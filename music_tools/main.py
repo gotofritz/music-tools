@@ -144,24 +144,40 @@ def flip_windows(
     """Flip the order of bars in each section."""
     flipped = {}
     for section_name, section_bars in windows.items():
-        flipped[section_name] = zip_longest(*section_bars)
+        flipped[section_name] = list(zip_longest(*section_bars))
     return flipped
 
 
-def flatten(windows: dict[str, list[list[BarsWindow]]], repeats: int = 1) -> list[Bar]:
+def flatten(
+    windows: dict[str, list[list[BarsWindow]]], repeats: int = 1, granular: bool = True
+) -> dict[str, list[Bar]]:
     """Add repeats to the windows of bars."""
+
     bars: dict[str, list[Bar]] = {}
+
     for section_name, section_windows in windows.items():
-        bars[section_name] = []
-        for run in section_windows:
+        for i, run in enumerate(section_windows):
+            if granular:
+                key = f"{section_name}-{i}"
+            else:
+                key = section_name
+            bars[key] = [] if key not in bars else bars[key]
+
             for window in run:
-                bars[section_name].extend([bar for bar in (window.bars * repeats)])
+                bars[key].extend([bar for bar in (window.bars * repeats)])
     return bars
 
 
 def create_output(audio: AudioSegment, bars: list[Bar]) -> AudioSegment:
     """Create output audio by concatenating segments with repeats."""
     output = AudioSegment.empty()
+
+    if not bars:
+        return output
+
+    start_ms = int(bars[0].start_time * 1000)
+    end_ms = int(bars[0].end_time * 1000)
+    output += audio[start_ms:end_ms] - 34
 
     for bar in bars:
         # Convert times to milliseconds for pydub
@@ -178,13 +194,23 @@ def create_output(audio: AudioSegment, bars: list[Bar]) -> AudioSegment:
 @click.argument("audio_file", type=click.Path(exists=True))
 @click.option("--marker-file", type=click.Path(exists=True), required=True)
 @click.option("--measures", default=2, help="Number of measures per segment")
-@click.option("--repeats", default=4, help="Number of times to repeat each segment")
+@click.option("--repeats", default=8, help="Number of times to repeat each segment")
+@click.option(
+    "--granular/--no-granular", default=True, help="Save each run as a separate file"
+)
 @click.option(
     "--flip/--no-flip",
     default=True,
     help="Whether to go through all 1st bars, then all seconds, etc",
 )
-def main(audio_file: str, marker_file: str, measures: int, repeats: int, flip: bool):
+def main(
+    audio_file: str,
+    marker_file: str,
+    measures: int,
+    repeats: int,
+    flip: bool,
+    granular: bool,
+):
     """Split and rearrange audio file based on markers."""
     # Load audio file
     audio = AudioSegment.from_file(audio_file)
@@ -204,7 +230,7 @@ def main(audio_file: str, marker_file: str, measures: int, repeats: int, flip: b
     if flip:
         windows = flip_windows(windows)
 
-    flattened = flatten(windows, repeats)
+    flattened = flatten(windows, repeats, granular)
 
     # Create output files
     for section_name, bars in flattened.items():
