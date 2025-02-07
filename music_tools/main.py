@@ -29,6 +29,7 @@ class Bar:
     start_time: float
     end_time: float
     bar_number: int
+    source: int = 0
 
 
 @dataclass
@@ -164,28 +165,50 @@ def flatten(
             bars[key] = [] if key not in bars else bars[key]
 
             for window in run:
-                bars[key].extend([bar for bar in (window.bars * repeats)])
+                bars[key].extend(
+                    [copy.deepcopy(bar) for bar in (window.bars * repeats)]
+                )
     return bars
 
 
-def create_output(audio: AudioSegment, bars: list[Bar]) -> AudioSegment:
+def create_output(
+    *,
+    audio: AudioSegment,
+    bars: list[Bar],
+    audio_silent: Optional[AudioSegment] = None,
+    measures: int = 2,
+    repeats: int = 8,
+) -> AudioSegment:
     """Create output audio by concatenating segments with repeats."""
     output = AudioSegment.empty()
+
+    ALWAYS_AUDIO = 3
 
     if not bars:
         return output
 
+    audios = [audio]
+
+    if audio_silent:
+        audios.append(audio_silent)
+        for i in range(len(bars)):
+            if ((i // measures) % repeats) < ALWAYS_AUDIO:
+                continue
+            bars[i].source = (i // measures) % 2
+
     start_ms = int(bars[0].start_time * 1000)
     end_ms = int(bars[0].end_time * 1000)
-    output += audio[start_ms:end_ms] - 34
+    output += audios[0][start_ms:end_ms] - 34
 
     for bar in bars:
         # Convert times to milliseconds for pydub
         start_ms = int(bar.start_time * 1000)
         end_ms = int(bar.end_time * 1000)
 
+        aud = audios[bar.source]
+
         # Extract and repeat segment
-        output += audio[start_ms:end_ms]
+        output += aud[start_ms:end_ms]
 
     return output
 
@@ -193,6 +216,7 @@ def create_output(audio: AudioSegment, bars: list[Bar]) -> AudioSegment:
 @click.command()
 @click.argument("audio_file", type=click.Path(exists=True))
 @click.option("--marker-file", type=click.Path(exists=True), required=True)
+@click.option("--audio-silent", type=click.Path(exists=True))
 @click.option("--measures", default=2, help="Number of measures per segment")
 @click.option("--repeats", default=8, help="Number of times to repeat each segment")
 @click.option(
@@ -203,6 +227,7 @@ def create_output(audio: AudioSegment, bars: list[Bar]) -> AudioSegment:
     default=True,
     help="Whether to go through all 1st bars, then all seconds, etc",
 )
+@click.option("--output-dir", type=click.Path(), help="Output directory")
 def main(
     audio_file: str,
     marker_file: str,
@@ -210,12 +235,13 @@ def main(
     repeats: int,
     flip: bool,
     granular: bool,
+    output_dir: Optional[str],
+    audio_silent: Optional[str] = None,
 ):
     """Split and rearrange audio file based on markers."""
-    # Load audio file
     audio = AudioSegment.from_file(audio_file)
+    silent = AudioSegment.from_file(audio_silent) if audio_silent else None
 
-    # Get marker file path (same name as audio file but with .txt extension)
     marker_file = Path(marker_file)
     if not marker_file.exists():
         click.echo(f"Error: Marker file {marker_file} not found", err=True)
@@ -234,10 +260,17 @@ def main(
 
     # Create output files
     for section_name, bars in flattened.items():
-        output = create_output(audio, bars)
-        output_file = Path(audio_file).with_stem(
-            f"{Path(audio_file).stem}_{section_name}_output"
+        output = create_output(
+            audio=audio,
+            bars=bars,
+            audio_silent=silent,
+            repeats=repeats,
+            measures=measures,
         )
+        output_file = (
+            Path(output_dir) / f"{Path(audio_file).stem}_{section_name}_output.mp3"
+        )
+
         output.export(output_file, format=output_file.suffix[1:])
         click.echo(f"Created {output_file}")
 
