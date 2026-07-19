@@ -1,0 +1,209 @@
+source:
+  root: /Users/fritz/Documents/MuseScore4/Scores/TUNES/T/There's No Greater Love - Miles Davis
+  audio:
+    bass: There's No Greater Love - Miles Davis - bass.mp3
+    silent: There's No Greater Love - Miles Davis - drums.mp3
+  markers: There's No Greater Love - Miles Davis - markers.txt
+outputs:
+  vars:
+    bass_repeats: 3
+    silent_repeats: 1
+    window: 1
+  files:
+    - destination: theres_no_greater_love_a1_Bb.mp3
+      steps:
+        - trigger:
+            each:
+              section:
+                matching: "^A"
+                each:
+                  measure:
+                    first_start: 1
+                    last_start: 1
+                    window: $window
+          output:
+            - copy:
+                source: bass
+                repeats: $bass_repeats
+            - copy:
+                source: silent
+                repeats: $silent_repeats
+    - destination: theres_no_greater_love_a2_Eb.mp3
+      steps:
+        - trigger:
+            each:
+              section:
+                matching: "^A"
+                each:
+                  measure:
+                    first_start: 2
+                    last_start: 2
+                    window: $window
+          output:
+            - copy:
+                source: bass
+                repeats: $bass_repeats
+            - copy:
+                source: silent
+                repeats: $silent_repeats
+    - destination: theres_no_greater_love_a3_D7.mp3
+      steps:
+        - trigger:
+            each:
+              section:
+                matching: "^A"
+                each:
+                  measure:
+                    first_start: 3
+                    last_start: 3
+                    window: $window
+          output:
+            - copy:
+                source: bass
+                repeats: $bass_repeats
+            - copy:
+                source: silent
+                repeats: $silent_repeats
+    - destination: theres_no_greater_love_a4_G7.mp3
+      steps:
+        - trigger:
+            each:
+              section:
+                matching: "^A"
+                each:
+                  measure:
+                    first_start: 4
+                    last_start: 4
+                    window: $window
+          output:
+            - copy:
+                source: bass
+                repeats: $bass_repeats
+            - copy:
+                source: silent
+                repeats: $silent_repeats
+    - destination: theres_no_greater_love_a5-6_C7.mp3
+      steps:
+        - trigger:
+            each:
+              section:
+                matching: "^A1"
+                each:
+                  measure:
+                    first_start: 5
+                    last_start: 5
+                    window: 2
+          output:
+            - copy:
+                source: bass
+                repeats: 1
+            - copy:
+                source: silent
+                repeats: $silent_repeats
+    - destination: theres_no_greater_love_a5_Cm7-F7.mp3
+      steps:
+        - trigger:
+            each:
+              section:
+                matching: "^A[23]"
+                each:
+                  measure:
+                    first_start: 5
+                    last_start: 5
+                    window: $window
+          output:
+            - copy:
+                source: bass
+                repeats: $bass_repeats
+            - copy:
+                source: silent
+                repeats: $silent_repeats
+        - trigger:
+            each:
+              section:
+                matching: "^A[23]"
+                each:
+                  measure:
+                    first_start: 6
+                    last_start: 6
+                    window: $window
+          output:
+            - copy:
+                source: bass
+                repeats: $bass_repeats
+            - copy:
+                source: silent
+                repeats: $silent_repeats
+
+    - destination: theres_no_greater_love_a7-8_Cm7-F7.mp3
+      steps:
+        - trigger:
+            each:
+              section:
+                matching: "^A1"
+                each:
+                  measure:
+                    first_start: 7
+                    last_start: 7
+                    window: 2
+          output:
+            - copy:
+                source: bass
+                repeats: $bass_repeats
+            - copy:
+                source: silent
+                repeats: $silent_repeats
+    - destination: theres_no_greater_love_a7-8b_Bb6.mp3
+      steps:
+        - trigger:
+            each:
+              section:
+                matching: "^A[23]"
+                each:
+                  measure:
+                    first_start: 7
+                    last_start: 7
+                    window: 2
+          output:
+            - copy:
+                source: bass
+                repeats: $bass_repeats
+            - copy:
+                source: silent
+                repeats: $silent_repeats
+    - destination: theres_no_greater_love_B1-6_Am75b-D7-Gm7.mp3
+      steps:
+        - trigger:
+            each:
+              section:
+                matching: "^B"
+                each:
+                  measure:
+                    first_start: 1
+                    last_start: 1
+                    window: 6
+          output:
+            - copy:
+                source: bass
+                repeats: $bass_repeats
+            - copy:
+                source: silent
+                repeats: $silent_repeats
+    - destination: theres_no_greater_love_B7-8_C7-Cm7-F7.mp3
+      steps:
+        - trigger:
+            each:
+              section:
+                matching: "^B"
+                each:
+                  measure:
+                    first_start: 7
+                    last_start: 7
+                    window: 2
+          output:
+            - copy:
+                source: bass
+                repeats: $bass_repeats
+            - copy:
+                source: silent
+                repeats: $silent_repeats

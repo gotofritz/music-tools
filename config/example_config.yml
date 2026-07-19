@@ -1,0 +1,16 @@
+files:
+  source: ~/Documents/MuseScore4/Scores/TUNES/Take The A Train - Ray Brown/Take The A Train - Ray Brown - bass.mp3
+
+  # I generated this with Transcribe! 8.80.0
+  marker: ./config/example_marker.txt
+
+  output: ~/Documents/MuseScore4/Scores/TUNES/Take The A Train - Ray Brown/
+sections:
+  boundaries:
+    - [8, "A"]
+    - [8, "A"]
+    - [8, "B"]
+    - [8, "A"]
+instructions:
+  measures: 2 # how many bars long
+  repeats: 8 # how

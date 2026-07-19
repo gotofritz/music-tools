@@ -9,12 +9,17 @@ from typing import Literal, Optional
 import click
 from pydub import AudioSegment
 
+from music_tools.config import Config
+from music_tools.generator import generate_output
+from music_tools.markers import MarkerFile
+
 
 @dataclass
 class Marker:
     timestamp: float  # in seconds
     marker_type: str
     value: str
+    repeats: int = 1
 
 
 @dataclass
@@ -29,6 +34,7 @@ class Bar:
     start_time: float
     end_time: float
     bar_number: int
+    repeats: int = 1
     source: int = 0
 
 
@@ -56,17 +62,35 @@ def parse_timestamp(timestamp_str: str) -> float:
 def parse_markers(file_path: Path) -> list[Marker]:
     """Parse the marker file and return a list of Marker objects."""
     markers = []
-    pattern = r'(\d{1,2}:\d{2}:\d{2}\.\d+) Marker \((.*?)\): "(.*?)"'
-
+    marker_pattern = r'^(\d{1,2}:\d{2}:\d{2}\.\d+) Marker \((.*?)\): "(.*?)"'
+    textblock_pattern = r"^\d{1,2}:\d{2}:\d{2}\.\d+ Textblock \((.*?)\):"
+    text_patterns = r"x(\d+)"
+    repeats_buffer = 1
+    text_buffer = ""
     with open(file_path, "r") as f:
         for line in f:
-            match = re.match(pattern, line.strip())
+            match = re.match(marker_pattern, line.strip())
             if match:
                 timestamp_str, marker_type, value = match.groups()
                 if marker_type == "beat":
                     continue
+                if text_buffer:
+                    match = re.match(text_patterns, text_buffer)
+                    (repeats,) = match.groups()
+                    repeats_buffer = int(repeats)
+                    text_buffer = ""
                 timestamp = parse_timestamp(timestamp_str)
-                markers.append(Marker(timestamp, marker_type.lower(), value.lower()))
+                markers.append(
+                    Marker(
+                        timestamp, marker_type.lower(), value.lower(), repeats_buffer
+                    )
+                )
+            else:
+                match = re.match(textblock_pattern, line.strip())
+                if match:
+                    text_buffer = ""
+                else:
+                    text_buffer += line.strip()
 
     return markers
 
@@ -74,13 +98,13 @@ def parse_markers(file_path: Path) -> list[Marker]:
 type Sections = dict[str, list[list[Bar]]]
 
 
-def organize_sections(
+def organize_sections_with_boundaries(
     markers: list[Marker],
-    boundaries: list[Boundary] = [
-        Boundary(8, "A"),
-        Boundary(8, "A"),
-        Boundary(8, "B"),
-        Boundary(8, "A"),
+    boundaries: Optional[list[Boundary]] = [
+        Boundary(128, "A"),
+        # Boundary(8, "A"),
+        # Boundary(8, "B"),
+        # Boundary(8, "A"),
     ],
 ) -> dict[str, list[list[Bar]]]:
     """Organize markers into sections with their measures."""
@@ -102,7 +126,9 @@ def organize_sections(
             bar_number = 0
             current_run = []
 
-        current_run.append(Bar(last_section_end, marker.timestamp, bar_number))
+        current_run.append(
+            Bar(last_section_end, marker.timestamp, bar_number, marker.repeats)
+        )
 
         last_section_end = marker.timestamp
         current_boundary.length -= 1
@@ -114,6 +140,35 @@ def organize_sections(
 
         if marker.value == "end":
             break
+
+    return sections
+
+
+def organize_sections_with_repeats(markers: list[Marker]) -> dict[str, list[list[Bar]]]:
+    """Organize markers into sections with their measures."""
+    if not markers:
+        return {}
+
+    sections: Sections = {}
+    boundary_name = "A"
+    sections[boundary_name] = []
+
+    last_section_end: float = markers.pop(0).timestamp
+    current_run = []
+    bar_number = 0
+
+    for marker in markers:
+        current_run.append(
+            Bar(last_section_end, marker.timestamp, bar_number, marker.repeats)
+        )
+
+        last_section_end = marker.timestamp
+        bar_number += 1
+
+        if marker.value == "end":
+            break
+
+    sections[boundary_name].append(current_run)
 
     return sections
 
@@ -166,7 +221,10 @@ def flatten(
 
             for window in run:
                 bars[key].extend(
-                    [copy.deepcopy(bar) for bar in (window.bars * repeats)]
+                    [
+                        copy.deepcopy(bar)
+                        for bar in (window.bars * window.bars[0].repeats)
+                    ]
                 )
     return bars
 
@@ -214,65 +272,22 @@ def create_output(
 
 
 @click.command()
-@click.argument("audio_file", type=click.Path(exists=True))
-@click.option("--marker-file", type=click.Path(exists=True), required=True)
-@click.option("--audio-silent", type=click.Path(exists=True))
-@click.option("--measures", default=2, help="Number of measures per segment")
-@click.option("--repeats", default=8, help="Number of times to repeat each segment")
-@click.option(
-    "--granular/--no-granular", default=True, help="Save each run as a separate file"
-)
-@click.option(
-    "--flip/--no-flip",
-    default=True,
-    help="Whether to go through all 1st bars, then all seconds, etc",
-)
-@click.option("--output-dir", type=click.Path(), help="Output directory")
+@click.option("--config", "-c", type=click.Path(exists=True))
 def main(
-    audio_file: str,
-    marker_file: str,
-    measures: int,
-    repeats: int,
-    flip: bool,
-    granular: bool,
-    output_dir: Optional[str],
-    audio_silent: Optional[str] = None,
+    config: str,
 ):
     """Split and rearrange audio file based on markers."""
-    audio = AudioSegment.from_file(audio_file)
-    silent = AudioSegment.from_file(audio_silent) if audio_silent else None
+    job_config = Config.load(Path(config))
+    markers = MarkerFile.load(job_config.source.markers)
 
-    marker_file = Path(marker_file)
-    if not marker_file.exists():
-        click.echo(f"Error: Marker file {marker_file} not found", err=True)
-        return
-
-    # Parse markers and organize sections
-    global markers
-    markers = parse_markers(marker_file)
-    sections = organize_sections(markers)
-    windows = windowize_bars(sections, size=measures, period=measures)
-
-    if flip:
-        windows = flip_windows(windows)
-
-    flattened = flatten(windows, repeats, granular)
-
-    # Create output files
-    for section_name, bars in flattened.items():
-        output = create_output(
-            audio=audio,
-            bars=bars,
-            audio_silent=silent,
-            repeats=repeats,
-            measures=measures,
+    for file_obj in job_config.outputs.files:
+        generate_output(
+            file_obj=file_obj,
+            markers_file=markers,
+            vars=job_config.outputs.vars,
+            sources=job_config.source,
         )
-        output_file = (
-            Path(output_dir) / f"{Path(audio_file).stem}_{section_name}_output.mp3"
-        )
-
-        output.export(output_file, format=output_file.suffix[1:])
-        click.echo(f"Created {output_file}")
+    exit()
 
 
 if __name__ == "__main__":
