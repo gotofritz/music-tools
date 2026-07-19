@@ -1,0 +1,192 @@
+source:
+  root: /Users/fritz/Documents/MuseScore4/Scores/TUNES/T/Take The A Train - Ray Brown/
+  audio:
+    bass: Take The A Train - Ray Brown - bass.mp3
+    silent: Take The A Train - Ray Brown - silent.mp3
+  markers: Take The A Train - Ray Brown.txt
+outputs:
+  vars:
+    bass_repeats: 6
+    silent_repeats: 2
+    window: 1
+  files:
+    - destination: take_the_a_train_a1-2_Cmaj7.mp3
+      steps:
+        - trigger:
+            each:
+              section:
+                matching: "^A"
+                each:
+                  measure:
+                    first_start: 1
+                    last_start: 1
+                    window: 2
+          output:
+            - copy:
+                source: bass
+                repeats: $bass_repeats
+            - copy:
+                source: silent
+                repeats: $silent_repeats
+    - destination: take_the_a_train_a3-4_D9.mp3
+      steps:
+        - trigger:
+            each:
+              section:
+                matching: "^A"
+                each:
+                  measure:
+                    first_start: 3
+                    last_start: 3
+                    window: 2
+          output:
+            - copy:
+                source: bass
+                repeats: $bass_repeats
+            - copy:
+                source: silent
+                repeats: $silent_repeats
+    - destination: take_the_a_train_a5_Dm7.mp3
+      steps:
+        - trigger:
+            each:
+              section:
+                matching: "^A"
+                each:
+                  measure:
+                    first_start: 5
+                    last_start: 5
+                    window: 1
+          output:
+            - copy:
+                source: bass
+                repeats: $bass_repeats
+            - copy:
+                source: silent
+                repeats: $silent_repeats
+    - destination: take_the_a_train_a6_G7.mp3
+      steps:
+        - trigger:
+            each:
+              section:
+                matching: "^A"
+                each:
+                  measure:
+                    first_start: 6
+                    last_start: 6
+                    window: 1
+          output:
+            - copy:
+                source: bass
+                repeats: $bass_repeats
+            - copy:
+                source: silent
+                repeats: $silent_repeats
+    - destination: take_the_a_train_a7-8_C7_(Dm7-G7).mp3
+      steps:
+        - trigger:
+            each:
+              section:
+                matching: "^A\\d+\\.[13]"
+                each:
+                  measure:
+                    first_start: 7
+                    last_start: 5
+                    window: 2
+          output:
+            - copy:
+                source: bass
+                repeats: 1
+            - copy:
+                source: silent
+                repeats: $silent_repeats
+    - destination: take_the_a_train_a7-8b_Cmaj7_(Gm-C7).mp3
+      steps:
+        - trigger:
+            each:
+              section:
+                matching: "^A\\d+\\.[2]"
+                each:
+                  measure:
+                    first_start: 7
+                    last_start: 5
+                    window: 2
+          output:
+            - copy:
+                source: bass
+                repeats: 1
+            - copy:
+                source: silent
+                repeats: $silent_repeats
+    - destination: take_the_a_train_b1-4_Fmaj7.mp3
+      steps:
+        - trigger:
+            each:
+              section:
+                matching: "^B"
+                each:
+                  measure:
+                    first_start: 1
+                    last_start: 1
+                    window: 4
+          output:
+            - copy:
+                source: bass
+                repeats: $bass_repeats
+            - copy:
+                source: silent
+                repeats: $silent_repeats
+    - destination: take_the_a_train_b5-6_D7.mp3
+      steps:
+        - trigger:
+            each:
+              section:
+                matching: "^b"
+                each:
+                  measure:
+                    first_start: 5
+                    last_start: 5
+                    window: 2
+          output:
+            - copy:
+                source: bass
+                repeats: $bass_repeats
+            - copy:
+                source: silent
+                repeats: $silent_repeats
+    - destination: take_the_a_train_b7-Dm7.mp3
+      steps:
+        - trigger:
+            each:
+              section:
+                matching: "^b"
+                each:
+                  measure:
+                    first_start: 7
+                    last_start: 7
+                    window: 1
+          output:
+            - copy:
+                source: bass
+                repeats: $bass_repeats
+            - copy:
+                source: silent
+                repeats: $silent_repeats
+    - destination: take_the_a_train_G9_C7.mp3
+      steps:
+        - trigger:
+            each:
+              section:
+                matching: "^b"
+                each:
+                  measure:
+                    first_start: 8
+                    last_start: 8
+                    window: 1
+          output:
+            - copy:
+                source: bass
+                repeats: $bass_repeats
+            - copy:
+                source: silent
+                repeats: $silent_repeats

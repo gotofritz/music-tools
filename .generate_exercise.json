@@ -1,0 +1,29 @@
+{
+  "notes": ["C#", "D", "D#", "F", "F#", "G", "G#", "A", "A#", "B"],
+  "scales": [
+    "minor",
+    "dorian",
+    "phrygian",
+    "lydian",
+    "mixolydian",
+    "aeolian",
+    "locrian",
+    "major pentatonic",
+    "blues",
+    "harmonic minor",
+    "melodic minor",
+    "altered",
+    "diminished",
+    "whole tone"
+  ],
+  "fingerings": [
+    [1, 1],
+    [1, 2],
+    [1, 3],
+    [2, 2],
+    [2, 3],
+    [3, 3],
+    [3, 4],
+    [4, 4]
+  ]
+}
