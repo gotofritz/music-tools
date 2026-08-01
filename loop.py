@@ -24,6 +24,11 @@ from pydub import AudioSegment
 import subprocess
 
 
+def resolve(root: Path, path: str) -> Path:
+    """Prepend root to path, unless path is already absolute."""
+    return root / Path(path).expanduser()
+
+
 @click.command(
     context_settings={"help_option_names": ["-h", "--help"]},
     help="""
@@ -39,7 +44,16 @@ Each character in a sequence represents one repetition of the snippet:
 
 Sections allow progressively harder exercises.
 
+An optional top level "root" is prepended to "snippet" and "output",
+so that only the file names have to be typed. Paths that are already
+absolute are used as they are.
+
 Example:
+
+root: ~/Documents/MuseScore4/Scores/TUNES/I/I want you Back - Jacksons 5
+
+snippet: I Want You Back - loop 1.wav
+output: I Want You Back - practice 1.wav
 
 sections:
   - name: Warm-up
@@ -64,9 +78,14 @@ def main(config: Path):
     with config.open() as f:
         cfg = yaml.safe_load(f)
 
-    snippet_path = Path(cfg["snippet"])
-    output_path = Path(cfg["output"])
+    root = Path(cfg.get("root", "")).expanduser()
+
+    snippet_path = resolve(root, cfg["snippet"])
+    output_path = resolve(root, cfg["output"])
     sections = cfg["sections"]
+
+    if not snippet_path.is_file():
+        raise click.ClickException(f"Snippet not found: {snippet_path}")
 
     snippet = AudioSegment.from_file(snippet_path)
     silence = AudioSegment.silent(duration=len(snippet))
@@ -76,6 +95,8 @@ def main(config: Path):
     total_units = 0
     total_sections = len(sections)
 
+    if str(root) != ".":
+        click.echo(f"Root: {root}")
     click.echo(f"Loaded snippet: {snippet_path}")
     click.echo(f"Snippet length: {len(snippet)/1000:.2f} s")
     click.echo()
