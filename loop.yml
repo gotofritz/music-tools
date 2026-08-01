@@ -2,11 +2,31 @@ root: /Users/fritz/Documents/MuseScore4/Scores/TUNES/I/I want you Back - Jackson
 
 snippet: I Want You Back - Jackson 5 - loop 1.wav
 output: I Want You Back - Jackson 5 - practice 1.wav
+
+# markers exported from Transcribe!; needed by "bars" and "beats" below
+# markers: I Want You Back - Jackson 5 - loop 1.txt
+
 sections:
 
   - name: yeah, name
     repeat: 1
     sequence: "x"
+
+  # sequence: one character per repetition of the whole snippet
+  # bars:     one character per bar
+  # beats:    one character per beat, spaces optional, group them per bar
+  #
+  # - name: whole thing
+  #   repeat: 2
+  #   bars: "1111"
+  #
+  # - name: lose the end of A4
+  #   repeat: 1
+  #   beats: "1111 1111 1111 11xx"
+  #
+  # - name: lose A4
+  #   repeat: 1
+  #   bars: "111x"
 
   - repeat: 4
     sequence: "x1"
