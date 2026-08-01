@@ -1,0 +1,19 @@
+snippet: /Users/fritz/Documents/MuseScore4/Scores/TUNES/I/I want you Back - Jacksons 5/I Want You Back - Jackson 5 - loop 1.wav
+output: /Users/fritz/Documents/MuseScore4/Scores/TUNES/I/I want you Back - Jacksons 5/I Want You Back - Jackson 5 - practice 1.wav
+sections:
+
+  - name: yeah, name
+    repeat: 1
+    sequence: "x"
+
+  - repeat: 4
+    sequence: "x1"
+
+  - repeat: 2 
+    sequence: "xx11"
+
+  - repeat: 2
+    sequence: "xx1x"
+
+  - repeat: 1
+    sequence: "1xxxxxxx"
