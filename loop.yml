@@ -12,16 +12,22 @@ sections:
   # sequence: one character per repetition of the whole snippet
   # bars:     one character per bar
   # beats:    one character per beat, spaces optional, group them per bar
-  # markers:  addresses in any order, repeats allowed
+  # markers:  spans in any order, repeats allowed
+  #
+  # a span is [where it starts] or [start-end], and the end is exclusive:
   #
   #   [4] 4th bar   [D51] bar labelled D51   [1.4] 4th beat of bar 1
-  #   [b2] beat labelled b2                  a trailing x silences it
-  #   {JOHN} text block, up to the next bar or beat
-  #   {JOHN-3} up to bar 3, {JOHN-3.2} up to its 2nd beat, {JOHN-b2} up to b2
+  #   [b2] beat labelled b2                  [JOHN] text block JOHN
+  #   [1-3] bars 1 and 2   [1.4-3] from bar 1 beat 4 up to bar 3
+  #   [JOHN-3.2] from JOHN up to bar 3 beat 2   [1.1-JOHN] the top, up to JOHN
+  #   a trailing x silences the span: [4x], [1-3x]
+  #
+  # with no end, a span runs to the next address of its own kind, so
+  # [1] is [1-2] and [1.1] is [1.1-1.2]
   #
   # - name: drill bar 1, then run into bar 3
   #   repeat: 3
-  #   markers: "[1][1][1] {JOHN-3}"
+  #   markers: "[1][1][1] [JOHN-3]"
 
    - name: whole thing
      repeat: 2
