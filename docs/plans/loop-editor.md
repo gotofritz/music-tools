@@ -150,6 +150,9 @@ Cover, using `tests/fixtures/d51.txt` and `tests/fixtures/jackson5.txt`:
 - A trailing bar marker with no beats under it closes the last bar instead of
   opening one, using the Two Way Pak E Way file that ends on a bare `93`, which
   is addressable as the end of the score but never played.
+- A marker labelled `end` truncates the score there and everything after it is
+  dropped — undocumented behaviour that predates the pattern grammar, and the
+  reason nothing can shadow the reserved `END`.
 - `parse_markers` on the Jackson 5 file yields `A1`–`A4`, with five beats in `A3`.
 - `Score.build` shifts the first marker to `0.0`; the last bar ends at the
   snippet duration.
@@ -173,7 +176,7 @@ end; the ranges `[1-3]`, `[1.4-3]`, `[JOHN-3.2]`, `[JOHN-D53]`, `[1.1-JOHN]`,
 neighbour rule specifically: `[1]` alone is the whole snippet, `[1][3]` is bars
 1–2 then 3 to the end, and `[1][2]` matches `[1-2]` only because 2 follows.
 On the Two Way file, `[92-93]` naming the end marker as an end, equal to a bare
-`[92]` but usable anywhere in a pattern. Errors: `[nope]`, `[JOHN-nope]`, `[]`,
+`[92]` but usable anywhere in a pattern, and equal again to `[92-END]`. Errors: `[nope]`, `[JOHN-nope]`, `[]`,
 `[9]`, `[1.9]`, the backwards span `[JOHN-b2]`, the empty `[1][1]`, `[3][1]` and
 `[93]`, `{JOHN}` pointing at square brackets, and `[1]junk[2]`. Plus a third fixture containing a bar genuinely labelled
 `D51x`, asserting `[D51x]` plays it rather than silencing `D51`.

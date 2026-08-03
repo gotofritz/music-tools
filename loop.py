@@ -37,6 +37,9 @@ TEXTBLOCK_PATTERN = re.compile(
 )
 TIMESTAMPED = re.compile(r"^\d{1,2}:\d{2}:\d{2}\.\d+ ")
 
+# the one reserved name, so that a span can always reach the end of the score
+SCORE_END = "end"
+
 # a pattern is a run of [address] or [address-address] spans. Curly brackets
 # are deliberately not part of the syntax, so that they stay free for
 # templating later on
@@ -162,7 +165,7 @@ class Score:
         # every name is one point in time. The end marker is the weakest, then
         # text blocks, then beats, then bars, and within a kind the earliest
         # wins. So a bar called "3" is bar 3, not the third bar
-        self.by_name: dict[str, float] = {
+        named = {
             **({end_marker.lower(): duration} if end_marker else {}),
             **first_wins((block.name.lower(), block.start) for block in textblocks),
             **first_wins(
@@ -170,6 +173,11 @@ class Score:
             ),
             **first_wins((bar.name.lower(), bar.start) for bar in bars),
         }
+
+        # END is reserved, so that a span can reach the end of any score. No
+        # marker can shadow it: one labelled "end" is consumed by build, which
+        # truncates the score there, and so names this very point anyway
+        self.by_name: dict[str, float] = {**named, SCORE_END: duration}
 
     @classmethod
     def build(
@@ -488,12 +496,16 @@ Because a bare span ends where the next one starts, repeating or
 reordering needs explicit ends: [1][1] is two empty spans, while
 [1-2][1-2] is bar 1 played twice.
 
-Markers exported by dropping one on every barline finish with a bar
-marker that has no beats under it. That last one closes the passage
-rather than opening a bar, so it is never played, but it can be named as
-an end. It is the only way to write a span that reaches the end of the
-snippet without putting it last: given bars 92 and 93, [92-93] is bar 92
-in full, wherever it appears in the pattern.
+END is reserved and always means the end of the snippet, so a span can
+reach the end without being written last: [4-END] is the 4th bar in
+full, wherever it appears in the pattern.
+
+Two things in a marker file name that same point, so all three agree.
+A marker labelled "end" stops the score there, and everything after it
+is ignored. And markers exported by dropping one on every barline finish
+with a bar marker that has no beats under it, which closes the passage
+rather than opening a bar: it is never played, but given bars 92 and 93,
+[92-93] and [92-END] are the same span.
 
 A trailing x means silence, but a label always wins: if a bar really is
 called "D51x" then [D51x] plays it.
