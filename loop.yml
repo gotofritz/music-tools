@@ -3,21 +3,34 @@ root: /Users/fritz/Documents/MuseScore4/Scores/TUNES/I/I want you Back - Jackson
 snippet: I Want You Back - Jackson 5 - loop 1.wav
 output: I Want You Back - Jackson 5 - practice 1.wav
 
-markers: I Want You Back - Jackson 5 - loop 1.txt
+marker_file: I Want You Back - Jackson 5 - loop 1.txt
 
 sections:
 
+  # a section uses exactly one kind of pattern:
+  #
   # sequence: one character per repetition of the whole snippet
   # bars:     one character per bar
   # beats:    one character per beat, spaces optional, group them per bar
+  # markers:  addresses in any order, repeats allowed
+  #
+  #   [4] 4th bar   [D51] bar labelled D51   [1.4] 4th beat of bar 1
+  #   [b2] beat labelled b2                  a trailing x silences it
+  #   {JOHN} text block, up to the next bar or beat
+  #   {JOHN-3} up to bar 3, {JOHN-3.2} up to its 2nd beat, {JOHN-b2} up to b2
+  #
+  # - name: drill bar 1, then run into bar 3
+  #   repeat: 3
+  #   markers: "[1][1][1] {JOHN-3}"
+
    - name: whole thing
      repeat: 2
      bars: "1111"
-  
+
    - name: lose the end of A4
      repeat: 1
      beats: "1111 1111 1111 11xx"
-  
+
    - name: lose A4
      repeat: 1
      bars: "111x"
