@@ -45,9 +45,13 @@ SCORE_END = "end"
 # templating later on
 TOKEN_PATTERN = re.compile(r"\[([^\[\]]*)\]")
 
-# the marker types Transcribe! uses to open a new bar; anything containing
-# "beat" (plain "beat", but also "t beat") subdivides the bar it is in
+# the marker types Transcribe! uses to open a new bar
 BAR_TYPES = {"section", "measure"}
+
+# and the ones that subdivide the bar they are in. "auto" is what Transcribe!
+# writes for beats it worked out itself rather than ones tapped in by hand,
+# and anything containing "beat" covers plain "beat" as well as "t beat"
+BEAT_TYPES = {"beat", "auto"}
 
 BAR_INDEX = re.compile(r"^(\d+)$")
 BEAT_INDEX = re.compile(r"^(\d+)\.(\d+)$")
@@ -154,11 +158,13 @@ class Score:
         textblocks: list[TextBlock],
         duration: float,
         end_marker: str | None = None,
+        ignored: "Counter[str] | None" = None,
     ):
         self.bars = bars
         self.textblocks = textblocks
         self.duration = duration  # of the score, which may stop short of the audio
         self.end_marker = end_marker
+        self.ignored = ignored if ignored is not None else Counter()
 
         self.beats = [beat for bar in bars for beat in bar.beats]
 
@@ -196,6 +202,7 @@ class Score:
         offset = entries[0][0]
         bars: list[Bar] = []
         textblocks: list[TextBlock] = []
+        ignored: Counter[str] = Counter()
         end = duration
 
         for timestamp, kind, label in entries:
@@ -210,12 +217,13 @@ class Score:
                     textblocks.append(TextBlock(label, start, timestamp))
                 continue
 
-            if "beat" in kind:
+            if kind in BEAT_TYPES or "beat" in kind:
                 if bars:
                     bars[-1].beats.append(Beat(label, start, raw=timestamp))
                 continue
 
             if kind not in BAR_TYPES:
+                ignored[kind] += 1
                 continue
 
             # a bar opens on its own first beat
@@ -254,7 +262,9 @@ class Score:
             for j, beat in enumerate(bar.beats):
                 beat.end = bar.beats[j + 1].start if j + 1 < len(bar.beats) else bar.end
 
-        return cls(bars, textblocks, end, end_marker.name if end_marker else None)
+        return cls(
+            bars, textblocks, end, end_marker.name if end_marker else None, ignored
+        )
 
     def bar_slices(self) -> list[tuple[float, float]]:
         """Start and end of every bar."""
@@ -404,6 +414,14 @@ def report(score: Score) -> None:
     if score.textblocks:
         click.echo(
             f"Text blocks: {' '.join(block.name for block in score.textblocks)}"
+        )
+    if score.ignored:
+        kinds = ", ".join(
+            f"{count} × {kind}" for kind, count in sorted(score.ignored.items())
+        )
+        click.echo(
+            f"!  Ignored {kinds}: not a bar or a beat. If those are beats, the "
+            "bar lengths below will be wrong."
         )
 
     counts = Counter(len(bar.beats) for bar in score.bars)

@@ -154,6 +154,10 @@ Cover, using `tests/fixtures/d51.txt` and `tests/fixtures/jackson5.txt`:
   dropped — undocumented behaviour that predates the pattern grammar, and the
   reason nothing can shadow the reserved `END`.
 - `parse_markers` on the Jackson 5 file yields `A1`–`A4`, with five beats in `A3`.
+- `Marker (auto)` counts as a beat, not something to skip: Transcribe! writes it
+  for beats it worked out itself, and a file mixing `auto` and `beat` markers
+  must give every bar the same beat count. A kind that is neither bar nor beat
+  is counted into `score.ignored` and reported rather than dropped in silence.
 - `Score.build` shifts the first marker to `0.0`; the last bar ends at the
   snippet duration.
 - Bars tile the snippet with no gaps or overlaps, and so do beats.
