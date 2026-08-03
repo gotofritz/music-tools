@@ -22,9 +22,10 @@ sections:
   #   [JOHN-3.2] from JOHN up to bar 3 beat 2   [1.1-JOHN] the top, up to JOHN
   #   a trailing x silences the span: [4x], [1-3x]
   #
-  # a trailing bar marker with no beats under it closes the passage and
-  # is never played, but it can be named as an end: with bars 92 and 93,
-  # [92-93] is bar 92 in full
+  # END is reserved and always means the end of the snippet, so [4-END]
+  # is the 4th bar in full wherever it appears. A trailing bar marker
+  # with no beats under it names the same point and is never played, so
+  # with bars 92 and 93, [92-93] and [92-END] are the same span
   #
   # with no end, a span runs to where the next one starts, or to the end
   # of the snippet, so a pattern can chop a snippet into pieces:
