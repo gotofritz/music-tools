@@ -138,7 +138,8 @@ class Score:
     def __init__(self, bars: list[Bar], textblocks: list[TextBlock], duration: float):
         self.bars = bars
         self.textblocks = textblocks
-        self.duration = duration
+        self.duration = duration  # of the score, which may stop short of the audio
+        self.end_marker: str | None = None
 
         # bars win over beats, earlier wins over later
         self.by_label: dict[str, tuple[float, float]] = {}
@@ -207,6 +208,15 @@ class Score:
                 "No section or measure markers found in the marker file."
             )
 
+        # A bar marker with no beats under it closes the bar before it rather
+        # than opening one of its own: the passage was marked up by dropping a
+        # marker at each barline, including the one the passage ends on. That
+        # last one is the end of the audio, not a bar to play.
+        end_marker = None
+        if len(bars) > 1 and len(bars[-1].beats) == 1:
+            end_marker = bars.pop()
+            end = min(end, end_marker.start)
+
         if bars[-1].start >= duration:
             raise click.ClickException(
                 f"Markers run past the end of the snippet: bar {bars[-1].name} starts "
@@ -220,7 +230,9 @@ class Score:
             for j, beat in enumerate(bar.beats):
                 beat.end = bar.beats[j + 1].start if j + 1 < len(bar.beats) else bar.end
 
-        return cls(bars, textblocks, duration)
+        score = cls(bars, textblocks, end)
+        score.end_marker = end_marker.name if end_marker else None
+        return score
 
     def bar_slices(self) -> list[tuple[float, float]]:
         """Start and end of every bar."""
@@ -341,6 +353,8 @@ def report(score: Score) -> None:
     click.echo(
         f"Bars: {len(score.bars)} ({' '.join(bar.name for bar in score.bars)})"
     )
+    if score.end_marker:
+        click.echo(f"{score.end_marker} closes the last bar and is not played.")
     if score.textblocks:
         click.echo(
             f"Text blocks: {' '.join(block.name for block in score.textblocks)}"
