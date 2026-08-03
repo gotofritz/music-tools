@@ -145,17 +145,25 @@ def parse_markers(path: Path) -> list[tuple[float, str, str]]:
 class Score:
     """The bars, beats and text blocks of one snippet, in playing order."""
 
-    def __init__(self, bars: list[Bar], textblocks: list[TextBlock], duration: float):
+    def __init__(
+        self,
+        bars: list[Bar],
+        textblocks: list[TextBlock],
+        duration: float,
+        end_marker: str | None = None,
+    ):
         self.bars = bars
         self.textblocks = textblocks
         self.duration = duration  # of the score, which may stop short of the audio
-        self.end_marker: str | None = None
+        self.end_marker = end_marker
 
         self.beats = [beat for bar in bars for beat in bar.beats]
 
-        # every name is one point in time. Bars beat beats beat text blocks,
-        # and within a kind the earliest wins
+        # every name is one point in time. The end marker is the weakest, then
+        # text blocks, then beats, then bars, and within a kind the earliest
+        # wins. So a bar called "3" is bar 3, not the third bar
         self.by_name: dict[str, float] = {
+            **({end_marker.lower(): duration} if end_marker else {}),
             **first_wins((block.name.lower(), block.start) for block in textblocks),
             **first_wins(
                 (beat.label.lower(), beat.start) for beat in self.beats if beat.label
@@ -238,9 +246,7 @@ class Score:
             for j, beat in enumerate(bar.beats):
                 beat.end = bar.beats[j + 1].start if j + 1 < len(bar.beats) else bar.end
 
-        score = cls(bars, textblocks, end)
-        score.end_marker = end_marker.name if end_marker else None
-        return score
+        return cls(bars, textblocks, end, end_marker.name if end_marker else None)
 
     def bar_slices(self) -> list[tuple[float, float]]:
         """Start and end of every bar."""
@@ -383,7 +389,10 @@ def report(score: Score) -> None:
         f"Bars: {len(score.bars)} ({' '.join(bar.name for bar in score.bars)})"
     )
     if score.end_marker:
-        click.echo(f"{score.end_marker} closes the last bar and is not played.")
+        click.echo(
+            f"{score.end_marker} closes the last bar. It is not played, but a "
+            f"span may end on it, as [{score.bars[-1].name}-{score.end_marker}]."
+        )
     if score.textblocks:
         click.echo(
             f"Text blocks: {' '.join(block.name for block in score.textblocks)}"
@@ -478,6 +487,13 @@ lets a pattern chop a snippet into consecutive pieces:
 Because a bare span ends where the next one starts, repeating or
 reordering needs explicit ends: [1][1] is two empty spans, while
 [1-2][1-2] is bar 1 played twice.
+
+Markers exported by dropping one on every barline finish with a bar
+marker that has no beats under it. That last one closes the passage
+rather than opening a bar, so it is never played, but it can be named as
+an end. It is the only way to write a span that reaches the end of the
+snippet without putting it last: given bars 92 and 93, [92-93] is bar 92
+in full, wherever it appears in the pattern.
 
 A trailing x means silence, but a label always wins: if a bar really is
 called "D51x" then [D51x] plays it.
