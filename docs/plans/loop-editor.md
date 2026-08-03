@@ -5,7 +5,7 @@
 `loop.py` generates rhythm-training audio from a YAML config: a snippet, a
 marker file exported from Transcribe!, and sections that each play a pattern
 some number of times. Patterns can now address bars, beats and text blocks
-directly (`[1][1][1][JOHN-3]`), which makes the format expressive but also makes
+directly (`[1.1][UP1][UP2]`), which makes the format expressive but also makes
 hand-editing fiddly — you have to hold the bar numbering in your head while
 counting characters in `"1111 1111 1111 11xx"`.
 
@@ -84,8 +84,8 @@ UI cheap: bar names, beat counts, labels and text-block names all come from
 so a `markers:` field can show live feedback as you type:
 
 ```
-[1][1][1][JOHN-3]
-0.000-2.041  0.000-2.041  0.000-2.041  2.742-4.060
+[1.1][UP1][UP2]
+0.000-0.545  0.545-0.872  0.872-2.760
 ```
 
 ### Where configs live
@@ -165,13 +165,15 @@ existing `rearrange` entry, delete root `loop.py`. Invocation becomes
 ### Step 2 — Pattern resolution locked down
 
 **Red.** `tests/test_patterns.py`, parametrised over every span form against the
-D51 score: `[1][2][3][4x]`; `[D51]` equivalent to `[1]`; `[1.4]`; `[b2]`;
-`[JOHN]`; the ranges `[1-3]`, `[1.4-3]`, `[JOHN-3.2]`, `[JOHN-D53]`,
-`[1.1-JOHN]`, `[1-3x]`; repeats and out-of-order runs. The sugar identities
-`[1] == [1-2]`, `[1.1] == [1.1-1.2]` and `[1.4] == [2.1]`'s predecessor, which
-are what keep the grammar honest. Errors: `[nope]`, `[JOHN-nope]`, `[]`, `[9]`,
-`[1.9]`, the backwards span `[JOHN-b2]`, `{JOHN}` pointing at square brackets,
-and `[1]junk[2]`. Plus a third fixture containing a bar genuinely labelled
+D51 score: `[1][2][3][4x]` tiling the snippet bar by bar; `[D51]…` matching it
+by label; `[1.1][1.2][1.3][1.4x][2]`; `[b1][b2]`; `[JOHN]` alone running to the
+end; the ranges `[1-3]`, `[1.4-3]`, `[JOHN-3.2]`, `[JOHN-D53]`, `[1.1-JOHN]`,
+`[1-3x]`; repeats and out-of-order runs written with explicit ends. The
+neighbour rule specifically: `[1]` alone is the whole snippet, `[1][3]` is bars
+1–2 then 3 to the end, and `[1][2]` matches `[1-2]` only because 2 follows.
+Errors: `[nope]`, `[JOHN-nope]`, `[]`, `[9]`, `[1.9]`, the backwards span
+`[JOHN-b2]`, the empty `[1][1]` and `[3][1]`, `{JOHN}` pointing at square
+brackets, and `[1]junk[2]`. Plus a third fixture containing a bar genuinely labelled
 `D51x`, asserting `[D51x]` plays it rather than silencing `D51`.
 
 **Green.** Nothing — these should pass on arrival. If any fails, step 1 broke

@@ -22,12 +22,18 @@ sections:
   #   [JOHN-3.2] from JOHN up to bar 3 beat 2   [1.1-JOHN] the top, up to JOHN
   #   a trailing x silences the span: [4x], [1-3x]
   #
-  # with no end, a span runs to the next address of its own kind, so
-  # [1] is [1-2] and [1.1] is [1.1-1.2]
+  # with no end, a span runs to where the next one starts, or to the end
+  # of the snippet, so a pattern can chop a snippet into pieces:
+  #
+  # - name: the whole snippet, cut at two cues
+  #   repeat: 2
+  #   markers: "[1.1][UP1][UP2]"
+  #
+  # to repeat or reorder, give each span its own end:
   #
   # - name: drill bar 1, then run into bar 3
   #   repeat: 3
-  #   markers: "[1][1][1] [JOHN-3]"
+  #   markers: "[1-2][1-2][1-2] [JOHN-3]"
 
    - name: whole thing
      repeat: 2
