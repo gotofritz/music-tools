@@ -627,9 +627,14 @@ def main(config: Path):
             else:
                 slices = score.bar_slices() if mode == "bars" else score.beat_slices()
                 if len(pattern) != len(slices):
+                    shape = (
+                        " ".join(bar.name for bar in score.bars)
+                        if mode == "bars"
+                        else "+".join(str(len(bar.beats)) for bar in score.bars)
+                    )
                     raise click.ClickException(
                         f"{name}: {mode} has {len(pattern)} characters but the "
-                        f"markers define {len(slices)} {mode}."
+                        f"markers define {len(slices)} {mode} ({shape})."
                     )
                 spans = [
                     (start, end, character == "x")
