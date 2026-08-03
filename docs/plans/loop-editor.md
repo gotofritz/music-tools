@@ -5,7 +5,7 @@
 `loop.py` generates rhythm-training audio from a YAML config: a snippet, a
 marker file exported from Transcribe!, and sections that each play a pattern
 some number of times. Patterns can now address bars, beats and text blocks
-directly (`[1][1][1]{JOHN-3}`), which makes the format expressive but also makes
+directly (`[1][1][1][JOHN-3]`), which makes the format expressive but also makes
 hand-editing fiddly — you have to hold the bar numbering in your head while
 counting characters in `"1111 1111 1111 11xx"`.
 
@@ -84,7 +84,7 @@ UI cheap: bar names, beat counts, labels and text-block names all come from
 so a `markers:` field can show live feedback as you type:
 
 ```
-[1][1][1]{JOHN-3}
+[1][1][1][JOHN-3]
 0.000-2.041  0.000-2.041  0.000-2.041  2.742-4.060
 ```
 
@@ -147,6 +147,8 @@ Cover, using `tests/fixtures/d51.txt` and `tests/fixtures/jackson5.txt`:
 
 - `parse_markers` on the D51 file yields four bars `D51`–`D54` of four beats
   each, beats `b1`/`b2` labelled in the first bar, one text block `JOHN`.
+- A trailing bar marker with no beats under it closes the last bar instead of
+  opening one, using the Two Way Pak E Way file that ends on a bare `93`.
 - `parse_markers` on the Jackson 5 file yields `A1`–`A4`, with five beats in `A3`.
 - `Score.build` shifts the first marker to `0.0`; the last bar ends at the
   snippet duration.
@@ -162,13 +164,15 @@ existing `rearrange` entry, delete root `loop.py`. Invocation becomes
 
 ### Step 2 — Pattern resolution locked down
 
-**Red.** `tests/test_patterns.py`, parametrised over every address form against
-the D51 score: `[1][2][3][4x]`; `[D51]` equivalent to `[1]`; `[1.4]`; `[b2]`;
-`{JOHN}` ending at the next boundary; `{JOHN-3}`, `{JOHN-3.2}`, `{JOHN-D53}`,
-`{JOHN-3x}`; repeats and out-of-order runs. Errors: `[nope]`, `{nope}`,
-`[1]junk[2]`, `[]`, `[9]`, `[1.9]`, and the backwards span `{JOHN-b2}`. Plus a
-third fixture containing a bar genuinely labelled `D51x`, asserting `[D51x]`
-plays it rather than silencing `D51`.
+**Red.** `tests/test_patterns.py`, parametrised over every span form against the
+D51 score: `[1][2][3][4x]`; `[D51]` equivalent to `[1]`; `[1.4]`; `[b2]`;
+`[JOHN]`; the ranges `[1-3]`, `[1.4-3]`, `[JOHN-3.2]`, `[JOHN-D53]`,
+`[1.1-JOHN]`, `[1-3x]`; repeats and out-of-order runs. The sugar identities
+`[1] == [1-2]`, `[1.1] == [1.1-1.2]` and `[1.4] == [2.1]`'s predecessor, which
+are what keep the grammar honest. Errors: `[nope]`, `[JOHN-nope]`, `[]`, `[9]`,
+`[1.9]`, the backwards span `[JOHN-b2]`, `{JOHN}` pointing at square brackets,
+and `[1]junk[2]`. Plus a third fixture containing a bar genuinely labelled
+`D51x`, asserting `[D51x]` plays it rather than silencing `D51`.
 
 **Green.** Nothing — these should pass on arrival. If any fails, step 1 broke
 something.

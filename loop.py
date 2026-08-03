@@ -37,8 +37,10 @@ TEXTBLOCK_PATTERN = re.compile(
 )
 TIMESTAMPED = re.compile(r"^\d{1,2}:\d{2}:\d{2}\.\d+ ")
 
-# a pattern is a run of [bar or beat] and {textblock} addresses
-TOKEN_PATTERN = re.compile(r"\[([^\[\]]*)\]|\{([^{}]*)\}")
+# a pattern is a run of [address] or [address-address] spans. Curly brackets
+# are deliberately not part of the syntax, so that they stay free for
+# templating later on
+TOKEN_PATTERN = re.compile(r"\[([^\[\]]*)\]")
 
 # the marker types Transcribe! uses to open a new bar; anything containing
 # "beat" (plain "beat", but also "t beat") subdivides the bar it is in
@@ -81,9 +83,26 @@ class TextBlock:
     raw: float = 0.0
 
 
+@dataclass
+class Address:
+    """One point in the score, and which run of points it belongs to."""
+
+    start: float
+    kind: str  # "bar", "beat" or "block"
+    index: int  # its position within that kind
+
+
 def resolve(root: Path, path: str) -> Path:
     """Prepend root to path, unless path is already absolute."""
     return root / Path(path).expanduser()
+
+
+def first_wins(pairs) -> dict:
+    """Build a dict in which the earliest of any repeated key survives."""
+    names: dict = {}
+    for key, value in pairs:
+        names.setdefault(key, value)
+    return names
 
 
 def parse_timestamp(timestamp: str) -> float:
@@ -141,19 +160,32 @@ class Score:
         self.duration = duration  # of the score, which may stop short of the audio
         self.end_marker: str | None = None
 
-        # bars win over beats, earlier wins over later
-        self.by_label: dict[str, tuple[float, float]] = {}
-        for bar in bars:
-            self.by_label.setdefault(bar.name.lower(), (bar.start, bar.end))
-        for bar in bars:
-            for beat in bar.beats:
-                if beat.label:
-                    self.by_label.setdefault(beat.label.lower(), (beat.start, beat.end))
+        self.beats = [beat for bar in bars for beat in bar.beats]
 
-        self.by_block = {block.name.lower(): block for block in textblocks}
-        self.boundaries = sorted(
-            {beat.start for bar in bars for beat in bar.beats} | {duration}
-        )
+        # a span given no end runs to the next point of its own kind, so each
+        # kind is kept as its own run of starts
+        self.sequences = {
+            "bar": [bar.start for bar in bars],
+            "beat": [beat.start for beat in self.beats],
+            "block": [block.start for block in textblocks],
+        }
+
+        # bars beat beats beat blocks, and within a kind the earliest wins
+        self.by_name = {
+            **first_wins(
+                (block.name.lower(), Address(block.start, "block", i))
+                for i, block in enumerate(textblocks)
+            ),
+            **first_wins(
+                (beat.label.lower(), Address(beat.start, "beat", i))
+                for i, beat in enumerate(self.beats)
+                if beat.label
+            ),
+            **first_wins(
+                (bar.name.lower(), Address(bar.start, "bar", i))
+                for i, bar in enumerate(bars)
+            ),
+        }
 
     @classmethod
     def build(
@@ -242,96 +274,109 @@ class Score:
         """Start and end of every beat, across all bars."""
         return [(beat.start, beat.end) for bar in self.bars for beat in bar.beats]
 
-    def next_boundary(self, after: float) -> float:
-        """The first bar or beat line strictly after a point in time."""
-        for boundary in self.boundaries:
-            if boundary > after + EPSILON:
-                return boundary
-        return self.duration
-
-    def address(self, text: str) -> tuple[float, float] | None:
-        """Resolve [4], [D51], [1.4] or [b2] to a start and an end."""
+    def address(self, text: str) -> Address | None:
+        """Resolve 4, D51, 1.4, b2 or JOHN to one point in the score."""
         key = text.strip().lower()
 
-        if key in self.by_label:
-            return self.by_label[key]
+        if key in self.by_name:
+            return self.by_name[key]
 
         if match := BAR_INDEX.match(key):
-            index = int(match.group(1))
-            if 1 <= index <= len(self.bars):
-                bar = self.bars[index - 1]
-                return bar.start, bar.end
+            index = int(match.group(1)) - 1
+            if 0 <= index < len(self.bars):
+                return Address(self.bars[index].start, "bar", index)
             return None
 
         if match := BEAT_INDEX.match(key):
-            bar_index, beat_index = (int(group) for group in match.groups())
-            if 1 <= bar_index <= len(self.bars):
-                beats = self.bars[bar_index - 1].beats
-                if 1 <= beat_index <= len(beats):
-                    beat = beats[beat_index - 1]
-                    return beat.start, beat.end
+            bar_index, beat_index = (int(group) - 1 for group in match.groups())
+            if 0 <= bar_index < len(self.bars):
+                bar = self.bars[bar_index]
+                if 0 <= beat_index < len(bar.beats):
+                    before = sum(len(b.beats) for b in self.bars[:bar_index])
+                    return Address(
+                        bar.beats[beat_index].start, "beat", before + beat_index
+                    )
         return None
 
-    def block(self, text: str) -> tuple[float, float] | None:
-        """Resolve {JOHN} or {JOHN-3} to a start and an end.
+    def follows(self, address: Address) -> float:
+        """Where a span with no end of its own runs to.
 
-        A block on its own runs to the next bar or beat. With a trailing
-        address it runs to the start of whatever that names.
+        The next point of the same kind: the next bar for a bar, the next
+        beat for a beat, the next text block for a text block, and the end
+        of the score when there is no next one.
         """
-        key = text.strip().lower()
+        starts = self.sequences[address.kind]
+        after = address.index + 1
+        return starts[after] if after < len(starts) else self.duration
 
-        if key in self.by_block:
-            start = self.by_block[key].start
-            return start, self.next_boundary(start)
+    def resolve(self, text: str) -> tuple[float, float] | None:
+        """Resolve FROM or FROM-TO to a start and an end.
 
-        if "-" in key:
-            name, _, until = key.rpartition("-")
-            if (block := self.by_block.get(name.strip())) and (
-                target := self.address(until)
-            ):
-                return block.start, target[0]
+        An end is exclusive: it is the start of whatever it names, so
+        [1-3] stops where bar 3 begins.
+        """
+        if address := self.address(text):
+            return address.start, self.follows(address)
+
+        if "-" in text:
+            before, _, after = text.strip().rpartition("-")
+            if (start := self.address(before)) and (end := self.address(after)):
+                return start.start, end.start
         return None
 
-    def span(self, token: str, is_block: bool) -> tuple[float, float, bool]:
+    def span(self, token: str) -> tuple[float, float, bool]:
         """Resolve one token, honouring a trailing x as "play this silently".
 
         The literal text is tried first, so a bar genuinely labelled "D51x"
         wins over a silent "D51".
         """
-        lookup = self.block if is_block else self.address
-
-        if found := lookup(token):
+        if found := self.resolve(token):
             return found[0], found[1], False
 
         if token.strip().lower().endswith("x"):
-            if found := lookup(token.strip()[:-1]):
+            if found := self.resolve(token.strip()[:-1]):
                 return found[0], found[1], True
 
-        brackets = "{%s}" if is_block else "[%s]"
         raise click.ClickException(
-            f"{brackets % token}: no such "
-            + ("text block" if is_block else "bar or beat")
-            + "."
+            f"[{token}]: no such bar, beat or text block: {self.missing(token)}"
         )
 
+    def missing(self, token: str) -> str:
+        """Name the parts of a token that do not resolve, for the error."""
+        candidate = token.strip()
+        if candidate.lower().endswith("x") and not self.address(candidate):
+            candidate = candidate[:-1]
+
+        names = [candidate]
+        if "-" in candidate:
+            before, _, after = candidate.rpartition("-")
+            names = [before, after]
+
+        return ", ".join(name.strip() for name in names if not self.address(name))
+
     def parse_pattern(self, pattern: str, name: str) -> list[tuple[float, float, bool]]:
-        """Turn "[1][1][1]{JOHN-3}" into a list of spans to play."""
+        """Turn "[1][1][1][JOHN-3]" into a list of spans to play."""
         spans = []
         position = 0
 
+        def outside(text: str) -> None:
+            if "{" in text or "}" in text:
+                raise click.ClickException(
+                    f"{name}: {text!r} uses curly brackets; spans are written "
+                    "in square ones, as [JOHN-3]."
+                )
+            raise click.ClickException(f"{name}: {text!r} is outside any [].")
+
         for match in TOKEN_PATTERN.finditer(pattern):
             if gap := pattern[position:match.start()].strip():
-                raise click.ClickException(
-                    f"{name}: {gap!r} is outside any [] or {{}}."
-                )
+                outside(gap)
             position = match.end()
 
-            square, curly = match.groups()
-            token = square if square is not None else curly
+            token = match.group(1)
             if not token.strip():
                 raise click.ClickException(f"{name}: empty address in the pattern.")
 
-            start, end, is_silent = self.span(token, is_block=square is None)
+            start, end, is_silent = self.span(token)
             if end <= start + EPSILON:
                 raise click.ClickException(
                     f"{name}: {match.group(0)} ends at {end:.3f}s, which is not "
@@ -340,7 +385,7 @@ class Score:
             spans.append((start, end, is_silent))
 
         if gap := pattern[position:].strip():
-            raise click.ClickException(f"{name}: {gap!r} is outside any [] or {{}}.")
+            outside(gap)
 
         if not spans:
             raise click.ClickException(f"{name}: markers may not be empty.")
@@ -422,19 +467,29 @@ the unit and x replaces it with silence of the same length:
     bars:       a unit is one bar   (needs "marker_file")
     beats:      a unit is one beat  (needs "marker_file")
 
-The fourth, "markers", is a free run of addresses, which may be in any
-order and may repeat:
+The fourth, "markers", is a free run of spans, which may be in any order
+and may repeat. A span is written in square brackets and names where it
+starts, optionally followed by a dash and where it ends:
 
     [4]         the 4th bar
-    [4x]        the 4th bar, silent
     [D51]       the bar or beat labelled D51
     [1.4]       the 4th beat of the 1st bar
     [b2]        the beat labelled b2
-    {JOHN}      the text block JOHN, up to the next bar or beat
-    {JOHN-3}    the text block JOHN, up to the start of bar 3
-    {JOHN-3.2}  ... up to the 2nd beat of bar 3
-    {JOHN-b2}   ... up to whatever is labelled b2
-    {JOHN-3x}   ... silent
+    [JOHN]      the text block JOHN
+    [1-3]       from bar 1 up to the start of bar 3
+    [1.4-3]     from the 4th beat of bar 1 up to bar 3
+    [JOHN-3.2]  from JOHN up to the 2nd beat of bar 3
+    [1.1-JOHN]  from the top of the snippet up to JOHN
+    [4x]        the 4th bar, silent
+    [1-3x]      bars 1 and 2, silent
+
+An end is exclusive: it is the start of whatever it names, so [1-3]
+stops where bar 3 begins.
+
+Given no end, a span runs to the next address of its own kind: the next
+bar for a bar, the next beat for a beat, the next text block for a text
+block, and the end of the snippet when there is no next one. So [1] and
+[1-2] are the same span, and so are [1.1] and [1.1-1.2].
 
 A trailing x means silence, but a label always wins: if a bar really is
 called "D51x" then [D51x] plays it.
@@ -468,7 +523,7 @@ sections:
 
   - name: Drill bar 1, then run into bar 3
     repeat: 3
-    markers: "[1][1][1] {JOHN-3}"
+    markers: "[1][1][1] [JOHN-3]"
 
 Usage:
 
