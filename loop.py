@@ -381,24 +381,40 @@ class Score:
 
         spans = []
         for index, (start, end, is_silent, shown) in enumerate(opened):
-            follows = index + 1 < len(opened)
-            if end is None:
-                end = opened[index + 1][0] if follows else self.duration
+            given = end is not None
+            after = opened[index + 1] if index + 1 < len(opened) else None
+            if not given:
+                end = after[0] if after else self.duration
 
             if end <= start + EPSILON:
-                hint = ""
-                if opened[index][1] is None:
-                    hint = (
-                        f" A span with no end of its own runs to the next one, so"
-                        f" {shown} needs one of its own here, as [1-2]."
-                    )
                 raise click.ClickException(
-                    f"{name}: {shown} ends at {end:.3f}s, which is not after "
-                    f"its start at {start:.3f}s.{hint}"
+                    f"{name}: {self.backwards(shown, start, end, given, after)}"
                 )
             spans.append((start, end, is_silent))
 
         return spans
+
+    def backwards(self, shown, start, end, given, after) -> str:
+        """Explain a span that does not move forwards.
+
+        Which of the three it is matters, because the fix differs: correct
+        the end, reorder the pattern, or drop the span.
+        """
+        if given:
+            return (
+                f"{shown} ends at {end:.3f}s, which is not after its start "
+                f"at {start:.3f}s."
+            )
+        if after:
+            return (
+                f"{shown} starts at {start:.3f}s but the next span {after[3]} "
+                f"starts at {end:.3f}s, so {shown} has nowhere to run. Put the "
+                f"spans in time order, or give {shown} an end of its own."
+            )
+        return (
+            f"{shown} starts at {start:.3f}s, which is already the end of the "
+            "snippet, so there is nothing left to play."
+        )
 
 
 def report(score: Score) -> None:
