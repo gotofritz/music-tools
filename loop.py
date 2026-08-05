@@ -166,6 +166,17 @@ class Score:
         self.end_marker = end_marker
         self.ignored = ignored if ignored is not None else Counter()
 
+        # A snippet cut from a recording usually starts on an upbeat, giving a
+        # short first bar. That is an anacrusis, not a bar of its own, so it is
+        # numbered 0 the way MuseScore numbers a pickup measure, and [1] stays
+        # the first full bar. Its length is judged against the bars after it,
+        # since the last bar is just as likely to be partial
+        self.pickup = len(bars) > 1 and (
+            len(bars[0].beats)
+            < Counter(len(bar.beats) for bar in bars[1:]).most_common(1)[0][0]
+        )
+        self.numbered_from = 0 if self.pickup else 1
+
         self.beats = [beat for bar in bars for beat in bar.beats]
 
         # every name is one point in time. The end marker is the weakest, then
@@ -282,13 +293,14 @@ class Score:
             return self.by_name[key]
 
         if match := BAR_INDEX.match(key):
-            index = int(match.group(1)) - 1
+            index = int(match.group(1)) - self.numbered_from
             if 0 <= index < len(self.bars):
                 return self.bars[index].start
             return None
 
         if match := BEAT_INDEX.match(key):
-            bar_index, beat_index = (int(group) - 1 for group in match.groups())
+            bar_index = int(match.group(1)) - self.numbered_from
+            beat_index = int(match.group(2)) - 1
             if 0 <= bar_index < len(self.bars):
                 beats = self.bars[bar_index].beats
                 if 0 <= beat_index < len(beats):
@@ -440,10 +452,19 @@ def report(score: Score) -> None:
             "bar lengths below will be wrong."
         )
 
+    if score.pickup:
+        click.echo(
+            f"{score.bars[0].name} is a {len(score.bars[0].beats)}-beat pickup, "
+            f"so it is [0] and the first full bar is [1] ({score.bars[1].name})."
+        )
+
     counts = Counter(len(bar.beats) for bar in score.bars)
     expected, _ = counts.most_common(1)[0]
 
-    for bar in score.bars:
+    # A snippet cut from a recording is expected to be partial at its edges,
+    # where a short bar means the cut fell mid-phrase rather than that the
+    # markers are wrong. Only a short bar in the middle is worth a warning
+    for bar in score.bars[1:-1]:
         if len(bar.beats) == expected:
             continue
 
@@ -519,6 +540,13 @@ After a dash it may also say where it ends, mixing the forms freely:
 
 An end is exclusive: it is the start of whatever it names, so [1-3]
 stops where bar 3 begins.
+
+A snippet cut from a recording usually starts on an upbeat. Where the
+first bar is shorter than the ones after it, it is taken for a pickup
+and numbered 0, the way MuseScore numbers a pickup measure, so [1] is
+still the first full bar and [0-1] is the pickup on its own. The markers
+must cover that upbeat: the score is lined up on the first marker, so
+audio before it cannot be reached and shifts everything if included.
 
 Given no end, a span runs to wherever the next span in the pattern
 starts, or to the end of the snippet if nothing follows it. That is what
