@@ -22,6 +22,11 @@ sections:
   #   [JOHN-3.2] from JOHN up to bar 3 beat 2   [1.1-JOHN] the top, up to JOHN
   #   a trailing x silences the span: [4x], [1-3x]
   #
+  # a short first bar is taken for a pickup and numbered 0, so [1] is
+  # still the first full bar and [0-1] is the pickup on its own. The
+  # markers have to cover that upbeat: audio before the first marker
+  # cannot be reached, and shifts everything else if it is included
+  #
   # END is reserved and always means the end of the snippet, so [4-END]
   # is the 4th bar in full wherever it appears. A trailing bar marker
   # with no beats under it names the same point and is never played, so

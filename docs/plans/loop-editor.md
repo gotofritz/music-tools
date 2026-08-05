@@ -159,7 +159,14 @@ Cover, using `tests/fixtures/d51.txt` and `tests/fixtures/jackson5.txt`:
   must give every bar the same beat count. A kind that is neither bar nor beat
   is counted into `score.ignored` and reported rather than dropped in silence.
 - `Score.build` shifts the first marker to `0.0`; the last bar ends at the
-  snippet duration.
+  snippet duration. That anchoring is why audio before the first marker cannot
+  be addressed — a loop starting on an upbeat must mark that upbeat.
+- A first bar shorter than the bars after it is a pickup: `score.pickup` is set,
+  positional addressing starts at `[0]`, and `[1]` is the first full bar. A loop
+  with square edges keeps 1-based numbering and has no `[0]`.
+- The odd-beat-count warning covers interior bars only, since a snippet cut from
+  a recording is expected to be partial at both edges. A short bar in the middle
+  still warns; a short first or last bar does not.
 - Bars tile the snippet with no gaps or overlaps, and so do beats.
 - Markers longer than the snippet raise, with the "belong to this snippet"
   message.
