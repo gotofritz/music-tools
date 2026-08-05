@@ -167,6 +167,10 @@ Cover, using `tests/fixtures/d51.txt` and `tests/fixtures/jackson5.txt`:
 - The odd-beat-count warning covers interior bars only, since a snippet cut from
   a recording is expected to be partial at both edges. A short bar in the middle
   still warns; a short first or last bar does not.
+- `modal_beats` breaks a tie toward the longer count, so a `2+4+4+2` loop reads
+  as two full bars between two partial ones. Breaking it the other way blames
+  the two correct interior bars, which is what `Counter.most_common` does on its
+  own — the same trap that made the warning name the wrong bar on a `1+4` file.
 - Bars tile the snippet with no gaps or overlaps, and so do beats.
 - Markers longer than the snippet raise, with the "belong to this snippet"
   message.
