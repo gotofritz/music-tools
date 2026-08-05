@@ -95,6 +95,17 @@ def resolve(root: Path, path: str) -> Path:
     return root / Path(path).expanduser()
 
 
+def modal_beats(bars: "list[Bar]") -> int:
+    """The beats-per-bar to judge the other bars by.
+
+    A tie goes to the longer count, because the bars that differ are the
+    ones cut short: a loop of 2+4+4+2 is two full bars between two partial
+    ones, not two odd bars between two right ones.
+    """
+    counts = Counter(len(bar.beats) for bar in bars)
+    return max(counts, key=lambda beats: (counts[beats], beats))
+
+
 def first_wins(pairs) -> dict:
     """Build a dict in which the earliest of any repeated key survives."""
     names: dict = {}
@@ -171,10 +182,7 @@ class Score:
         # numbered 0 the way MuseScore numbers a pickup measure, and [1] stays
         # the first full bar. Its length is judged against the bars after it,
         # since the last bar is just as likely to be partial
-        self.pickup = len(bars) > 1 and (
-            len(bars[0].beats)
-            < Counter(len(bar.beats) for bar in bars[1:]).most_common(1)[0][0]
-        )
+        self.pickup = len(bars) > 1 and len(bars[0].beats) < modal_beats(bars[1:])
         self.numbered_from = 0 if self.pickup else 1
 
         self.beats = [beat for bar in bars for beat in bar.beats]
@@ -458,8 +466,7 @@ def report(score: Score) -> None:
             f"so it is [0] and the first full bar is [1] ({score.bars[1].name})."
         )
 
-    counts = Counter(len(bar.beats) for bar in score.bars)
-    expected, _ = counts.most_common(1)[0]
+    expected = modal_beats(score.bars)
 
     # A snippet cut from a recording is expected to be partial at its edges,
     # where a short bar means the cut fell mid-phrase rather than that the
