@@ -532,6 +532,89 @@ def diagnose(marker_path: "Path | None", score: "Score | None", section) -> None
             click.echo(line)
 
 
+def drill_sets(count: int, keep: int) -> list[frozenset]:
+    """Which regions to silence, in order, for a drill of this many regions.
+
+    A window opens after the regions being kept, slides along, then widens
+    by one and slides again, until it covers everything after them. Then
+    each region in turn is the only one left sounding. The widest window is
+    also the first of those turns, so it is not repeated.
+    """
+    silenced = []
+    for width in range(1, count - keep + 1):
+        for start in range(keep, count - width + 1):
+            silenced.append(frozenset(range(start, start + width)))
+    for alone in range(count):
+        silenced.append(frozenset(i for i in range(count) if i != alone))
+
+    seen, unique = set(), []
+    for quiet in silenced:
+        if quiet not in seen:
+            seen.add(quiet)
+            unique.append(quiet)
+    return unique
+
+
+def expand_drill(section: dict, name: str) -> list[dict]:
+    """Turn one drill into the plain sections it stands for.
+
+    Textual, and deliberately so: it needs no score, so --expand works on
+    a config whose audio is not to hand, and what it prints can be pasted
+    back in place of the drill and hand-edited from there.
+    """
+    tokens = [
+        match.group(1).strip() for match in TOKEN_PATTERN.finditer(section["drill"])
+    ]
+    if len(tokens) < 2:
+        raise click.ClickException(
+            f"{name}: a drill needs at least two regions, as "
+            '"[START][M1.1][M2.1][M3.1-END]".'
+        )
+
+    keep = int(section.get("keep", 1))
+    if not 0 <= keep < len(tokens):
+        raise click.ClickException(
+            f"{name}: keep is {keep}, but there are only {len(tokens)} regions "
+            "and at least one has to be left to silence."
+        )
+
+    repeat = int(section.get("repeat", 1))
+    reference = int(section.get("reference", 1))
+    plain = "".join(f"[{token}]" for token in tokens)
+
+    sections = []
+    steps = drill_sets(len(tokens), keep)
+    for step, quiet in enumerate(steps, start=1):
+        if reference:
+            sections.append(
+                {"name": f"{name} {step}/{len(steps)}: all", "repeat": reference,
+                 "markers": plain}
+            )
+        without = " ".join(tokens[i] for i in sorted(quiet))
+        sections.append({
+            "name": f"{name} {step}/{len(steps)}: without {without}",
+            "repeat": repeat,
+            "markers": "".join(
+                f"[{token}x]" if i in quiet else f"[{token}]"
+                for i, token in enumerate(tokens)
+            ),
+        })
+    return sections
+
+
+def expand_sections(sections: list) -> list:
+    """Replace every drill with the sections it stands for."""
+    expanded = []
+    for i, section in enumerate(sections, start=1):
+        if isinstance(section, dict) and "drill" in section:
+            expanded.extend(
+                expand_drill(section, section.get("name", f"Section {i}"))
+            )
+        else:
+            expanded.append(section)
+    return expanded
+
+
 def read_pattern(section: dict, name: str) -> tuple[str, str, str]:
     """Pick the one of sequence/bars/beats/markers a section uses."""
     modes = [mode for mode in MODES if mode in section]
@@ -624,6 +707,21 @@ rather than opening a bar: it is never played, but given bars 92 and 93,
 A trailing x means silence, but a label always wins: if a bar really is
 called "D51x" then [D51x] plays it.
 
+A section may instead hold a "drill", which is a markers pattern that
+stands for a whole run of sections silencing its regions in turn:
+
+  - name: heaven
+    drill: "[START][M1.1][M2.1][M3.1-END]"
+    reference: 1   # repeats of the untouched pattern, before each step
+    repeat: 3      # repeats of each silenced pattern
+    keep: 1        # leading regions left sounding while the window widens
+
+A window opens after the kept regions and slides along, then widens by
+one and slides again, until it covers everything after them. Then each
+region in turn is the only one left sounding. Four regions give nine
+steps. Run with --expand to print the sections a drill stands for and
+stop; paste them back in its place to hand-edit from there.
+
 An optional top level "root" is prepended to "snippet", "marker_file"
 and "output", so that only the file names have to be typed. Paths that
 are already absolute are used as they are.
@@ -664,10 +762,22 @@ Usage:
     "config",
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
 )
-def main(config: Path):
+@click.option(
+    "--expand",
+    is_flag=True,
+    help="Print the sections a drill stands for, and stop. Paste them back "
+    "in its place to hand-edit from there.",
+)
+def main(config: Path, expand: bool):
 
     with config.open() as f:
         cfg = yaml.safe_load(f)
+
+    cfg["sections"] = expand_sections(cfg["sections"])
+
+    if expand:
+        click.echo(yaml.safe_dump({"sections": cfg["sections"]}, sort_keys=False))
+        return
 
     root = Path(cfg.get("root", "")).expanduser()
 

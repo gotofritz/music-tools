@@ -44,6 +44,21 @@ sections:
   # - name: drill bar 1, then run into bar 3
   #   repeat: 3
   #   markers: "[1-2][1-2][1-2] [JOHN-3]"
+  #
+  # drill:    one pattern standing for a run of sections that silence its
+  #           regions in turn. A window opens after the kept regions and
+  #           slides along, then widens and slides again, until it covers
+  #           everything after them; then each region in turn is the only
+  #           one still sounding. Four regions give nine steps
+  #
+  # - name: heaven
+  #   drill: "[START][M1.1][M2.1][M3.1-END]"
+  #   reference: 1   # repeats of the untouched pattern, before each step
+  #   repeat: 3      # repeats of each silenced pattern
+  #   keep: 1        # leading regions left sounding while the window widens
+  #
+  # run with --expand to print what a drill stands for and stop, then
+  # paste that back in its place to hand-edit from there
 
    - name: whole thing
      repeat: 2

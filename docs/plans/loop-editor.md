@@ -74,6 +74,7 @@ tests/                           # pytest
 | `PUT` | `/api/config?path=` | Save, after validation |
 | `POST` | `/api/config` | Create from a template next to a chosen snippet |
 | `POST` | `/api/validate` | Validate one pattern, return resolved spans |
+| `POST` | `/api/expand` | Expand a drill into the sections it stands for |
 | `POST` | `/api/generate?path=` | Run generation, return the output path |
 | `GET` | `/api/browse?dir=` | List directories and audio/marker files |
 
@@ -87,6 +88,12 @@ so a `markers:` field can show live feedback as you type:
 [1.1][UP1][UP2]
 0.000-0.545  0.545-0.872  0.872-2.760
 ```
+
+A `drill:` section stands for a run of sections that silence its regions in
+turn, which the CLI expands textually — no score needed — and `--expand` prints
+for pasting back. The editor should show a drill as its expansion too, since a
+row that generates eighteen others is otherwise opaque; `/api/expand` is that
+same function over HTTP.
 
 `describe(score)` already renders a score as the addresses a pattern can use —
 every bar and beat with its time, text blocks under the bar they fall in — which
