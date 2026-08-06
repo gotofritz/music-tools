@@ -487,6 +487,51 @@ def report(score: Score) -> None:
             click.echo(f"   ({beat:.3f} is {gap:.2f}s after the previous beat)")
 
 
+def describe(score: Score) -> list[str]:
+    """The marker file written out as the addresses a pattern can use.
+
+    Every failure so far has come down to a mismatch between what the
+    markers say and what the pattern assumed, so the useful thing to show
+    is not the file but the score it was read as.
+    """
+    lines = []
+    for index, bar in enumerate(score.bars):
+        number = index + score.numbered_from
+        note = "   (pickup)" if score.pickup and index == 0 else ""
+        lines.append(
+            f"    [{number}] {bar.name}   {bar.start:.3f} - {bar.end:.3f}{note}"
+        )
+        # a bar's opening beat carries the bar's own label, which is already
+        # on the line above, so only a beat labelled in its own right is shown
+        lines.append("        " + "  ".join(
+            f"[{number}.{n}] {beat.start:.3f}"
+            + (f" ={beat.label}" if beat.label and n > 1 else "")
+            for n, beat in enumerate(bar.beats, 1)
+        ))
+        lines.extend(
+            f"        [{block.name}] {block.start:.3f}"
+            for block in score.textblocks
+            if bar.start <= block.start < bar.end
+        )
+
+    closing = f"[{score.end_marker}] " if score.end_marker else ""
+    lines.append(f"    {closing}[END]   {score.duration:.3f}")
+    return lines
+
+
+def diagnose(marker_path: "Path | None", score: "Score | None", section) -> None:
+    """After a failure, show the instruction that failed and the markers."""
+    if section is not None:
+        click.echo("\nThe section that failed, as written:")
+        for line in yaml.safe_dump(section, sort_keys=False).strip().splitlines():
+            click.echo(f"    {line}")
+
+    if score is not None:
+        click.echo(f"\nMarkers: {marker_path}, as read:")
+        for line in describe(score):
+            click.echo(line)
+
+
 def read_pattern(section: dict, name: str) -> tuple[str, str, str]:
     """Pick the one of sequence/bars/beats/markers a section uses."""
     modes = [mode for mode in MODES if mode in section]
@@ -655,54 +700,70 @@ def main(config: Path):
         if marker_key == "markers":
             click.echo('Note: top level "markers" is now called "marker_file".')
         click.echo(f"Loaded markers: {marker_path}")
-        score = Score.build(parse_markers(marker_path), duration)
+        try:
+            score = Score.build(parse_markers(marker_path), duration)
+        except click.ClickException:
+            # no score to render it as, so the file itself is all there is
+            click.echo(f"\nMarkers: {marker_path}, as written:")
+            for line in marker_path.read_text().splitlines():
+                click.echo(f"    {line}")
+            raise
         report(score)
 
     click.echo()
 
-    for i, section in enumerate(sections, start=1):
+    section = None
+    try:
+        for i, section in enumerate(sections, start=1):
 
-        name = section.get("name", f"Section {i}")
-        repeat = int(section["repeat"])
-        mode, pattern, written = read_pattern(section, name)
+            name = section.get("name", f"Section {i}")
+            repeat = int(section["repeat"])
+            mode, pattern, written = read_pattern(section, name)
 
-        if mode == "sequence":
-            spans = [(0.0, duration, character == "x") for character in pattern]
-        else:
-            if not score:
-                raise click.ClickException(
-                    f'{name}: {mode} needs a top level "marker_file".'
-                )
-            if mode == "markers":
-                spans = score.parse_pattern(pattern, name)
+            if mode == "sequence":
+                spans = [(0.0, duration, character == "x") for character in pattern]
             else:
-                slices = score.bar_slices() if mode == "bars" else score.beat_slices()
-                if len(pattern) != len(slices):
-                    shape = (
-                        " ".join(bar.name for bar in score.bars)
-                        if mode == "bars"
-                        else "+".join(str(len(bar.beats)) for bar in score.bars)
-                    )
+                if not score:
                     raise click.ClickException(
-                        f"{name}: {mode} has {len(pattern)} characters but the "
-                        f"markers define {len(slices)} {mode} ({shape})."
+                        f'{name}: {mode} needs a top level "marker_file".'
                     )
-                spans = [
-                    (start, end, character == "x")
-                    for character, (start, end) in zip(pattern, slices)
-                ]
+                if mode == "markers":
+                    spans = score.parse_pattern(pattern, name)
+                else:
+                    slices = (
+                        score.bar_slices() if mode == "bars" else score.beat_slices()
+                    )
+                    if len(pattern) != len(slices):
+                        shape = (
+                            " ".join(bar.name for bar in score.bars)
+                            if mode == "bars"
+                            else "+".join(str(len(bar.beats)) for bar in score.bars)
+                        )
+                        raise click.ClickException(
+                            f"{name}: {mode} has {len(pattern)} characters but the "
+                            f"markers define {len(slices)} {mode} ({shape})."
+                        )
+                    spans = [
+                        (start, end, character == "x")
+                        for character, (start, end) in zip(pattern, slices)
+                    ]
 
-        click.echo(f"[{i}/{total_sections}] {name}")
-        click.echo(f"    {repeat} × {written} ({mode})")
+            click.echo(f"[{i}/{total_sections}] {name}")
+            click.echo(f"    {repeat} × {written} ({mode})")
 
-        for _ in range(repeat):
-            for start, end, is_silent in spans:
-                unit = snippet[int(start * 1000):int(end * 1000)]
-                output += AudioSegment.silent(
-                    duration=len(unit), frame_rate=snippet.frame_rate
-                ) if is_silent else unit
+            for _ in range(repeat):
+                for start, end, is_silent in spans:
+                    unit = snippet[int(start * 1000):int(end * 1000)]
+                    output += AudioSegment.silent(
+                        duration=len(unit), frame_rate=snippet.frame_rate
+                    ) if is_silent else unit
 
-        total_units += repeat * (len(spans) if mode != "sequence" else len(pattern))
+            total_units += repeat * (
+                len(spans) if mode != "sequence" else len(pattern)
+            )
+    except click.ClickException:
+        diagnose(marker_path, score, section)
+        raise
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output.export(output_path)
