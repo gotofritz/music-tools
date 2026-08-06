@@ -88,6 +88,12 @@ so a `markers:` field can show live feedback as you type:
 0.000-0.545  0.545-0.872  0.872-2.760
 ```
 
+`describe(score)` already renders a score as the addresses a pattern can use —
+every bar and beat with its time, text blocks under the bar they fall in — which
+the CLI prints on any failure. The editor wants the same data as JSON rather
+than text, so `/api/config` returning the score is that same view by another
+route.
+
 ### Where configs live
 
 Adopt a `*.loop.yml` suffix, each config beside the audio it drives:
