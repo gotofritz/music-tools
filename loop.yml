@@ -46,16 +46,25 @@ sections:
   #   markers: "[1-2][1-2][1-2] [JOHN-3]"
   #
   # drill:    one pattern standing for a run of sections that silence its
-  #           regions in turn. A window opens after the kept regions and
-  #           slides along, then widens and slides again, until it covers
-  #           everything after them; then each region in turn is the only
-  #           one still sounding. Four regions give nine steps
+  #           regions in turn. Taking [A][B][C][D] with keep 1:
+  #
+  #   each   one at a time: Bx, Cx, Dx
+  #   head   a growing head: Bx, BxCx, BxCxDx
+  #   tail   a growing tail: Dx, CxDx, BxCxDx
+  #   build  a shrinking tail, so the phrase grows back a region at a time
+  #   widen  a window that slides, widens by one, and slides again
+  #   solo   each region in turn as the only one still sounding
+  #
+  # steps run in the order given and never repeat a silencing already
+  # reached. keep holds the leading regions while a window moves through
+  # the rest; solo ignores it
   #
   # - name: heaven
   #   drill: "[START][M1.1][M2.1][M3.1-END]"
-  #   reference: 1   # repeats of the untouched pattern, before each step
+  #   steps: [widen, solo]   # the default
+  #   reference: 1   # repeats of the plain pattern, before each step
   #   repeat: 3      # repeats of each silenced pattern
-  #   keep: 1        # leading regions left sounding while the window widens
+  #   keep: 1        # leading regions the window leaves alone
   #
   # run with --expand to print what a drill stands for and stop, then
   # paste that back in its place to hand-edit from there

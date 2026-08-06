@@ -532,24 +532,74 @@ def diagnose(marker_path: "Path | None", score: "Score | None", section) -> None
             click.echo(line)
 
 
-def drill_sets(count: int, keep: int) -> list[frozenset]:
-    """Which regions to silence, in order, for a drill of this many regions.
+def step_each(count: int, keep: int) -> list[frozenset]:
+    """One region at a time."""
+    return [frozenset([i]) for i in range(keep, count)]
 
-    A window opens after the regions being kept, slides along, then widens
-    by one and slides again, until it covers everything after them. Then
-    each region in turn is the only one left sounding. The widest window is
-    also the first of those turns, so it is not repeated.
+
+def step_widen(count: int, keep: int) -> list[frozenset]:
+    """A window that slides along, widens by one, and slides again."""
+    return [
+        frozenset(range(start, start + width))
+        for width in range(1, count - keep + 1)
+        for start in range(keep, count - width + 1)
+    ]
+
+
+def step_head(count: int, keep: int) -> list[frozenset]:
+    """A growing head, so the phrase starts later and later."""
+    return [frozenset(range(keep, keep + w)) for w in range(1, count - keep + 1)]
+
+
+def step_tail(count: int, keep: int) -> list[frozenset]:
+    """A growing tail, so the phrase is cut shorter and shorter."""
+    return [frozenset(range(count - w, count)) for w in range(1, count - keep + 1)]
+
+
+def step_build(count: int, keep: int) -> list[frozenset]:
+    """A shrinking tail, so the phrase grows a region at a time."""
+    return list(reversed(step_tail(count, keep)))
+
+
+def step_solo(count: int, keep: int) -> list[frozenset]:
+    """Each region in turn as the only one still sounding.
+
+    This one ignores keep: holding a region back is the opposite of what
+    it is for.
+    """
+    return [
+        frozenset(i for i in range(count) if i != alone) for alone in range(count)
+    ]
+
+
+DRILL_STEPS = {
+    "each": step_each,
+    "widen": step_widen,
+    "head": step_head,
+    "tail": step_tail,
+    "build": step_build,
+    "solo": step_solo,
+}
+
+
+def drill_sets(count: int, keep: int, steps: list[str], name: str) -> list[frozenset]:
+    """Which regions to silence, in order, running the steps back to back.
+
+    Steps overlap by design -- widen ends where solo begins, each is the
+    first pass of widen -- so a set already reached is not repeated.
     """
     silenced = []
-    for width in range(1, count - keep + 1):
-        for start in range(keep, count - width + 1):
-            silenced.append(frozenset(range(start, start + width)))
-    for alone in range(count):
-        silenced.append(frozenset(i for i in range(count) if i != alone))
+    for step in steps:
+        if step not in DRILL_STEPS:
+            raise click.ClickException(
+                f"{name}: no such drill step {step!r}. "
+                f"Pick from {', '.join(sorted(DRILL_STEPS))}."
+            )
+        silenced.extend(DRILL_STEPS[step](count, keep))
 
     seen, unique = set(), []
     for quiet in silenced:
-        if quiet not in seen:
+        if quiet and quiet not in seen:
             seen.add(quiet)
             unique.append(quiet)
     return unique
@@ -582,8 +632,12 @@ def expand_drill(section: dict, name: str) -> list[dict]:
     reference = int(section.get("reference", 1))
     plain = "".join(f"[{token}]" for token in tokens)
 
+    wanted = section.get("steps", ["widen", "solo"])
+    if isinstance(wanted, str):
+        wanted = [wanted]
+
     sections = []
-    steps = drill_sets(len(tokens), keep)
+    steps = drill_sets(len(tokens), keep, wanted, name)
     for step, quiet in enumerate(steps, start=1):
         if reference:
             sections.append(
@@ -712,15 +766,29 @@ stands for a whole run of sections silencing its regions in turn:
 
   - name: heaven
     drill: "[START][M1.1][M2.1][M3.1-END]"
-    reference: 1   # repeats of the untouched pattern, before each step
-    repeat: 3      # repeats of each silenced pattern
-    keep: 1        # leading regions left sounding while the window widens
+    steps: [widen, solo]   # which drills to run, in order
+    reference: 1           # repeats of the plain pattern, before each step
+    repeat: 3              # repeats of each silenced pattern
+    keep: 1                # leading regions the window leaves alone
 
-A window opens after the kept regions and slides along, then widens by
-one and slides again, until it covers everything after them. Then each
-region in turn is the only one left sounding. Four regions give nine
-steps. Run with --expand to print the sections a drill stands for and
-stop; paste them back in its place to hand-edit from there.
+Taking [A][B][C][D] with keep 1, the steps are:
+
+    each    one region at a time, so Bx, then Cx, then Dx
+    head    a growing head: Bx, then BxCx, then BxCxDx
+    tail    a growing tail: Dx, then CxDx, then BxCxDx
+    build   a shrinking tail, so the phrase grows back a region at a time
+    widen   a window that slides, widens by one, and slides again
+    solo    each region in turn as the only one still sounding
+
+Steps run back to back in the order given, and a silencing already
+reached is not repeated -- "each" is "widen" at its first width, and
+"widen" ends where "solo" begins. keep holds the leading regions while a
+window moves through the rest; "solo" ignores it, since holding a region
+back is the opposite of what it is for. With keep 0 a window can reach
+every region, so [tail] ends on total silence, to be played to nothing.
+
+Run with --expand to print the sections a drill stands for and stop;
+paste them back in its place to hand-edit from there.
 
 An optional top level "root" is prepended to "snippet", "marker_file"
 and "output", so that only the file names have to be typed. Paths that

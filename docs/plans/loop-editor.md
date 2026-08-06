@@ -90,10 +90,12 @@ so a `markers:` field can show live feedback as you type:
 ```
 
 A `drill:` section stands for a run of sections that silence its regions in
-turn, which the CLI expands textually — no score needed — and `--expand` prints
-for pasting back. The editor should show a drill as its expansion too, since a
-row that generates eighteen others is otherwise opaque; `/api/expand` is that
-same function over HTTP.
+turn, built from named steps (`each`, `head`, `tail`, `build`, `widen`, `solo`)
+that compose in order. The CLI expands it textually — no score needed — and
+`--expand` prints the result for pasting back. The editor should show a drill as
+its expansion too, since a row that generates eighteen others is otherwise
+opaque; `/api/expand` is that same function over HTTP. The step names are the
+obvious thing to offer as checkboxes, with the expansion previewed live.
 
 `describe(score)` already renders a score as the addresses a pattern can use —
 every bar and beat with its time, text blocks under the bar they fall in — which
