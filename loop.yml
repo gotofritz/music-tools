@@ -65,6 +65,15 @@ sections:
   #   reference: 1   # repeats of the plain pattern, before each step
   #   repeat: 3      # repeats of each silenced pattern
   #   keep: 1        # leading regions the window leaves alone
+  #   cycle: 1       # passes of the regions making up one pattern
+  #
+  # cycle above 1 lays the regions down that many times and drills the
+  # whole run, so the phrase keeps turning while the hole moves through
+  # it. With cycle 2, [1][2][3][4] and step each gives
+  #
+  #   [1][2x][3][4] [1][2][3][4]
+  #   [1][2][3x][4] [1][2][3][4]
+  #   ...  through to  [1][2][3][4] [1][2][3][4x]
   #
   # run with --expand to print what a drill stands for and stop, then
   # paste that back in its place to hand-edit from there

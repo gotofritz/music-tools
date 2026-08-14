@@ -605,6 +605,27 @@ def drill_sets(count: int, keep: int, steps: list[str], name: str) -> list[froze
     return unique
 
 
+def close_spans(tokens: list[str]) -> list[str]:
+    """Give every bare region an end of its own, so the run can come round.
+
+    A bare span is closed by whatever follows it, which stops working the
+    moment the regions repeat: the last region would be closed by the
+    first and run backwards. Naming the end that was implied anyway lets
+    a region mean the same thing wherever it lands in the cycle.
+    """
+    closed = []
+    for i, token in enumerate(tokens):
+        if "-" in token:  # already ends somewhere of its own
+            closed.append(token)
+            continue
+        following = tokens[i + 1] if i + 1 < len(tokens) else None
+        closed.append(
+            f"{token}-{SCORE_END.upper()}" if following is None
+            else f"{token}-{following.split('-')[0].strip()}"
+        )
+    return closed
+
+
 def expand_drill(section: dict, name: str) -> list[dict]:
     """Turn one drill into the plain sections it stands for.
 
@@ -620,6 +641,14 @@ def expand_drill(section: dict, name: str) -> list[dict]:
             f"{name}: a drill needs at least two regions, as "
             '"[START][M1.1][M2.1][M3.1-END]".'
         )
+
+    # a cycle longer than one pass keeps the phrase turning while a hole
+    # moves through it, so the silence is heard in time rather than as a gap
+    cycle = int(section.get("cycle", 1))
+    if cycle < 1:
+        raise click.ClickException(f"{name}: cycle is {cycle}, but a drill needs at least one pass.")
+    if cycle > 1:
+        tokens = close_spans(tokens) * cycle
 
     keep = int(section.get("keep", 1))
     if not 0 <= keep < len(tokens):
@@ -644,7 +673,9 @@ def expand_drill(section: dict, name: str) -> list[dict]:
                 {"name": f"{name} {step}/{len(steps)}: all", "repeat": reference,
                  "markers": plain}
             )
-        without = " ".join(tokens[i] for i in sorted(quiet))
+        without = " ".join(
+            f"{tokens[i]}#{i + 1}" if cycle > 1 else tokens[i] for i in sorted(quiet)
+        )
         sections.append({
             "name": f"{name} {step}/{len(steps)}: without {without}",
             "repeat": repeat,
@@ -770,6 +801,7 @@ stands for a whole run of sections silencing its regions in turn:
     reference: 1           # repeats of the plain pattern, before each step
     repeat: 3              # repeats of each silenced pattern
     keep: 1                # leading regions the window leaves alone
+    cycle: 1               # how many passes of the regions make one pattern
 
 Taking [A][B][C][D] with keep 1, the steps are:
 
@@ -786,6 +818,20 @@ reached is not repeated -- "each" is "widen" at its first width, and
 window moves through the rest; "solo" ignores it, since holding a region
 back is the opposite of what it is for. With keep 0 a window can reach
 every region, so [tail] ends on total silence, to be played to nothing.
+
+A cycle above one lays the regions down that many times over and drills
+the whole run, so the phrase keeps turning while a hole moves through
+it. With cycle 2, [1][2][3][4] and step "each" gives
+
+    [1][2x][3][4] [1][2][3][4]
+    [1][2][3x][4] [1][2][3][4]
+    ...
+    [1][2][3][4] [1][2][3][4x]
+
+which is heard in time rather than as a gap. A bare region is closed by
+whatever follows it, so cycling first gives every region an end of its
+own -- otherwise the last would be closed by the first and run
+backwards. Regions repeat, so a step is named by its place in the cycle.
 
 Run with --expand to print the sections a drill stands for and stop;
 paste them back in its place to hand-edit from there.
