@@ -91,7 +91,7 @@ so a `markers:` field can show live feedback as you type:
 
 A `drill:` section stands for a run of sections that silence its regions in
 turn, built from named steps (`each`, `head`, `tail`, `build`, `widen`, `solo`)
-that compose in order. The CLI expands it textually — no score needed — and
+that compose in order, over a `cycle` of one or more passes of the regions. The CLI expands it textually — no score needed — and
 `--expand` prints the result for pasting back. The editor should show a drill as
 its expansion too, since a row that generates eighteen others is otherwise
 opaque; `/api/expand` is that same function over HTTP. The step names are the
