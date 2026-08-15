@@ -65,7 +65,9 @@ def test_next_orders_by_due_date_and_says_how_overdue(stocked, run):
     result = run("next")
 
     assert result.exit_code == 0
-    lines = [line for line in result.output.splitlines() if line.strip()]
+    heading, *lines = [line for line in result.output.splitlines() if line.strip()]
+    assert heading.startswith("SONGS (REPERTOIRE)")
+    assert "1 due of 3 rows" in heading
     assert "le freak" in lines[0]
     assert "1 day overdue" in lines[0]
     assert "espresso" in lines[1]
@@ -203,3 +205,90 @@ def test_start_opens_the_day_when_there_is_not_one(run):
 
     assert date.today().isoformat() in log.output
     assert "(running)" in log.output
+
+
+# --- the module is the unit --------------------------------------------------
+
+
+def test_module_list_shows_each_queue_on_its_own(stocked, run):
+    run("module", "add", "SLAP", "--log-group", "TECHNIQUE")
+    run("add", "SLAP", "Stomp!", "--due", YESTERDAY.isoformat())
+
+    result = run("module", "list")
+
+    assert result.exit_code == 0
+    songs, slap = [line for line in result.output.splitlines() if line.strip()][-2:]
+    assert "SONGS" in songs and "3 rows" in songs and "1 due" in songs
+    assert "SLAP" in slap and "1 row" in slap
+
+
+def test_next_without_a_module_is_grouped_by_module(stocked, run):
+    run("module", "add", "SLAP", "--log-group", "TECHNIQUE")
+    run("add", "SLAP", "Stomp!", "--due", YESTERDAY.isoformat())
+
+    result = run("next")
+
+    assert result.output.index("SONGS") < result.output.index("le freak")
+    assert result.output.index("SLAP") < result.output.index("Stomp!")
+    # the module heading carries the queue, not each row
+    assert "SONGS/le freak" not in result.output
+
+
+def test_module_show_lists_the_whole_queue_due_or_not(stocked, run):
+    result = run("module", "show", "SONGS")
+
+    assert result.exit_code == 0
+    assert "le freak" in result.output
+    assert "love me jeje" in result.output  # undated, so never in `next --due`
+    assert "REPERTOIRE" in result.output
+
+
+def test_module_edit_retags_and_renames(stocked, run):
+    assert run("module", "edit", "SONGS", "--log-group", "TUNES").exit_code == 0
+    assert run("module", "rename", "SONGS", "REPERTOIRE").exit_code == 0
+
+    listed = run("module", "list").output
+    assert "REPERTOIRE" in listed
+    assert "SONGS" not in listed
+
+
+def test_module_archive_takes_the_whole_queue_out_and_restore_brings_it_back(
+    stocked, run
+):
+    assert run("module", "archive", "SONGS").exit_code == 0
+    assert "le freak" not in run("next").output
+
+    assert run("module", "restore", "SONGS").exit_code == 0
+    assert "le freak" in run("next").output
+
+
+def test_module_delete_refuses_while_it_has_rows(stocked, run):
+    result = run("module", "delete", "SONGS")
+
+    assert result.exit_code != 0
+    assert "archive" in result.output
+    assert run("module", "delete", "SONGS", "--force").exit_code == 0
+    assert "SONGS" not in run("module", "list").output
+
+
+def test_a_row_can_be_edited_archived_and_deleted(stocked, run):
+    assert (
+        run("edit", "espresso", "--name", "Espresso", "--speed", "72%").exit_code == 0
+    )
+    assert "Espresso" in run("module", "show", "SONGS").output
+
+    assert run("archive", "Espresso").exit_code == 0
+    assert "Espresso" not in run("module", "show", "SONGS").output
+    assert run("restore", "Espresso").exit_code == 0
+
+    assert run("delete", "Espresso").exit_code == 0
+    assert "Espresso" not in run("module", "show", "SONGS").output
+
+
+def test_a_row_in_the_log_is_not_deleted(stocked, run):
+    run("done", "le freak")
+
+    result = run("delete", "le freak")
+
+    assert result.exit_code != 0
+    assert "archive" in result.output

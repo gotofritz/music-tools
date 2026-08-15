@@ -13,6 +13,15 @@ from typing import Any
 
 from music_tools.domain.models import Exercise, Module, PracticeDay, PracticeEntry
 
+MODULE_COLUMNS = (
+    "name",
+    "slug",
+    "log_group",
+    "instrument",
+    "position",
+    "archived_at",
+)
+
 EXERCISE_COLUMNS = (
     "module_id",
     "name",
@@ -99,11 +108,28 @@ def find_module(conn: sqlite3.Connection, name: str) -> Module | None:
     return Module.model_validate(dict(row)) if row else None
 
 
-def list_modules(conn: sqlite3.Connection) -> list[Module]:
+def list_modules(
+    conn: sqlite3.Connection, *, include_archived: bool = False
+) -> list[Module]:
     rows = conn.execute(
-        "SELECT * FROM module WHERE archived_at IS NULL ORDER BY position, name"
+        "SELECT * FROM module WHERE (? OR archived_at IS NULL) ORDER BY position, name",
+        (include_archived,),
     ).fetchall()
     return [Module.model_validate(dict(row)) for row in rows]
+
+
+def update_module(conn: sqlite3.Connection, module_id: int, **fields) -> Module:
+    columns = _check_columns(fields, MODULE_COLUMNS)
+    conn.execute(
+        f"UPDATE module SET {', '.join(f'{c} = ?' for c in columns)} WHERE id = ?",
+        [_encode(fields[column]) for column in columns] + [module_id],
+    )
+    return _require(get_module(conn, module_id), "module")
+
+
+def delete_module(conn: sqlite3.Connection, module_id: int) -> None:
+    """Hard delete. The foreign key refuses while any row still points here."""
+    conn.execute("DELETE FROM module WHERE id = ?", (module_id,))
 
 
 # --- exercises --------------------------------------------------------------
@@ -136,15 +162,33 @@ def update_exercise(conn: sqlite3.Connection, exercise_id: int, **fields) -> Exe
     return _require(get_exercise(conn, exercise_id), "exercise")
 
 
+def delete_exercise(conn: sqlite3.Connection, exercise_id: int) -> None:
+    """Hard delete. The foreign key refuses while the log still points here."""
+    conn.execute("DELETE FROM exercise WHERE id = ?", (exercise_id,))
+
+
+def count_entries_for_exercise(conn: sqlite3.Connection, exercise_id: int) -> int:
+    return conn.execute(
+        "SELECT count(*) FROM practice_entry WHERE exercise_id = ?", (exercise_id,)
+    ).fetchone()[0]
+
+
 def find_exercises(
-    conn: sqlite3.Connection, name: str, *, module_id: int | None = None
+    conn: sqlite3.Connection,
+    name: str,
+    *,
+    module_id: int | None = None,
+    include_archived: bool = False,
 ) -> list[Exercise]:
     """Every live exercise with this name — a name can repeat across modules."""
     sql = (
-        "SELECT * FROM exercise WHERE lower(name) = ? AND archived_at IS NULL"
+        "SELECT * FROM exercise WHERE lower(name) = ?"
+        " AND (? OR archived_at IS NULL)"
         " AND (? IS NULL OR module_id = ?) ORDER BY module_id"
     )
-    rows = conn.execute(sql, (name.strip().lower(), module_id, module_id)).fetchall()
+    rows = conn.execute(
+        sql, (name.strip().lower(), include_archived, module_id, module_id)
+    ).fetchall()
     return [Exercise.model_validate(dict(row)) for row in rows]
 
 
@@ -153,21 +197,26 @@ def exercises_due(
     *,
     module_id: int | None = None,
     on: date | None = None,
+    include_archived: bool = False,
 ) -> list[Exercise]:
     """`bassReorder`, which turned out to be a query.
 
-    Ordered by due date with undated rows last; archived rows never appear.
-    `on` narrows to what is actually due by then, which drops the undated.
+    Ordered by due date with undated rows last. Archived rows never appear,
+    and neither do the rows of an archived module: a module is the unit, so
+    archiving one takes its whole queue out of circulation. `on` narrows to
+    what is actually due by then, which drops the undated.
     """
     sql = [
-        "SELECT * FROM exercise WHERE archived_at IS NULL",
+        "SELECT exercise.* FROM exercise",
+        "JOIN module ON module.id = exercise.module_id",
+        "WHERE (? OR (exercise.archived_at IS NULL AND module.archived_at IS NULL))",
         "AND (? IS NULL OR module_id = ?)",
         "AND (? IS NULL OR (next_due IS NOT NULL AND next_due <= ?))",
-        "ORDER BY next_due IS NULL, next_due, name",
+        "ORDER BY next_due IS NULL, next_due, exercise.name",
     ]
     on_iso = on.isoformat() if on else None
     rows = conn.execute(
-        " ".join(sql), (module_id, module_id, on_iso, on_iso)
+        " ".join(sql), (include_archived, module_id, module_id, on_iso, on_iso)
     ).fetchall()
     return [Exercise.model_validate(dict(row)) for row in rows]
 

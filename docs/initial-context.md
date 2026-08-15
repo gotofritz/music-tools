@@ -42,6 +42,7 @@ music_tools/
         models.py        Module, Exercise, PracticeDay, PracticeEntry, ...
         tempo.py         the speed grammar
         scheduling.py    the five algorithms, pure
+        catalogue.py     modules and their rows: CRUD, and what may be deleted
         session.py       start a day, mark done, day totals
     importer/
         sheets.py        the one-off spreadsheet importer
@@ -55,7 +56,7 @@ tests/
     conftest.py          marker fixtures, the db fixture, the seeded rngs
     fixtures/*.txt       hand-written marker exports
     test_migrations.py test_tempo.py test_scheduling.py
-    test_session.py    test_importer.py test_cli.py
+    test_catalogue.py  test_session.py  test_importer.py test_cli.py
     test_score.py      test_patterns.py test_drills.py
 docs/
     initial-context.md   this file
@@ -73,7 +74,12 @@ config/, tunes/          hand-kept example inputs and shell wrappers
 
 The sheet used one word for three things, so, once and for all:
 
-- A **module** is a practice area — one sheet: `SLAP`, `SONGS`, `TECHNIQUE`.
+- A **module** is a practice area — one sheet: `SLAP`, `SONGS`, `TECHNIQUE`. It
+  is the fundamental abstraction: a queue of its own, scheduled within itself,
+  asked for a module at a time. `ROTATE` and `HOLD` scan one module's due dates
+  and no other's, `next` prints a block per module, and archiving one takes its
+  whole queue out of circulation. Nothing crosses modules except the day log,
+  which adds their time up by log group.
 - A **log group** is the coarser bucket the day log subtotals by — `TECHNIQUE`,
   `REPERTOIRE`. The Apps Script read it from cell `A1` of the module's sheet,
   and the importer still does.
@@ -96,10 +102,14 @@ Three rules hold the shape:
 
 - **`domain/tempo.py` and `domain/scheduling.py` are pure.** No I/O, no clock,
   no global `random`. They take what they need and return a value.
-- **`domain/session.py` is the only place that composes writes.** It opens one
-  transaction per operation and calls the repository inside it.
+- **`domain/session.py` and `domain/catalogue.py` are where writes are
+  composed.** They open one transaction per operation and call the repository
+  inside it. `session.py` is a practice session — the clock, `mark_done`, the
+  totals. `catalogue.py` is the shape of the catalogue itself — modules, their
+  rows, and what may be renamed, archived or deleted.
 - **`db/repository.py` never opens a transaction** and never makes a decision.
-  SQL in, models out.
+  SQL in, models out. Refusing to delete a row with history is a decision, which
+  is why that lives in `catalogue.py` and not next to the `DELETE`.
 
 **The clock and the rng are injected everywhere.** Any function that would
 otherwise call `datetime.now()` takes `now` as an argument, and anything random
@@ -158,6 +168,19 @@ restamps the running entry's `started_at` to now, so the gap since the last
 `done` — a break — is not logged against whatever is played next. The rule
 underneath both cases is the same: **time nobody attributed is not practice
 time**, and the app will not invent an attribution for it.
+
+### Archiving and deleting
+
+`archived_at` on both `module` and `exercise` is the normal way things leave:
+reversible, and the day log stays intelligible. `exercises_due` excludes
+archived rows *and* the rows of archived modules, so archiving a module retires
+its queue in one move.
+
+Hard deletes are for mistakes and stop at history: `catalogue.delete_exercise`
+refuses once any entry points at the row, and `delete_module` refuses unless it
+is empty or `force`d, and refuses either way once any of its rows has been
+practised. The rule is that the day log is a record — the catalogue may not
+punch holes in it.
 
 `description`, `speed`, `bpm` and `log_group` on an entry are **snapshots**: the
 log is a record and must not change when an exercise is renamed, retuned or

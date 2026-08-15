@@ -8,7 +8,8 @@ it, and its Apps Script, are in `docs/raw/`), reproduces its schedule, and
 imports its history.
 
 ```bash
-uv run practice next                 # what is due, most overdue first
+uv run practice module list          # every module and the state of its queue
+uv run practice next SONGS           # that module's queue, most overdue first
 uv run practice done "le freak"      # schedule it, and log the time
 uv run practice start                # back after a break: drop the gap
 uv run practice log                  # today's block, with subtotals
@@ -52,7 +53,7 @@ source .venv/bin/activate
 ### Running it
 
 ```bash
-uv run practice --help              # the tracker: start, next, done, log, import
+uv run practice --help              # the tracker: module, next, done, log, import
 uv run loop practice.yml            # build the practice file
 uv run loop --expand practice.yml   # print what a drill stands for, and stop
 uv run loop --help                  # the full pattern grammar
@@ -85,7 +86,7 @@ CI runs `task qa` on every push to `main` and every pull request
 ```
 music_tools/cli.py      practice: the click group, and the only clock and rng
 music_tools/db/         connection, migrations, repository (SQL in, models out)
-music_tools/domain/     tempo, scheduling, session, models — pure where it can be
+music_tools/domain/     tempo, scheduling, session, catalogue, models
 music_tools/importer/   the one-off spreadsheet importer
 music_tools/loop.py     the loop tool: model, parsing, rendering, CLI
 music_tools/main.py     rearrange, plus config.py, generator.py, markers.py
