@@ -10,10 +10,12 @@ seeded `random.Random` that every scheduling call takes, because nothing in
 """
 
 import random
+from datetime import date, datetime, time
 from pathlib import Path
 
 import pytest
 
+from music_tools.db import repository
 from music_tools.db.connection import open_db
 from music_tools.db.migrate import migrate
 from music_tools.loop import Score, parse_markers
@@ -123,3 +125,35 @@ def steady_rng():
 def jittery_rng():
     """Jitter pinned to its positive extreme, for the order-of-operations test."""
     return SteadyRandom(uniform_value=1.0, randint_value=2)
+
+
+@pytest.fixture
+def sample_day(db):
+    """The 2026-07-05 block of `docs/raw/BASS.csv`, as entries.
+
+    The subtotals the spreadsheet's own formulas produced for it are 00:19,
+    00:34 and 00:53, which is what the port has to reproduce.
+    """
+    day = repository.create_day(db, day=date(2026, 7, 5))
+    block = [
+        ("22:27", "22:34", "TECHNIQUE", "019 Tempo Builder"),
+        ("22:34", "22:46", "TECHNIQUE", "Page 3 The Slap Bass Program"),
+        ("22:46", "23:03", "REPERTOIRE", "le freak"),
+        ("23:03", "23:20", "REPERTOIRE", "love me jeje"),
+    ]
+    for started, ended, log_group, description in block:
+        entry = repository.create_entry(
+            db,
+            day_id=day.id,
+            started_at=datetime.combine(day.day, time.fromisoformat(started)),
+            description=description,
+            log_group=log_group,
+        )
+        repository.close_entry(
+            db,
+            entry.id,
+            ended_at=datetime.combine(day.day, time.fromisoformat(ended)),
+            description=description,
+            log_group=log_group,
+        )
+    return day
