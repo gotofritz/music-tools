@@ -3,6 +3,154 @@
 This guide is for playing, not programming. It assumes you can open a
 Terminal window and type into it, and nothing else.
 
+There are two tools, and they are heading towards being one:
+
+- **`practice`** keeps track of *what* to play — every exercise, how fast you
+  are playing it, when you last did it, and when it comes back. It is the
+  spreadsheet, as a program.
+- **`loop`** builds the practice track itself: a passage over and over with
+  bits of it replaced by silence.
+
+Part 1 below is `practice`. Part 2 is `loop`. Read whichever you need.
+
+Ask a developer to do the one-off setup in [README.md](../README.md#setup)
+first.
+
+---
+
+# Part 1 — Keeping track of what to practise
+
+Practice is organised in three layers:
+
+- A **module** is a practice area — `SLAP`, `SONGS`, `TECHNIQUE`. One per
+  sheet, back when this was a spreadsheet.
+- An **exercise** is a row in it: a tune or a study, with the speed you play it
+  at, how many times you have practised it, and the date it is next due.
+- The **day log** is what you actually did, in blocks of a day, with a subtotal
+  per **log group** (`TECHNIQUE`, `REPERTOIRE`) and a total for the day.
+
+Everything lives in one file: `~/.local/share/music-tools/practice.db`. Set
+`MUSIC_TOOLS_DB` to keep it somewhere else, or pass `--db` to any command.
+
+## A practice session
+
+```bash
+uv run practice day new              # start the clock
+uv run practice next                 # what is due, most overdue first
+uv run practice done "le freak"      # played it — schedule it and log the time
+uv run practice log                  # today's block, with subtotals
+```
+
+`next` prints one line per exercise:
+
+```
+2026-12-03   3 days overdue   SONGS/le freak    87.8 BPM (66%)   x12
+```
+
+— the date it was due, how late that is, which module it is in, what speed you
+are playing it at, and how many times you have practised it.
+
+`done` is the one that matters. It bumps the count, stamps today, works out
+when the exercise comes back, closes the entry that was running and starts the
+next one, all at once:
+
+```
+le freak done — practised 13 times, next due 2027-01-15 (in 153 days)
+logged 22:46-23:03  00:17  REPERTOIRE  87.8 BPM (66%)
+```
+
+You never type a start time. The clock runs from the last thing you finished,
+so entries tile the session end to end. A day ends at 4am, not midnight —
+practice past midnight belongs to the evening it started in.
+
+If a name exists in two modules, say which: `uv run practice done SONGS/"le
+freak"`. If you mistype it, the message lists the near misses.
+
+## How fast you are playing it
+
+The speed column understands two dialects, because Transcribe! counts in
+percentages and metronomes count in BPM:
+
+| You type | It means | At a target of 133 |
+| --- | --- | --- |
+| `123` | 123 BPM | 123 |
+| `123/1` | the same, spelled out | 123 |
+| `123/2` | 123 a minute, one every 2nd beat | 246 |
+| `123/0.5` | 123 a minute, one every half beat | 61.5 |
+| `66%` | 66% of what you are aiming at | 87.8 |
+
+```bash
+uv run practice speed "le freak" 85%
+uv run practice speed "le freak" 85% --target-bpm 133
+```
+
+The **target** is the tempo the exercise is aiming at — the tune's real tempo,
+or the marking on the page. It is worth filling in, because it is what makes
+the two dialects comparable, and because **an exercise you are playing under
+tempo comes back sooner**. At 80% of target the interval is 80% as long. Past
+the target nothing shrinks further.
+
+Anything the app cannot read — `fast`, `medium-ish`, an empty cell — is kept
+exactly as you typed it and simply does not affect the schedule.
+
+## When it comes back
+
+Intervals grow the way they did in the spreadsheet: 1, 1, 2, 3, 5, 8, 13, 21,
+34, 55, 89 days and on up to a ceiling of 120, with a few percent of jitter so
+everything does not pile up on the same day. Four variations, when the default
+is wrong:
+
+| Command | What it does |
+| --- | --- |
+| `practice done X` | the normal interval |
+| `practice done X --short` | half of it — this one is not sticking |
+| `practice done X --long` | half again as long — this one is solid |
+| `practice done X --rotate` | to the back of this module's queue |
+| `practice done X --hold` | to the front: practised, but not learned |
+
+## Adding things
+
+```bash
+uv run practice module add SLAP --log-group TECHNIQUE
+uv run practice add SLAP "Stomp!" --speed 80% --target-bpm 133
+uv run practice module list
+```
+
+## Bringing the spreadsheet over
+
+Export each sheet from Google Sheets (**File → Download → Tab-separated
+values**) and point the importer at them:
+
+```bash
+uv run practice import --modules "BASS SONGS.csv" --modules "BASS SLAP.csv" \
+                       --day-log "BASS.csv"
+```
+
+The file name gives the module — `BASS SONGS.csv` becomes the module `SONGS`
+on the instrument `bass` — and the top-left cell gives its log group. Practice
+counts, dates and speeds all come over as they are, so nothing in the schedule
+shifts on the day you switch. Running it twice changes nothing, so you can
+re-export and re-import as often as you like. Anything it cannot read is listed
+at the end rather than dropped in silence.
+
+## Keeping a copy
+
+The spreadsheet gave you version history for free and a file on your disk does
+not:
+
+```bash
+uv run practice db dump    # writes backups/practice.sql
+```
+
+(or `task db:dump`, which is the same thing)
+
+That is plain text, one line per row, so it can live in a git repository and be
+read in a diff.
+
+---
+
+# Part 2 — Building a practice track
+
 ## What the tool does
 
 You have a tricky four bars. You can play them slowly. You cannot play them
@@ -26,9 +174,7 @@ it replaces, so the pulse never moves.
 - **A settings file.** A short text file, ending in `.yml`, where you say
   what you want. This guide is mostly about writing that.
 
-Ask a developer to do the one-off setup on page
-[README.md](../README.md#setup) first. After that you only ever type one
-command.
+After the one-off setup you only ever type one command.
 
 ## Marking up the snippet
 

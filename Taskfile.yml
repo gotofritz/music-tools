@@ -17,6 +17,11 @@ tasks:
     cmds:
       - uv run ty check
 
+  db:dump:
+    desc: Dump the practice database to backups/practice.sql
+    cmds:
+      - uv run practice db dump
+
   qa:
     desc: Everything CI runs
     cmds:

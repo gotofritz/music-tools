@@ -176,3 +176,14 @@ def test_log_defaults_to_today(stocked, run):
 def test_an_empty_database_says_so_rather_than_printing_nothing(run):
     assert "nothing" in run("next").output.lower()
     assert "nothing" in run("log").output.lower()
+
+
+def test_db_dump_writes_a_backup_that_can_live_in_git(stocked, run, tmp_path):
+    out = tmp_path / "backups" / "practice.sql"
+
+    result = run("db", "dump", "--to", str(out))
+
+    assert result.exit_code == 0
+    dumped = out.read_text()
+    assert "CREATE TABLE module" in dumped
+    assert "le freak" in dumped
