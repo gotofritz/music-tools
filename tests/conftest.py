@@ -3,12 +3,19 @@
 The marker fixtures are hand-written text, small enough to read in a diff.
 Each is offset well into an imaginary recording, because Transcribe! writes
 the timestamps of the original track and `Score.build` has to shift them back.
+
+The practice-app fixtures are the other half: an in-memory database, and the
+seeded `random.Random` that every scheduling call takes, because nothing in
+`domain/` is allowed to reach for the module-level `random`.
 """
 
+import random
 from pathlib import Path
 
 import pytest
 
+from music_tools.db.connection import open_db
+from music_tools.db.migrate import migrate
 from music_tools.loop import Score, parse_markers
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -63,3 +70,24 @@ def write_markers(tmp_path):
 def d51(build_score):
     """The score every pattern test is written against."""
     return build_score("d51")
+
+
+@pytest.fixture
+def memory_db():
+    """A connection with the pragmas set, but no schema."""
+    conn = open_db(":memory:")
+    yield conn
+    conn.close()
+
+
+@pytest.fixture
+def db(memory_db):
+    """A migrated, empty practice database."""
+    migrate(memory_db)
+    return memory_db
+
+
+@pytest.fixture
+def rng():
+    """The seeded rng every scheduling call takes; never the global one."""
+    return random.Random(20260715)
