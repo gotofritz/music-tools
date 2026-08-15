@@ -177,7 +177,7 @@ Each step is red/green: write the failing test, then the smallest change that
 passes it. Every step leaves the repo working.
 
 `loop.py`'s own behaviour — marker parsing, pattern resolution, drill expansion —
-is pinned by the characterisation tests in `01-foundations.md`. This phase is
+is pinned by the characterisation tests from `../archive/01-foundations.md`. This phase is
 where that pinning earns its keep: steps 1–3 change `loop.py`, and those tests
 are what says the change was safe.
 
