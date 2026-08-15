@@ -20,14 +20,18 @@ first.
 
 # Part 1 — Keeping track of what to practise
 
-Practice is organised in three layers:
+**The module is the unit.** A module is a practice area — `SLAP`, `SONGS`,
+`TECHNIQUE` — one per sheet, back when this was a spreadsheet, and each one is
+a queue of its own. Modules never affect each other: rows are scheduled within
+a module, rotated within a module, and asked for a module at a time.
 
-- A **module** is a practice area — `SLAP`, `SONGS`, `TECHNIQUE`. One per
-  sheet, back when this was a spreadsheet.
-- An **exercise** is a row in it: a tune or a study, with the speed you play it
-  at, how many times you have practised it, and the date it is next due.
+- A **row** (an **exercise**) belongs to exactly one module: a tune or a study,
+  with the speed you play it at, how many times you have practised it, and the
+  date it is next due.
 - The **day log** is what you actually did, in blocks of a day, with a subtotal
-  per **log group** (`TECHNIQUE`, `REPERTOIRE`) and a total for the day.
+  per **log group** (`TECHNIQUE`, `REPERTOIRE`) and a total for the day. The log
+  group is a property of the module, which is how a day's practice adds up
+  across several of them.
 
 Everything lives in one file: `~/.local/share/music-tools/practice.db`. Set
 `MUSIC_TOOLS_DB` to keep it somewhere else, or pass `--db` to any command.
@@ -36,19 +40,25 @@ Everything lives in one file: `~/.local/share/music-tools/practice.db`. Set
 
 ```bash
 uv run practice start                # start the clock, or restart it
-uv run practice next                 # what is due, most overdue first
+uv run practice next SONGS           # what that module wants, most overdue first
 uv run practice done "le freak"      # played it — schedule it and log the time
 uv run practice log                  # today's block, with subtotals
 ```
 
-`next` prints one line per exercise:
+`next MODULE` prints that module's queue:
 
 ```
-2026-12-03   3 days overdue   SONGS/le freak    87.8 BPM (66%)   x12
+SONGS (REPERTOIRE) — 1 due of 4 rows
+  2026-12-03   3 days overdue   le freak      87.8 BPM (66%)   x12
+  2027-01-05   in 33 days       espresso      70%              x13
 ```
 
-— the date it was due, how late that is, which module it is in, what speed you
-are playing it at, and how many times you have practised it.
+— the heading says how much of the queue is actually due, then one line per
+row: the date it was due, how late that is, what speed you are playing it at,
+and how many times you have practised it.
+
+Bare `next` does the same for every module, one block each, because that is
+what modules are: separate queues that happen to live in the same file.
 
 `done` is the one that matters. It bumps the count, stamps today, works out
 when the exercise comes back, closes the entry that was running and starts the
@@ -129,13 +139,60 @@ is wrong:
 | `practice done X --rotate` | to the back of this module's queue |
 | `practice done X --hold` | to the front: practised, but not learned |
 
-## Adding things
+## Looking after the modules
 
 ```bash
+uv run practice module list                    # every queue and its state
+uv run practice module show SONGS              # one module, whole queue, due or not
 uv run practice module add SLAP --log-group TECHNIQUE
-uv run practice add SLAP "Stomp!" --speed 80% --target-bpm 133
-uv run practice module list
+uv run practice module rename SLAP "BASS SLAP"
+uv run practice module edit SLAP --log-group TECHNIQUE --position 1
 ```
+
+`module list` is the overview:
+
+```
+SONGS          REPERTOIRE   4 rows     1 due   next 2026-11-14
+SLAP           TECHNIQUE    9 rows     3 due   next 2026-08-12
+```
+
+`--position` is the order they are listed in. `--log-group` is which bucket the
+module's time subtotals into in the day log.
+
+## Adding and changing rows
+
+```bash
+uv run practice add SLAP "Stomp!" --speed 80% --target-bpm 133 --due 2026-09-01
+uv run practice edit "Stomp!" --name "Stomp! (Godsmack)" --speed 85% --count 4
+uv run practice speed "Stomp!" 85%             # shorthand for edit --speed
+```
+
+Editing a row never rewrites the day log. What you played last Tuesday was
+called what it was called last Tuesday.
+
+## Putting things away
+
+Two ways, and the difference matters:
+
+```bash
+uv run practice archive "Stomp!"        # out of the queue, still in the log
+uv run practice restore "Stomp!"
+uv run practice module archive SLAP     # the whole queue at once
+uv run practice module restore SLAP
+
+uv run practice delete "Stomp!"         # gone, and only for mistakes
+uv run practice module delete SLAP [--force]
+```
+
+**Archiving is the normal move.** The row leaves the queue and stops turning up
+in `next`, and everything it did is still in the day log and still adds up.
+Archiving a module takes its whole queue out in one go.
+
+**Deleting is for mistakes** — the module you named wrong five minutes ago. It
+is refused for anything the day log points at, and tells you to archive it
+instead; a log with a hole in it is worse than a module you have stopped using.
+`module delete --force` takes the rows with it, and is refused just the same
+once any of them has been practised.
 
 ## Bringing the spreadsheet over
 
