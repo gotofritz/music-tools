@@ -22,7 +22,9 @@ lives in SQLite, not in the page; and `htmx.min.js` is a vendored file in
 the point of leaving Sheets.
 
 **Forms work without JavaScript.** Every HTMX action is a real `<form>` with a
-real `action` and `method`, progressively enhanced by `hx-post`. This is not
+real `action` and `method`, progressively enhanced by `hx-post`. HTML forms
+only submit GET and POST, so the inline-edit route answers a plain POST as
+well as the `PATCH` HTMX sends — one handler, registered twice. This is not
 purity: it is what makes the routes testable with `TestClient` and no browser,
 and it means a broken JS file degrades to a working app rather than a dead page.
 

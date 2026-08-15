@@ -98,11 +98,16 @@ Two notes on that:
   computes `days * 100/80`, a 25% *longer* interval, so a tune still under tempo
   comes back *later* than one already at full speed — backwards. The port
   multiplies by how close to target the exercise is being played (see **Tempo**
-  below), so 80% gives 0.8× the interval and returns sooner. Combined with the
-  `max(1, …)` floor already there, nothing can schedule below a day. This is the
-  one deliberate behaviour change in the port. Existing due dates are imported
-  verbatim, so nothing shifts at the cutover; anything below target simply comes
-  back sooner from its next `done` onward.
+  below), so 80% gives 0.8× the interval and returns sooner. The sheet applied
+  its `max(1, …)` floor *before* the scaling — harmless while scaling could
+  only stretch — so the floor moves after it, and nothing can schedule below a
+  day. This scaling fix, direction and floor together, is the one deliberate
+  behaviour change in the port. (Scaling by ratio also reaches the BPM dialect
+  once a target is typed in, where the sheet only ever recognised percentages —
+  but a null target means no scaling, so imported rows behave exactly as
+  today.) Existing due dates are imported verbatim, so nothing shifts at the
+  cutover; anything below target simply comes back sooner from its next `done`
+  onward.
 - **The table plateaus at 120 days**, and `Long` at 180. Pinned by test.
 
 ## Tempo
@@ -212,7 +217,8 @@ into the app; uploaded marker files are written beside the audio they describe.
 **Migrations** are numbered `.sql` files applied in order, gated by
 `PRAGMA user_version`. No ORM, no Alembic: hand-written SQL against `sqlite3`
 from the standard library, with pydantic models on the boundary. The whole
-schema is a dozen tables and the queries are all `SELECT … ORDER BY next_due`.
+schema is eight tables by the end and the queries are all
+`SELECT … ORDER BY next_due`.
 Adding SQLAlchemy would be more new surface than the app it holds.
 
 **Backups.** The spreadsheet gave version history for free and a local SQLite
@@ -251,6 +257,8 @@ CREATE TABLE exercise (
   archived_at TEXT
 );
 CREATE INDEX exercise_due ON exercise(module_id, next_due);
+CREATE UNIQUE INDEX exercise_name ON exercise(module_id, name)
+  WHERE archived_at IS NULL;      -- the importer's natural key
 
 CREATE TABLE practice_day (
   id INTEGER PRIMARY KEY,

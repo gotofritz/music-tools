@@ -15,7 +15,7 @@ tests.
 
 ## Honest caveat
 
-Steps 4 and 5 are **characterisation** tests. The behaviour already exists;
+Steps 4–6 are **characterisation** tests. The behaviour already exists;
 they are red only because there is no suite yet. That is not TDD, it is a safety
 net being installed before surgery, and calling it anything else would be
 dishonest. Every later phase in this plan is properly red-first.
@@ -70,12 +70,13 @@ green, on a repo where nothing has been tested yet.
 **Red.** No `.github/` at all, though AGENTS.md says "CI via GitHub Actions" and
 "all checks must pass before merge".
 
-**Green.** `.github/workflows/qa.yml`: checkout, `astral-sh/setup-uv`,
-`uv sync --all-groups`, `task qa`. Install `ffmpeg` in the runner — `pydub`
+**Green.** `.github/workflows/qa.yml`: checkout, `astral-sh/setup-uv`, install
+`task` (`arduino/setup-task` — a bare runner does not have it), then
+`uv sync --all-groups` and `task qa`. Install `ffmpeg` too — `pydub`
 needs it for mp3, and a later phase generates audio in tests.
 
 Nothing macOS-only may run in CI: the Transcribe! launch is behind a flag from
-`04-loop-editor.md` step 4, and until then no test may call `main`.
+`04-loop-editor.md` step 2, and until then no test may call `main`.
 
 ### Step 3 — `loop.py` becomes importable
 
@@ -156,7 +157,9 @@ end; the ranges `[1-3]`, `[1.4-3]`, `[JOHN-3.2]`, `[JOHN-D53]`, `[1.1-JOHN]`,
 `[1-3x]`; repeats and out-of-order runs written with explicit ends.
 
 The neighbour rule specifically: `[1]` alone is the whole snippet, `[1][3]` is
-bars 1–2 then 3 to the end, and `[1][2]` matches `[1-2]` only because 2 follows.
+bars 1–2 then 3 to the end, and in `[1][2]` the first span covers exactly what
+`[1-2]` covers, only because 2 follows — the pattern as a whole still runs on
+to the end.
 
 On `twoway.txt`: `[92-93]` naming the end marker as an end, equal to a bare
 `[92]` but usable anywhere in a pattern, and equal again to `[92-END]`.
@@ -168,6 +171,13 @@ Errors, each asserting the message names the offending token: `[nope]`,
 
 And on `d51x.txt`, a bar genuinely labelled `D51x`: `[D51x]` plays it rather
 than silencing `D51`.
+
+The grid modes, as far as they reach without calling `main`: `read_pattern`
+accepts exactly one of sequence/bars/beats/markers, names invalid characters,
+rejects an empty pattern, and strips the spaces that only group; `bar_slices`
+and `beat_slices` tile the snippet. The bars/beats length-mismatch error is
+inline in `main` and cannot be pinned here — `04`'s step 2 extracts that code,
+and its test asserts the error then, shape hint included.
 
 **Green.** Nothing again — these should pass on arrival.
 
