@@ -21,9 +21,10 @@ first.
 # Part 1 — Keeping track of what to practise
 
 **The module is the unit.** A module is a practice area — `SLAP`, `SONGS`,
-`TECHNIQUE` — one per sheet, back when this was a spreadsheet, and each one is
-a queue of its own. Modules never affect each other: rows are scheduled within
-a module, rotated within a module, and asked for a module at a time.
+`TECHNIQUE` — one per sheet, back when this was a spreadsheet. Each one holds
+its own list of rows, ordered by the date each row is next due, and the modules
+never affect each other: a row is scheduled against the module it is in, and
+you ask one module at a time what to play.
 
 - A **row** (an **exercise**) belongs to exactly one module: a tune or a study,
   with the speed you play it at, how many times you have practised it, and the
@@ -45,7 +46,7 @@ uv run practice done "le freak"      # played it — schedule it and log the tim
 uv run practice log                  # today's block, with subtotals
 ```
 
-`next MODULE` prints that module's queue:
+`next MODULE` prints that module's rows, the most overdue first:
 
 ```
 SONGS (REPERTOIRE) — 1 due of 4 rows
@@ -53,12 +54,12 @@ SONGS (REPERTOIRE) — 1 due of 4 rows
   2027-01-05   in 33 days       espresso      70%              x13
 ```
 
-— the heading says how much of the queue is actually due, then one line per
-row: the date it was due, how late that is, what speed you are playing it at,
-and how many times you have practised it.
+— the heading says how many of its rows are actually due today or earlier, then
+one line per row: the date it was due, how late that is, what speed you are
+playing it at, and how many times you have practised it.
 
-Bare `next` does the same for every module, one block each, because that is
-what modules are: separate queues that happen to live in the same file.
+Bare `next` does the same for every module, one block each, because that is what
+modules are: separate lists that happen to live in the same file.
 
 `done` is the one that matters. It bumps the count, stamps today, works out
 when the exercise comes back, closes the entry that was running and starts the
@@ -142,22 +143,33 @@ is wrong:
 ## Looking after the modules
 
 ```bash
-uv run practice module list                    # every queue and its state
-uv run practice module show SONGS              # one module, whole queue, due or not
+uv run practice module list                    # every module: how many rows, how many due
+uv run practice module show SONGS              # one module in full, due or not
 uv run practice module add SLAP --log-group TECHNIQUE
 uv run practice module rename SLAP "BASS SLAP"
 uv run practice module edit SLAP --log-group TECHNIQUE --position 1
 ```
 
-`module list` is the overview:
+`module list` is the "where am I?" command — run it before deciding which module
+to sit down with:
 
 ```
 SONGS          REPERTOIRE   4 rows     1 due   next 2026-11-14
 SLAP           TECHNIQUE    9 rows     3 due   next 2026-08-12
 ```
 
-`--position` is the order they are listed in. `--log-group` is which bucket the
-module's time subtotals into in the day log.
+One line per module: its name, the day-log bucket its time counts towards, how
+many rows are in it, how many of those are due today or earlier, and the date
+the next one falls due. A `—` in the last column means nothing in that module
+has a date yet. Archived modules are left out; `module list --archived` shows
+them too.
+
+`module show MODULE` then prints that module's rows in full, however many there
+are — `next` stops at ten. `module show SLAP --archived` includes the rows you
+have archived.
+
+`--position` is the order the modules are listed in. `--log-group` is which
+bucket the module's time subtotals into in the day log.
 
 ## Adding and changing rows
 
@@ -175,18 +187,18 @@ called what it was called last Tuesday.
 Two ways, and the difference matters:
 
 ```bash
-uv run practice archive "Stomp!"        # out of the queue, still in the log
+uv run practice archive "Stomp!"        # out of the module, still in the log
 uv run practice restore "Stomp!"
-uv run practice module archive SLAP     # the whole queue at once
+uv run practice module archive SLAP     # the module and all its rows at once
 uv run practice module restore SLAP
 
 uv run practice delete "Stomp!"         # gone, and only for mistakes
 uv run practice module delete SLAP [--force]
 ```
 
-**Archiving is the normal move.** The row leaves the queue and stops turning up
-in `next`, and everything it did is still in the day log and still adds up.
-Archiving a module takes its whole queue out in one go.
+**Archiving is the normal move.** The row leaves the module's list and stops
+turning up in `next`, and everything it did is still in the day log and still
+adds up. Archiving a module takes all of its rows out in one go.
 
 **Deleting is for mistakes** — the module you named wrong five minutes ago. It
 is refused for anything the day log points at, and tells you to archive it
