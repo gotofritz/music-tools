@@ -216,8 +216,9 @@ uv run practice import --modules "BASS SONGS.csv" --modules "BASS SLAP.csv" \
                        --day-log "BASS.csv"
 ```
 
-The file name gives the module — `BASS SONGS.csv` becomes the module `SONGS`
-on the instrument `bass` — and the top-left cell gives its log group. Practice
+The file name gives the module — `BASS SONGS.csv` becomes the module `SONGS`,
+since every sheet in the export is named `BASS <something>` — and the top-left
+cell gives its log group. Practice
 counts, dates and speeds all come over as they are, so nothing in the schedule
 shifts on the day you switch. Running it twice changes nothing, so you can
 re-export and re-import as often as you like. Anything it cannot read is listed

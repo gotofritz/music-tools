@@ -36,7 +36,7 @@ music_tools/
     db/
         connection.py    open_db, the pragmas, the transaction helper
         migrate.py       user_version-gated runner
-        migrations/      numbered .sql, applied in order
+        migrations/      numbered .sql, applied in order (001 schema, 002 …)
         repository.py    hand-written SQL in, pydantic models out
     domain/
         models.py        Module, Exercise, PracticeDay, PracticeEntry, ...
@@ -201,6 +201,10 @@ which would silently void every `REFERENCES`) and `journal_mode = WAL`. A
 database stamped newer than the code is refused rather than touched.
 
 Four tables — `module`, `exercise`, `practice_day`, `practice_entry`. The
+schema sketch in `00-practice-app.md` also gave `module` an `instrument`
+column, against a second instrument turning up one day; migration 002 drops it.
+One player, one instrument, and nothing ever read it — the module name carries
+everything the app needs. The
 importer's natural keys are `(module, name)` for exercises, enforced by a
 partial unique index, and `(day, started_at)` for entries, which is a lookup
 rather than a constraint because two exercises marked done in the same second

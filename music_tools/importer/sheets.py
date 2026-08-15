@@ -3,9 +3,9 @@
 The exports are tab-separated despite the `.csv` extension and carry a long
 tail of empty columns on every row. Two shapes:
 
-- **A module sheet** (`BASS SONGS.csv`) — one row per exercise. The file name
-  gives the instrument and the module; the first header cell gives the log
-  group, which is the `A1` the Apps Script read.
+- **A module sheet** (`BASS SONGS.csv`) — one row per exercise. The module name
+  comes from the file name, less the `BASS ` the exports all carry; the first
+  header cell gives the log group, which is the `A1` the Apps Script read.
 - **The day log** (`BASS.csv`) — one row per entry, in day blocks. `DAY` is
   written only on the first row of a block and `MODULE` only when it changes,
   so both forward-fill. The subtotal and total columns are formula results and
@@ -71,10 +71,15 @@ def split_trailing_note(written: str) -> tuple[str, str | None]:
     return match.group(1), match.group(2)
 
 
-def module_name_from(path: Path) -> tuple[str, str]:
-    """`BASS SONGS.csv` -> instrument `bass`, module `SONGS`."""
-    instrument, _, name = path.stem.partition(" ")
-    return instrument.lower(), (name or instrument).strip()
+def module_name_from(path: Path) -> str:
+    """`BASS SONGS.csv` -> `SONGS`.
+
+    Every sheet in the export is named for the instrument and then the module.
+    There is only ever one instrument, so the first word is dropped — unless
+    it is the whole name, which is the sheet the day log lives on.
+    """
+    first, _, rest = path.stem.partition(" ")
+    return (rest or first).strip()
 
 
 def import_sheets(
@@ -108,13 +113,11 @@ def _import_module(conn: sqlite3.Connection, path: Path, report: ImportReport) -
         report.problems.append(f"{path.name}: empty file")
         return
 
-    instrument, name = module_name_from(path)
+    name = module_name_from(path)
     log_group = _cell(rows[0], COL_SPEED) or name
     module = repo.find_module(conn, name)
     if module is None:
-        module = repo.create_module(
-            conn, name=name, log_group=log_group, instrument=instrument
-        )
+        module = repo.create_module(conn, name=name, log_group=log_group)
         report.modules_created += 1
 
     for number, row in enumerate(rows[1:], start=2):
