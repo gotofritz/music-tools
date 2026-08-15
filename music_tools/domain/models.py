@@ -21,7 +21,6 @@ class Module(BaseModel):
     name: str
     slug: str
     log_group: str
-    instrument: str = "bass"
     position: int = 0
     archived_at: datetime | None = None
 

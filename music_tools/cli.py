@@ -104,7 +104,7 @@ def module_show(ctx: click.Context, module_name: str, archived: bool) -> None:
     conn = _connect(ctx)
     found = _find_module(conn, module_name, include_archived=True)
     rows = repo.exercises_due(conn, module_id=found.id, include_archived=archived)
-    click.echo(f"{found.name} ({found.log_group}, {found.instrument})")
+    click.echo(f"{found.name} ({found.log_group})")
     if not rows:
         click.echo("  nothing in this module yet")
         return
@@ -116,14 +116,12 @@ def module_show(ctx: click.Context, module_name: str, archived: bool) -> None:
 @module.command("add")
 @click.argument("name")
 @click.option("--log-group", required=True, help="TECHNIQUE, REPERTOIRE, ...")
-@click.option("--instrument", default="bass", show_default=True)
 @click.option("--position", type=int, help="Where it sits in the listing.")
 @click.pass_context
 def module_add(
     ctx: click.Context,
     name: str,
     log_group: str,
-    instrument: str,
     position: int | None,
 ) -> None:
     """Add a practice area."""
@@ -131,11 +129,7 @@ def module_add(
     if repo.find_module(conn, name):
         raise click.ClickException(f"there is already a module called {name}")
     created = repo.create_module(
-        conn,
-        name=name,
-        log_group=log_group,
-        instrument=instrument,
-        position=position,
+        conn, name=name, log_group=log_group, position=position
     )
     click.echo(f"{created.name} ({created.log_group}) added")
 
@@ -156,28 +150,23 @@ def module_rename(ctx: click.Context, module_name: str, name: str) -> None:
 @module.command("edit")
 @click.argument("module_name", metavar="MODULE")
 @click.option("--log-group", help="Which day-log bucket it subtotals into.")
-@click.option("--instrument")
 @click.option("--position", type=int, help="Where it sits in the listing.")
 @click.pass_context
 def module_edit(
     ctx: click.Context,
     module_name: str,
     log_group: str | None,
-    instrument: str | None,
     position: int | None,
 ) -> None:
     """Retag or reorder a module."""
     conn = _connect(ctx)
     found = _find_module(conn, module_name)
-    fields = _given(log_group=log_group, instrument=instrument, position=position)
+    fields = _given(log_group=log_group, position=position)
     if not fields:
         raise click.ClickException("nothing to change — see --help")
     with _reporting():
         updated = update_module(conn, found.id, **fields)
-    click.echo(
-        f"{updated.name} ({updated.log_group}, {updated.instrument})"
-        f" at position {updated.position}"
-    )
+    click.echo(f"{updated.name} ({updated.log_group}) at position {updated.position}")
 
 
 @module.command("archive")

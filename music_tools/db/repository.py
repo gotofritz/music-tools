@@ -17,7 +17,6 @@ MODULE_COLUMNS = (
     "name",
     "slug",
     "log_group",
-    "instrument",
     "position",
     "archived_at",
 )
@@ -79,7 +78,6 @@ def create_module(
     name: str,
     log_group: str,
     slug: str | None = None,
-    instrument: str = "bass",
     position: int | None = None,
 ) -> Module:
     if position is None:
@@ -87,9 +85,8 @@ def create_module(
             "SELECT coalesce(max(position), 0) + 1 FROM module"
         ).fetchone()[0]
     cursor = conn.execute(
-        "INSERT INTO module (name, slug, log_group, instrument, position)"
-        " VALUES (?, ?, ?, ?, ?)",
-        (name, slug or slugify(name), log_group, instrument, position),
+        "INSERT INTO module (name, slug, log_group, position) VALUES (?, ?, ?, ?)",
+        (name, slug or slugify(name), log_group, position),
     )
     return _require(get_module(conn, _row_id(cursor)), "module")
 

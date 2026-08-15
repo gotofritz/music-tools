@@ -39,7 +39,6 @@ def test_the_module_comes_from_the_file_name_and_the_log_group_from_a1(db, impor
     module = loaded(repo.find_module(db, "SONGS"))
 
     assert module.name == "SONGS"
-    assert module.instrument == "bass"
     assert module.log_group == "REPERTOIRE"
 
 
