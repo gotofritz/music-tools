@@ -8,12 +8,7 @@ import sqlite3
 import pytest
 
 from music_tools.db.connection import open_db, transaction
-from music_tools.db.migrate import (
-    MIGRATIONS_DIR,
-    MigrationError,
-    latest_version,
-    migrate,
-)
+from music_tools.db.migrate import MigrationError, latest_version, migrate
 
 TABLES = {"module", "exercise", "practice_day", "practice_entry"}
 INDEXES = {"exercise_due", "exercise_name", "entry_day"}
@@ -39,33 +34,12 @@ def test_migrate_creates_the_schema_and_stamps_the_version(memory_db):
 
 
 def test_the_module_table_does_not_track_an_instrument(db):
-    # It was in the plan's schema sketch, was always 'bass', and nothing ever
-    # read it. Migration 002 drops it.
+    # The plan's schema sketch had one, against a second instrument turning up
+    # some day. One player, one instrument, and nothing would have read it.
     columns = {row[1] for row in db.execute("PRAGMA table_info(module)")}
 
     assert "instrument" not in columns
     assert {"name", "slug", "log_group", "position"} <= columns
-
-
-def test_an_existing_database_is_upgraded_without_losing_its_rows(memory_db):
-    # What a database written before migration 002 looks like.
-    first = MIGRATIONS_DIR / "001_initial.sql"
-    memory_db.executescript(first.read_text())
-    memory_db.execute("PRAGMA user_version = 1")
-    memory_db.execute(
-        "INSERT INTO module (name, slug, log_group, instrument, position)"
-        " VALUES ('SLAP', 'slap', 'TECHNIQUE', 'bass', 1)"
-    )
-    memory_db.execute("INSERT INTO exercise (module_id, name) VALUES (1, 'Stomp!')")
-
-    migrate(memory_db)
-
-    assert user_version(memory_db) == latest_version()
-    assert "instrument" not in {
-        row[1] for row in memory_db.execute("PRAGMA table_info(module)")
-    }
-    assert memory_db.execute("SELECT name FROM module").fetchone()[0] == "SLAP"
-    assert memory_db.execute("SELECT name FROM exercise").fetchone()[0] == "Stomp!"
 
 
 def test_migrate_is_idempotent(memory_db):
