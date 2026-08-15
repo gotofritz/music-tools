@@ -21,6 +21,7 @@ from music_tools.domain.models import (
     GroupTotal,
     PracticeDay,
     PracticeEntry,
+    RestartResult,
 )
 from music_tools.domain.scheduling import Algorithm, next_due
 from music_tools.domain.tempo import parse_tempo
@@ -45,6 +46,29 @@ def start_day(
     """`New Day`: open the day `now` falls in, and start the clock running."""
     with transaction(conn):
         return _start_day(conn, now=now, notes=notes)
+
+
+def restart_clock(conn: sqlite3.Connection, *, now: datetime) -> RestartResult:
+    """Start again from now, after a break.
+
+    Entries normally follow on from each other — the clock runs from the last
+    thing you finished, which is what makes a session tile end to end. It is
+    wrong after a break: the coffee, the phone call and the walk round the
+    block would all be logged against whatever you played next. `restart_clock`
+    moves the running entry's start to `now` — the `FROM` stamp, restamped — so
+    the gap is never attributed to anything, the same way an entry left running
+    from an earlier day is never attributed.
+    """
+    with transaction(conn):
+        day = _start_day(conn, now=now)
+        dropped = 0
+        running = repo.running_entry(conn, day_id=day.id)
+        if running is None:  # pragma: no cover - _start_day just opened one
+            opened = repo.create_entry(conn, day_id=day.id, started_at=now)
+        else:
+            dropped = max(0, int((now - running.started_at).total_seconds()))
+            opened = repo.update_entry(conn, running.id, started_at=now)
+        return RestartResult(opened=opened, dropped_seconds=dropped)
 
 
 def mark_done(

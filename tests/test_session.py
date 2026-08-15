@@ -17,6 +17,7 @@ from music_tools.domain.session import (
     format_duration,
     mark_done,
     practice_day_for,
+    restart_clock,
     start_day,
 )
 
@@ -364,3 +365,61 @@ def test_a_stale_running_entry_adds_nothing_to_an_earlier_day(db, songs):
     summary = day_summary(db, day=date(2026, 7, 4), now=datetime(2026, 7, 5, 22, 25))
 
     assert summary.total_seconds == 0
+
+
+# --- Starting again after a break -------------------------------------------
+
+
+def test_start_discards_the_gap_and_runs_from_now(db, songs, steady_rng):
+    day = start_day(db, now=datetime(2026, 7, 5, 22, 20))
+
+    result = restart_clock(db, now=datetime(2026, 7, 5, 23, 40))
+
+    assert result.opened.started_at == datetime(2026, 7, 5, 23, 40)
+    assert result.opened.ended_at is None
+    assert result.dropped_seconds == 80 * 60
+    # one entry, running from the restart: the 80 minutes are simply not there
+    entries = repo.entries_for_day(db, day.id)
+    assert [entry.started_at for entry in entries] == [datetime(2026, 7, 5, 23, 40)]
+
+
+def test_start_leaves_what_was_already_logged_alone(db, stomp, steady_rng):
+    mark_done(
+        db, exercise_id=stomp.id, algorithm=Algorithm.NORMAL, now=NOW, rng=steady_rng
+    )
+
+    restart_clock(db, now=datetime(2026, 7, 5, 23, 40))
+
+    day = loaded(repo.get_day(db, date(2026, 7, 5)))
+    entries = repo.entries_for_day(db, day.id)
+    assert [entry.description for entry in entries] == ["Stomp!", ""]
+    assert loaded(entries[0].ended_at) == NOW
+
+
+def test_the_gap_is_never_practice_time(db, stomp, steady_rng):
+    mark_done(
+        db, exercise_id=stomp.id, algorithm=Algorithm.NORMAL, now=NOW, rng=steady_rng
+    )
+    restart_clock(db, now=datetime(2026, 7, 5, 23, 40))
+
+    summary = day_summary(db, day=date(2026, 7, 5), now=datetime(2026, 7, 5, 23, 50))
+
+    # the 10 minutes since the restart, and none of the 73 before it
+    assert format_duration(summary.total_seconds) == "00:10"
+
+
+def test_start_with_no_day_open_starts_one(db):
+    result = restart_clock(db, now=datetime(2026, 7, 5, 22, 20))
+
+    assert repo.get_day(db, date(2026, 7, 5)) is not None
+    assert result.opened.started_at == datetime(2026, 7, 5, 22, 20)
+    assert result.dropped_seconds == 0
+
+
+def test_start_discards_a_clock_left_running_on_an_earlier_day(db):
+    start_day(db, now=datetime(2026, 7, 4, 21, 0))
+
+    restart_clock(db, now=datetime(2026, 7, 5, 22, 20))
+
+    yesterday = loaded(repo.get_day(db, date(2026, 7, 4)))
+    assert repo.entries_for_day(db, yesterday.id) == []

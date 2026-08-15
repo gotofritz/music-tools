@@ -27,6 +27,7 @@ from music_tools.domain.session import (
     format_duration,
     mark_done,
     practice_day_for,
+    restart_clock,
     start_day,
 )
 from music_tools.domain.tempo import format_tempo, parse_tempo
@@ -215,6 +216,24 @@ def done(
         f"  {format_duration(int((now - entry.started_at).total_seconds()))}"
         f"  {entry.log_group or '-'}  {_tempo(updated)}"
     )
+
+
+@practice.command("start")
+@click.pass_context
+def start(ctx: click.Context) -> None:
+    """Start the clock now, after a break.
+
+    Entries normally follow on from each other. Use this when they should not:
+    the gap since the last one is thrown away rather than logged against
+    whatever you play next.
+    """
+    conn = _connect(ctx)
+    now = datetime.now()
+    result = restart_clock(conn, now=now)
+    dropped = ""
+    if result.dropped_seconds:
+        dropped = f" — {format_duration(result.dropped_seconds)} of break not logged"
+    click.echo(f"clock running from {now:%H:%M}{dropped}")
 
 
 @practice.group()
