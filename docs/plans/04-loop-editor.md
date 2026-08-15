@@ -4,7 +4,7 @@
 stack (FastAPI + Jinja2 + HTMX, no Node), the storage (SQLite at
 `~/.local/share/music-tools/practice.db`, hand-written SQL, numbered
 migrations), and the domain (module → exercise → practice entry). This document
-covers only the loop half, and assumes Phases 0–3 have landed.
+covers only the loop half, and assumes Phases 1–3 have landed.
 
 ## Context
 
@@ -47,12 +47,12 @@ is what keeps it cheap when it arrives.
 
 ## Shape
 
-Adds to the tree in `001`:
+Adds to the tree in `00-practice-app.md`:
 
 ```
 music_tools/
     loop.py                        # already moved here in Phase 1
-    db/migrations/003_loops.sql
+    db/migrations/002_loops.sql
     domain/loops.py                # loop config ↔ pydantic ↔ YAML
     web/routes/loops.py
     web/templates/loops/…          # editor page + HTMX fragments
@@ -205,7 +205,10 @@ generation cannot be tested without shelling out to a macOS-only binary.
 **Red.** Assert `build_output(cfg, score, snippet) -> AudioSegment` exists and
 that for `bars: "1x"` over a two-bar score the result is one snippet long, with
 the second half silent (`max_dBFS == -inf` over that slice) and the first half
-not. Assert the section summary it returns matches what the CLI prints.
+not. Assert the section summary it returns matches what the CLI prints, and
+that a `bars` pattern of the wrong length raises the mismatch error naming the
+bar shape — inline in `main` until now, pinned here where the extraction puts
+it.
 
 **Green.** Extract `build_output` from `main`, leaving `main` as load → build →
 export → open. Put the Transcribe! launch behind `--open/--no-open` (default on)
@@ -226,7 +229,7 @@ output is unchanged. `validate_pattern` catches `PatternError`.
 
 ### Step 4 — Loop configs in the database
 
-**Red.** `tests/test_loops.py`: migration `003_loops.sql` creates the two
+**Red.** `tests/test_loops.py`: migration `002_loops.sql` creates the two
 tables; `create_loop(exercise_id, name, snippet, markers)` returns a config with
 no sections; `sections_for(config)` comes back in `position` order; deleting the
 exercise cascades; deleting a section leaves the remaining positions contiguous.
@@ -246,7 +249,8 @@ reproduces the config; a drill survives with its `steps`, `keep`, `cycle` and
 `reference` intact and **unexpanded**. Then the end-to-end one: import
 `loop.yml` from the repo root — eleven sections, mixed `bars` and `beats` — and
 assert the export is YAML-equal to the original. Unknown top-level keys are
-preserved rather than dropped.
+preserved rather than dropped, and the legacy top-level `markers:` spelling,
+which the CLI still accepts with a nudge, imports as `marker_file`.
 
 **Green.** `to_yaml` / `from_yaml` in `domain/loops.py`.
 
@@ -283,9 +287,11 @@ file writes it beside the snippet and creates the config; a second upload of the
 same name does not clobber the first. Section add / duplicate / delete /
 reorder each leave positions contiguous.
 
-**Green.** Implement, validating through step 3 before writing, and writing the
-YAML in the same transaction boundary as the rows — a save that fails leaves
-neither changed.
+**Green.** Implement, validating through step 3 before writing. A file write
+cannot join a SQLite transaction, so the order stands in for one: validate,
+write the export to a temp file, commit the rows, rename the temp into place —
+a failure at any point leaves neither the database nor the previous export
+changed.
 
 ### Step 9 — Generate
 
@@ -331,7 +337,10 @@ Beyond the suite, on the real files:
 1. `uv run loop "~/…/Jacksons 5/practice.loop.yml"` produces what it does today,
    confirming steps 1–2 changed nothing.
 2. Import that same config into the app, save it untouched, and confirm the
-   rewritten YAML differs from the original only in key order.
+   rewritten YAML is data-equal to the original: key order may move, and the
+   original's teaching comments are gone — `to_yaml` writes data, not
+   commentary. (The comments live on in the CLI help and
+   `config/example_loop.yml`.)
 3. Toggle a bar off in the grid, save, and confirm the YAML diff is the single
    character expected.
 4. Generate from the app and from the CLI; confirm both write the same file.

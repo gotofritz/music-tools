@@ -39,7 +39,7 @@ tests/
 ```
 
 **No ORM.** `sqlite3` from the standard library, hand-written SQL, pydantic
-models on the boundary. The whole schema is five tables and the hot query is
+models on the boundary. The whole schema is four tables and the hot query is
 `ORDER BY next_due`.
 
 **Two things are injected everywhere**: a clock (`now: datetime`) and a
@@ -54,7 +54,7 @@ the CLI is the only place that supplies the real one.
 **Red.** `tests/test_migrations.py`:
 
 - `migrate(conn)` on an empty in-memory database leaves `user_version = 1` and
-  the five tables of the schema in `00-practice-app.md`.
+  the four tables of the schema in `00-practice-app.md`, indexes included.
 - Running it twice is a no-op and does not error.
 - A database whose `user_version` is higher than the newest migration raises,
   rather than running anything — an old binary must not touch a newer file.
@@ -145,15 +145,24 @@ def next_due(
 - Tempo: `ratio=0.8` gives 0.8× the interval; `ratio=None` does not scale;
   `ratio=1.0` is unchanged; a ratio above 1 cannot arrive because `Tempo` caps
   it, asserted anyway so the cap cannot quietly move.
-- The order of operations matches the sheet: jitter first, then the tempo
-  scaling, then `max(1, …)`, then round. A test with a fixed seed pins the exact
-  date so a later reordering is visible.
-- `ROTATE`: the latest date in `module_dues` plus a random −1…+2 days; with an
-  empty `module_dues`, falls back to `last_practiced`.
+- The order of operations is jitter first, then the tempo scaling, then
+  `max(1, …)`, then round — which deliberately does **not** match the sheet:
+  `bass.gs` floors before it scales, which was safe while scaling could only
+  stretch and stops being safe now that a ratio shrinks. The floor moving
+  after the scaling is part of the scaling fix in `00-practice-app.md`. A test
+  with a fixed seed pins the exact date so a later reordering is visible.
+- `ROTATE`: the latest date in `module_dues` plus a random −1…+2 days. The
+  exercise's own current due date is **included**, because the sheet's max scan
+  includes it — a row already at the back of the queue rotates from its own
+  date, not the runner-up's. With an empty `module_dues`, falls back to
+  `last_practiced` (the sheet rotates from epoch 1970 here; a bug, not a
+  behaviour).
 - `HOLD`: the earliest of `module_dues` minus a day, applied **only if it brings
-  the date forward** — an exercise already due sooner keeps its date. The
-  exercise's own current due date is excluded from `module_dues` by the caller;
-  a test pins that passing it in would be wrong.
+  the date forward** — an exercise already due sooner keeps its date. Here the
+  exercise's own due date is **excluded**, because the sheet's min scan skips
+  the current row; a test pins that passing it in would be wrong. With no other
+  dated rows the date is left unchanged (the sheet would write 9999-12-30;
+  also a bug, not a behaviour).
 
 **Green.** `domain/scheduling.py`. One dispatch on the enum, five small
 functions, no I/O.
@@ -166,8 +175,9 @@ functions, no I/O.
   models with `target_bpm` and a null `target_bpm`.
 - `exercises_due(module, on=date)` returns rows `ORDER BY next_due`, nulls last,
   archived rows excluded. This is `bassReorder`, and it is a query.
-- `module_dues(module, excluding=exercise_id)` returns the dates the scheduler
-  needs, excluding the row being scheduled.
+- `module_dues(module, excluding=None)` returns the dates the scheduler needs.
+  `excluding` takes the row being scheduled: HOLD passes it, ROTATE does not —
+  the sheet's two scans disagree on exactly this, and the port keeps both.
 - Writes go through a `with transaction(conn):` helper that rolls back on an
   exception, asserted by raising inside one and finding the row absent.
 
@@ -196,6 +206,9 @@ def mark_done(
 - No open entry (first thing after opening the app) → a day is started
   implicitly and the entry runs from that moment, rather than raising.
 - No day at all → `start_day` is called for the day `now` falls in.
+- An open entry left over from an **earlier day** — the running clock nobody
+  stopped — is discarded when a later day starts, not closed at some invented
+  time. It is the ported dangling FROM row: time that was never attributed.
 - An exception mid-way leaves the exercise's count unchanged: the whole thing is
   one transaction.
 
@@ -217,7 +230,9 @@ def mark_done(
   TECHNIQUE sums both TECHNIQUE entries into one subtotal, which is what
   `compressRowsToRanges_` was for and what a `GROUP BY` is for.
 - A still-running entry (`ended_at IS NULL`) counts up to `now` in the summary
-  and does not break the total.
+  and does not break the total — but only when it belongs to the day `now`
+  falls in. A stale open entry in an earlier day adds nothing to that day's
+  totals; it is the row step 5 discards.
 
 **Green.** Durations computed in SQL or in Python, never stored.
 
@@ -246,8 +261,18 @@ def mark_done(
 - An entry whose description matches an exercise in the imported modules is
   linked to it; one that does not is kept as an ad-hoc entry with a null
   `exercise_id`, never dropped.
+- The `2026-07-09` block pins the awkward case: "le freak" is a SONGS exercise,
+  but the blank MODULE forward-fills TECHNIQUE over its row, and the sheet's
+  own subtotal (01:07 — the whole day) agrees. The entry links to the exercise
+  **and** keeps the file's log group: snapshots come from the log, never from
+  the exercise the entry points at.
+- The last row of a block may carry only a `FROM` — the dangling stamp the
+  running clock writes into the next row (`22:31` in the sample). Expected
+  structure, not a mangled row: skipped silently, never reported.
 - **Idempotent**: a second run over the same files changes nothing. Natural key
-  is `(day, started_at)` for entries and `(module, name)` for exercises.
+  is `(day, started_at)` for entries and `(module, name)` for exercises — the
+  partial unique index in the schema enforces the latter, so a rerun conflicts
+  instead of duplicating.
 - Rows that cannot be parsed are collected into a report and returned, never
   dropped in silence and never fatal. The test asserts a deliberately mangled
   row appears in the report and the rest still import.
@@ -275,7 +300,8 @@ uv run practice import --day-log … --modules …
 says how many days overdue; tempo renders as `88 BPM (66%)` in both dialects and
 as the raw text when it cannot be parsed; `log` renders the day block in the
 same shape as the sheet, subtotals included; an unknown exercise name exits
-non-zero with a message listing near matches.
+non-zero with a message listing near matches, and a name found in two modules
+exits non-zero naming both — `MODULE/NAME` disambiguates.
 
 **Green.** `cli.py`, a click group registered as
 `practice = "music_tools.cli:practice"`. The clock and rng are constructed here
@@ -297,9 +323,12 @@ Beyond the suite, on the real export:
 2. `uv run practice log --day 2026-07-05` against the spreadsheet's own row
    block: same entries, same subtotals, same total.
 3. `uv run practice next SONGS` against the sheet sorted by `DUE`: same order.
-4. Mark something done in both, and compare the new due dates. They will differ
-   for anything under target, by exactly the inverted-scaling fix in
-   `00-practice-app.md`. Any other difference is a bug.
+4. Mark something done in both, and compare the new due dates — allowing for
+   jitter, since each side draws its own: ±5% of the interval for the table
+   algorithms, −1…+2 days for Rotate. At full speed the dates must land within
+   the shared jitter band; anything under target comes back sooner, by the
+   scaling fix in `00-practice-app.md`. A difference the bands cannot explain
+   is a bug.
 
 ## Out of scope
 

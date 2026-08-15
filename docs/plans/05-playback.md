@@ -78,7 +78,10 @@ music_tools/
 rate slider bound to the exercise's `ratio`; `PATCH /exercises/{id}` from a rate
 change stores the new speed in the exercise's own dialect — a percentage stays a
 percentage, a BPM stays a BPM. That last one is a real test: dragging the slider
-on `123` must not silently rewrite it to `80%`.
+on `123` must not silently rewrite it to `80%`. An exercise with no
+`target_bpm` has no ratio: the slider renders at 1.0 and disabled, wearing the
+same flag the module view uses — there is nothing to scale and no dialect to
+write back into. Backfilling the target is what unlocks it.
 
 **Green.** `player.js` plus the template change. Transport is the browser's;
 the file adds the rate slider, a loop toggle, and section markers drawn as a
@@ -93,8 +96,9 @@ with a loop id attaches it to the open entry, so the day log reads
 snapshots the loop name, and that deleting the loop later leaves the entry
 readable.
 
-**Green.** A nullable `loop_config_id` on `practice_entry`, plus the snapshot in
-`description`.
+**Green.** Migration `003_entry_loop.sql`: a nullable `loop_config_id` on
+`practice_entry`, `ON DELETE SET NULL` so a deleted loop leaves the entry
+readable, plus the snapshot in `description`.
 
 ### Step 5 — By hand
 

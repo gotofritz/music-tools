@@ -19,8 +19,13 @@ place rather than re-exported.
 `parse_markers` reads a file and `Score.build` turns entries into a score.
 Phase 6 adds a second source — the database — feeding the same
 `list[tuple[float, str, str]]` into the same `Score.build`. Nothing downstream
-of `Score` changes, which is what makes this phase small: the score is already
-the boundary.
+of `Score.build` changes, which is what makes this phase small: the score is
+already the boundary. One thing inside it does change: `build` anchors the
+score by shifting every timestamp back by the first marker's. Right for a
+Transcribe! file, whose timestamps are the original track's; wrong for taps,
+which are snippet-relative already — a first bar tapped at 0.4 s would drag
+every slice 0.4 s early. `build` gains a `shift` argument defaulting to
+today's behaviour, and `origin='app'` sources pass `0.0`.
 
 **Transcribe! import stays forever.** Every tune already marked lives there, and
 the app is not going to be better at tapping along than a tool built for it.
@@ -57,7 +62,8 @@ CREATE INDEX marker_order ON marker(source_id, at_seconds);
 `to_entries()` is a straight mapping and a round trip through the `.txt` format
 is lossless. `offset_seconds` records the shift `Score.build` applies when
 markers come from a file whose timestamps are the original track's; markers
-tapped in the app are already snippet-relative and have an offset of 0.
+tapped in the app are already snippet-relative, have an offset of 0, and are
+built with `shift=0.0` so nothing moves.
 
 ## Steps
 
@@ -71,6 +77,10 @@ tapped in the app are already snippet-relative and have an offset of 0.
   text blocks and durations.
 - Import of a `.txt` records `origin='transcribe'` and the file it came from.
 - A source with no bar markers raises the same message as the file path does.
+- An app source whose first marker sits at 0.4 s keeps its bar starts where
+  they were tapped: built with `shift=0.0`, nothing slides. The same rows run
+  through the file path would come out 0.4 s early — the bug being legislated
+  against.
 
 **Green.** Migration `004_markers.sql`, `domain/markers_db.py`. `loop_config`
 gains a nullable `marker_source_id`; `marker_path` stays for configs still
@@ -88,9 +98,12 @@ pointing at a file, and a config may have exactly one of the two.
   `Score.build` applies, so the two never disagree.
 - Every one of these leaves a score that still tiles the snippet with no gaps.
 
-**Green.** Repository functions plus the guard that a score is rebuilt and
-validated inside the same transaction, so an edit that would break every pattern
-in the config fails before it lands.
+**Green.** Repository functions plus a guard that rebuilds the score inside
+the same transaction, so an edit that leaves it unbuildable — no bar markers
+left, say — fails before it lands. An edit that merely breaks *patterns* is
+saved and reported, never refused: step 4 returns re-resolved spans precisely
+so the page can show what broke, and step 5's drag-to-nudge could not exist if
+every marker a pattern names were immovable.
 
 ### Step 3 — Waveform peaks
 
