@@ -187,3 +187,19 @@ def test_db_dump_writes_a_backup_that_can_live_in_git(stocked, run, tmp_path):
     dumped = out.read_text()
     assert "CREATE TABLE module" in dumped
     assert "le freak" in dumped
+
+
+def test_start_runs_the_clock_from_now(run):
+    result = run("start")
+
+    assert result.exit_code == 0
+    assert "clock running from" in result.output
+
+
+def test_start_opens_the_day_when_there_is_not_one(run):
+    run("start")
+
+    log = run("log")
+
+    assert date.today().isoformat() in log.output
+    assert "(running)" in log.output

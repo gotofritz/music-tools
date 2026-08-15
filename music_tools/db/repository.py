@@ -32,7 +32,7 @@ EXERCISE_COLUMNS = (
 ENTRY_COLUMNS = (
     "day_id",
     "exercise_id",
-    "started_at",
+    "started_at",  # restamped by restart_clock when a break is not practice
     "ended_at",
     "speed",
     "bpm",

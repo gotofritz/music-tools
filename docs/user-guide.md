@@ -63,6 +63,27 @@ You never type a start time. The clock runs from the last thing you finished,
 so entries tile the session end to end. A day ends at 4am, not midnight —
 practice past midnight belongs to the evening it started in.
 
+## Coming back after a break
+
+Following on from the last thing is right most of the time and wrong after a
+break: the coffee, the phone call and the walk round the block would all be
+logged against whatever you play next. So when you sit down again:
+
+```bash
+uv run practice start
+```
+
+```
+clock running from 23:40 — 00:37 of break not logged
+```
+
+The clock now runs from this moment, and the gap is gone — it was not practice,
+so it is not in the log and not in the day's total. Nothing that was already
+logged is touched.
+
+`start` also opens the day if there is not one yet, so on an ordinary evening
+it does the same job as `day new` and you can use either.
+
 If a name exists in two modules, say which: `uv run practice done SONGS/"le
 freak"`. If you mistype it, the message lists the near misses.
 

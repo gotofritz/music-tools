@@ -10,6 +10,7 @@ imports its history.
 ```bash
 uv run practice next                 # what is due, most overdue first
 uv run practice done "le freak"      # schedule it, and log the time
+uv run practice start                # back after a break: drop the gap
 uv run practice log                  # today's block, with subtotals
 ```
 
@@ -51,7 +52,7 @@ source .venv/bin/activate
 ### Running it
 
 ```bash
-uv run practice --help              # the tracker: day, next, done, log, import
+uv run practice --help              # the tracker: start, next, done, log, import
 uv run loop practice.yml            # build the practice file
 uv run loop --expand practice.yml   # print what a drill stands for, and stop
 uv run loop --help                  # the full pattern grammar

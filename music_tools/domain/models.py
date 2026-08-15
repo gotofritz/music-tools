@@ -85,6 +85,13 @@ class DoneResult(BaseModel):
     opened: PracticeEntry
 
 
+class RestartResult(BaseModel):
+    """What `restart_clock` did: a fresh entry, and the gap it threw away."""
+
+    opened: PracticeEntry
+    dropped_seconds: int
+
+
 class GroupTotal(BaseModel):
     """A log group's subtotal within a day."""
 

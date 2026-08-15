@@ -153,6 +153,12 @@ entries tile the session end to end. An entry left running from an earlier day
 is **discarded** rather than closed at an invented time — it is the dangling
 `FROM` the sheet left behind, and it was never attributed.
 
+Tiling is the default and not the rule. `restart_clock` (the `start` command)
+restamps the running entry's `started_at` to now, so the gap since the last
+`done` — a break — is not logged against whatever is played next. The rule
+underneath both cases is the same: **time nobody attributed is not practice
+time**, and the app will not invent an attribution for it.
+
 `description`, `speed`, `bpm` and `log_group` on an entry are **snapshots**: the
 log is a record and must not change when an exercise is renamed, retuned or
 moved. Durations, subtotals and day totals are **computed, never stored** —
