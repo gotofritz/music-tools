@@ -1,0 +1,25 @@
+version: "3"
+
+tasks:
+  test:
+    desc: Run the test suite
+    cmds:
+      - uv run pytest
+
+  lint:
+    desc: Lint and check formatting
+    cmds:
+      - uv run ruff check .
+      - uv run ruff format --check .
+
+  types:
+    desc: Type check
+    cmds:
+      - uv run ty check
+
+  qa:
+    desc: Everything CI runs
+    cmds:
+      - task: lint
+      - task: types
+      - task: test

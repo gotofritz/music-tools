@@ -14,9 +14,47 @@ dependencies = [
 [project.scripts]
 rearrange="music_tools.main:main"
 
+[dependency-groups]
+dev = [
+    "pytest>=8.3.4",
+    "ruff>=0.9.0",
+    "ty>=0.0.1a5",
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["music_tools"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+# ruff reformats python blocks inside markdown; the plans are prose and the
+# snippets in them are sketches, not code the formatter has any say over.
+extend-exclude = ["docs"]
+
+[tool.ruff.lint]
+# ruff 0.16 turned on a much wider default rule set; this is the narrower one
+# the existing code was written against, plus import sorting. Widening it is a
+# clean-up of its own, not part of moving loop.py.
+select = ["E", "F", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+# Two long log lines in the rearrange half of the repo. Out of scope for the
+# practice app, and formatting cannot split a single string literal.
+"music_tools/generator.py" = ["E501"]
+
+[tool.ty.src]
+# The rearrange half of the repo predates any type checking and is out of
+# scope for the practice app (docs/plans/00-practice-app.md, "Out of scope").
+# Drop these exclusions when that code is unified with loop.py.
+exclude = [
+    "music_tools/config.py",
+    "music_tools/generator.py",
+    "music_tools/main.py",
+    "music_tools/markers.py",
+]
