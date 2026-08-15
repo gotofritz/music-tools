@@ -298,8 +298,8 @@ this is the map, not the territory.
 
 | | Phase | Document | Leaves you with |
 | --- | --- | --- | --- |
-| 1 | Foundations | `../archive/01-foundations.md` (done) | A test suite, CI, and an importable `loop.py` |
-| 2 | Domain, database, importer | `02-domain.md` | The sheet's brain in Python, plus a CLI and the migrated history |
+| 1 | Foundations | `../archive/2026-08-15-1222-af747ab-01-foundations.md` (done) | A test suite, CI, and an importable `loop.py` |
+| 2 | Domain, database, importer | `../archive/02-domain.md` (done) | The sheet's brain in Python, plus a CLI and the migrated history |
 | 3 | The app, and the cutover | `03-web.md` | The spreadsheet retired |
 | 4 | Loops, attached to exercises | `04-loop-editor.md` | Loops built and generated from the tune that is due |
 | 5 | Play it in the app | `05-playback.md` | The scenario closed: due → loop → play → done |
