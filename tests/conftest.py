@@ -91,3 +91,35 @@ def db(memory_db):
 def rng():
     """The seeded rng every scheduling call takes; never the global one."""
     return random.Random(20260715)
+
+
+class SteadyRandom(random.Random):
+    """A `random.Random` with the randomness dialled out.
+
+    The scheduler takes an rng rather than reaching for the module-level one,
+    which is what makes an exact date assertable. Every draw returns the value
+    it was built with.
+    """
+
+    def __init__(self, *, uniform_value: float = 0.0, randint_value: int = 0):
+        super().__init__(0)
+        self.uniform_value = uniform_value
+        self.randint_value = randint_value
+
+    def uniform(self, a: float, b: float) -> float:
+        return self.uniform_value
+
+    def randint(self, a: int, b: int) -> int:
+        return self.randint_value
+
+
+@pytest.fixture
+def steady_rng():
+    """No jitter at all: the interval comes out of the table unchanged."""
+    return SteadyRandom()
+
+
+@pytest.fixture
+def jittery_rng():
+    """Jitter pinned to its positive extreme, for the order-of-operations test."""
+    return SteadyRandom(uniform_value=1.0, randint_value=2)
