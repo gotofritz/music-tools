@@ -1,19 +1,10 @@
-#!/usr/bin/env -S uv run
-# /// script
-# dependencies = [
-#   "click>=8.1",
-#   "PyYAML>=6.0",
-#   "pydub>=0.25",
-# ]
-# ///
-
 """
 Generate a rhythm-training loop by repeating an audio snippet and replacing
 selected repetitions, bars, beats or marked spans with silence.
 
 Example:
 
-    uv run loop.py trainer.yml
+    uv run loop trainer.yml
 """
 
 import re
@@ -27,14 +18,10 @@ import click
 import yaml
 from pydub import AudioSegment
 
-MARKER_PATTERN = re.compile(
-    r'^(\d{1,2}:\d{2}:\d{2}\.\d+) Marker \((.*?)\): "(.*?)"'
-)
+MARKER_PATTERN = re.compile(r'^(\d{1,2}:\d{2}:\d{2}\.\d+) Marker \((.*?)\): "(.*?)"')
 # the word in brackets is the colour of the block, its text is on the
 # lines that follow, up to a blank line or the next timestamp
-TEXTBLOCK_PATTERN = re.compile(
-    r"^(\d{1,2}:\d{2}:\d{2}\.\d+) Textblock \((.*?)\):"
-)
+TEXTBLOCK_PATTERN = re.compile(r"^(\d{1,2}:\d{2}:\d{2}\.\d+) Textblock \((.*?)\):")
 TIMESTAMPED = re.compile(r"^\d{1,2}:\d{2}:\d{2}\.\d+ ")
 
 # the one reserved name, so that a span can always reach the end of the score
@@ -205,9 +192,7 @@ class Score:
         self.by_name: dict[str, float] = {**named, SCORE_END: duration}
 
     @classmethod
-    def build(
-        cls, entries: list[tuple[float, str, str]], duration: float
-    ) -> "Score":
+    def build(cls, entries: list[tuple[float, str, str]], duration: float) -> "Score":
         """Turn marker entries into a score, first marker at the top of the audio.
 
         Transcribe! writes the timestamps of the original track, so the first
@@ -360,9 +345,7 @@ class Score:
             before, _, after = candidate.rpartition("-")
             names = [before, after]
 
-        return ", ".join(
-            name.strip() for name in names if self.address(name) is None
-        )
+        return ", ".join(name.strip() for name in names if self.address(name) is None)
 
     def parse_pattern(self, pattern: str, name: str) -> list[tuple[float, float, bool]]:
         """Turn "[1.1][UP1][UP2]" into a list of spans to play.
@@ -383,7 +366,7 @@ class Score:
             raise click.ClickException(f"{name}: {text!r} is outside any [].")
 
         for match in TOKEN_PATTERN.finditer(pattern):
-            if gap := pattern[position:match.start()].strip():
+            if gap := pattern[position : match.start()].strip():
                 outside(gap)
             position = match.end()
 
@@ -439,18 +422,14 @@ class Score:
 
 def report(score: Score) -> None:
     """Print what was found, warning about bars with an odd number of beats."""
-    click.echo(
-        f"Bars: {len(score.bars)} ({' '.join(bar.name for bar in score.bars)})"
-    )
+    click.echo(f"Bars: {len(score.bars)} ({' '.join(bar.name for bar in score.bars)})")
     if score.end_marker:
         click.echo(
             f"{score.end_marker} closes the last bar. It is not played, but a "
             f"span may end on it, as [{score.bars[-1].name}-{score.end_marker}]."
         )
     if score.textblocks:
-        click.echo(
-            f"Text blocks: {' '.join(block.name for block in score.textblocks)}"
-        )
+        click.echo(f"Text blocks: {' '.join(block.name for block in score.textblocks)}")
     if score.ignored:
         kinds = ", ".join(
             f"{count} × {kind}" for kind, count in sorted(score.ignored.items())
@@ -476,9 +455,7 @@ def report(score: Score) -> None:
             continue
 
         click.echo(f"!  {bar.name} has {len(bar.beats)} beats, expected {expected}")
-        click.echo(
-            "   beats at " + " ".join(f"{beat.raw:.3f}" for beat in bar.beats)
-        )
+        click.echo("   beats at " + " ".join(f"{beat.raw:.3f}" for beat in bar.beats))
 
         raw = [beat.raw for beat in bar.beats]
         gaps = [(b - a, b) for a, b in zip(raw, raw[1:])]
@@ -503,11 +480,14 @@ def describe(score: Score) -> list[str]:
         )
         # a bar's opening beat carries the bar's own label, which is already
         # on the line above, so only a beat labelled in its own right is shown
-        lines.append("        " + "  ".join(
-            f"[{number}.{n}] {beat.start:.3f}"
-            + (f" ={beat.label}" if beat.label and n > 1 else "")
-            for n, beat in enumerate(bar.beats, 1)
-        ))
+        lines.append(
+            "        "
+            + "  ".join(
+                f"[{number}.{n}] {beat.start:.3f}"
+                + (f" ={beat.label}" if beat.label and n > 1 else "")
+                for n, beat in enumerate(bar.beats, 1)
+            )
+        )
         lines.extend(
             f"        [{block.name}] {block.start:.3f}"
             for block in score.textblocks
@@ -567,9 +547,7 @@ def step_solo(count: int, keep: int) -> list[frozenset]:
     This one ignores keep: holding a region back is the opposite of what
     it is for.
     """
-    return [
-        frozenset(i for i in range(count) if i != alone) for alone in range(count)
-    ]
+    return [frozenset(i for i in range(count) if i != alone) for alone in range(count)]
 
 
 DRILL_STEPS = {
@@ -620,7 +598,8 @@ def close_spans(tokens: list[str]) -> list[str]:
             continue
         following = tokens[i + 1] if i + 1 < len(tokens) else None
         closed.append(
-            f"{token}-{SCORE_END.upper()}" if following is None
+            f"{token}-{SCORE_END.upper()}"
+            if following is None
             else f"{token}-{following.split('-')[0].strip()}"
         )
     return closed
@@ -646,7 +625,9 @@ def expand_drill(section: dict, name: str) -> list[dict]:
     # moves through it, so the silence is heard in time rather than as a gap
     cycle = int(section.get("cycle", 1))
     if cycle < 1:
-        raise click.ClickException(f"{name}: cycle is {cycle}, but a drill needs at least one pass.")
+        raise click.ClickException(
+            f"{name}: cycle is {cycle}, but a drill needs at least one pass."
+        )
     if cycle > 1:
         tokens = close_spans(tokens) * cycle
 
@@ -670,20 +651,25 @@ def expand_drill(section: dict, name: str) -> list[dict]:
     for step, quiet in enumerate(steps, start=1):
         if reference:
             sections.append(
-                {"name": f"{name} {step}/{len(steps)}: all", "repeat": reference,
-                 "markers": plain}
+                {
+                    "name": f"{name} {step}/{len(steps)}: all",
+                    "repeat": reference,
+                    "markers": plain,
+                }
             )
         without = " ".join(
             f"{tokens[i]}#{i + 1}" if cycle > 1 else tokens[i] for i in sorted(quiet)
         )
-        sections.append({
-            "name": f"{name} {step}/{len(steps)}: without {without}",
-            "repeat": repeat,
-            "markers": "".join(
-                f"[{token}x]" if i in quiet else f"[{token}]"
-                for i, token in enumerate(tokens)
-            ),
-        })
+        sections.append(
+            {
+                "name": f"{name} {step}/{len(steps)}: without {without}",
+                "repeat": repeat,
+                "markers": "".join(
+                    f"[{token}x]" if i in quiet else f"[{token}]"
+                    for i, token in enumerate(tokens)
+                ),
+            }
+        )
     return sections
 
 
@@ -692,9 +678,7 @@ def expand_sections(sections: list) -> list:
     expanded = []
     for i, section in enumerate(sections, start=1):
         if isinstance(section, dict) and "drill" in section:
-            expanded.extend(
-                expand_drill(section, section.get("name", f"Section {i}"))
-            )
+            expanded.extend(expand_drill(section, section.get("name", f"Section {i}")))
         else:
             expanded.append(section)
     return expanded
@@ -869,7 +853,7 @@ sections:
 
 Usage:
 
-    uv run loop.py trainer.yml
+    uv run loop trainer.yml
 """,
 )
 @click.argument(
@@ -939,7 +923,6 @@ def main(config: Path, expand: bool):
     section = None
     try:
         for i, section in enumerate(sections, start=1):
-
             name = section.get("name", f"Section {i}")
             repeat = int(section["repeat"])
             mode, pattern, written = read_pattern(section, name)
@@ -977,14 +960,16 @@ def main(config: Path, expand: bool):
 
             for _ in range(repeat):
                 for start, end, is_silent in spans:
-                    unit = snippet[int(start * 1000):int(end * 1000)]
-                    output += AudioSegment.silent(
-                        duration=len(unit), frame_rate=snippet.frame_rate
-                    ) if is_silent else unit
+                    unit = snippet[int(start * 1000) : int(end * 1000)]
+                    output += (
+                        AudioSegment.silent(
+                            duration=len(unit), frame_rate=snippet.frame_rate
+                        )
+                        if is_silent
+                        else unit
+                    )
 
-            total_units += repeat * (
-                len(spans) if mode != "sequence" else len(pattern)
-            )
+            total_units += repeat * (len(spans) if mode != "sequence" else len(pattern))
     except click.ClickException:
         diagnose(marker_path, score, section)
         raise
@@ -996,12 +981,14 @@ def main(config: Path, expand: bool):
     click.echo("Done.")
     click.echo(f"Output : {output_path}")
     click.echo(f"Units  : {total_units}")
-    click.echo(f"Length : {len(output)/1000:.1f} seconds")
+    click.echo(f"Length : {len(output) / 1000:.1f} seconds")
 
-    subprocess.run([
-        "/Applications/Transcribe!.app/Contents/MacOS/Transcribe!",
-        output_path,
-    ])
+    subprocess.run(
+        [
+            "/Applications/Transcribe!.app/Contents/MacOS/Transcribe!",
+            output_path,
+        ]
+    )
 
 
 if __name__ == "__main__":
