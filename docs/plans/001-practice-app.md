@@ -92,13 +92,25 @@ both `ceil`ed — and two that ignore it entirely:
   only if that brings it forward. "Practised it, but it is not learned; keep it
   at the front."
 
-Two things to confirm rather than silently keep or silently change:
+Two notes on that:
 
-- **The speed scaling runs the intuitive way round.** At 80%, `days * 100/80`
-  = a 25% *longer* interval, so a tune still under tempo comes back *later* than
-  one played at 100%. Ported verbatim as-is, with a test that pins the current
-  direction, so flipping it later is a one-line change and a one-line test edit.
-- **The table plateaus at 120 days**, and `Long` at 180. Also pinned by test.
+- **The speed scaling is inverted, and the port fixes it.** At 80% the sheet
+  computes `days * 100/80`, a 25% *longer* interval, so a tune still under tempo
+  comes back *later* than one already at full speed — backwards. The port
+  divides instead:
+
+  ```
+  if speed matches ^(\d+)%$:  days = days * percent / 100
+  ```
+
+  so 80% gives 0.8× the interval and returns sooner, 100% is unscaled, and a
+  tune pushed past the original tempo drifts further out. Combined with the
+  `max(1, …)` floor already there, nothing can schedule below a day; `0%` is
+  treated as no scaling rather than dividing to zero. This is the one deliberate
+  behaviour change in the port. Existing due dates are imported verbatim, so
+  nothing shifts at the cutover; anything below 100% simply comes back sooner
+  from its next `done` onward.
+- **The table plateaus at 120 days**, and `Long` at 180. Pinned by test.
 
 **The day log** is a running clock, not a form. `New Day` appends a row stamped
 with today and `FROM = now`. Each `done` sets that row's `TO = now`, fills in
@@ -249,8 +261,9 @@ The spreadsheet's brain, with no UI.
    parametrised over the five algorithms and the table above — `count=0` → 1 day;
    `count=8` reads `intervals[8]` given the count is passed post-increment;
    beyond the table, the plateau; jitter within ±5% for a seeded rng and
-   never below 1 day; `80%` stretches by 5/4 and `66` (no percent sign) does
-   not; `Short`/`Long` scale by 0.5/1.5 with `ceil`. Rotate and No-Rotation take
+   never below 1 day; `80%` shortens to 4/5 while `66` and `66/1` (no percent
+   sign) are unscaled, and `0%` is unscaled rather than a division by zero;
+   `Short`/`Long` scale by 0.5/1.5 with `ceil`. Rotate and No-Rotation take
    the module's due dates as an argument and are pure. Clock and rng are
    injected — no `freezegun`, no monkeypatching `random`.
 3. **Marking done.** Red: `mark_done(exercise, algorithm, now)` bumps the count,
