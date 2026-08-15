@@ -12,6 +12,7 @@ dependencies = [
 ]
 
 [project.scripts]
+practice="music_tools.cli:practice"
 rearrange="music_tools.main:main"
 loop="music_tools.loop:main"
 
