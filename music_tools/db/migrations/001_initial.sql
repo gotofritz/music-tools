@@ -1,5 +1,8 @@
 -- The practice schema: modules, exercises, and the day log.
 --
+-- No `instrument` column, though the sketch in docs/plans/00-practice-app.md
+-- had one: one player, one instrument, and nothing would ever have read it.
+--
 -- Durations, subtotals and day totals are computed, never stored. The
 -- snapshot columns on practice_entry (description, speed, bpm, log_group) are
 -- deliberate duplication: the log is a record and must not change when an
@@ -10,7 +13,6 @@ CREATE TABLE module (
   name TEXT NOT NULL UNIQUE,          -- "SLAP", "SONGS"
   slug TEXT NOT NULL UNIQUE,
   log_group TEXT NOT NULL,            -- "TECHNIQUE", "REPERTOIRE" (sheet A1)
-  instrument TEXT NOT NULL DEFAULT 'bass',
   position INTEGER NOT NULL DEFAULT 0,
   archived_at TEXT
 );
