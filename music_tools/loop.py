@@ -1,19 +1,10 @@
-#!/usr/bin/env -S uv run
-# /// script
-# dependencies = [
-#   "click>=8.1",
-#   "PyYAML>=6.0",
-#   "pydub>=0.25",
-# ]
-# ///
-
 """
 Generate a rhythm-training loop by repeating an audio snippet and replacing
 selected repetitions, bars, beats or marked spans with silence.
 
 Example:
 
-    uv run loop.py trainer.yml
+    uv run loop trainer.yml
 """
 
 import re
@@ -862,7 +853,7 @@ sections:
 
 Usage:
 
-    uv run loop.py trainer.yml
+    uv run loop trainer.yml
 """,
 )
 @click.argument(

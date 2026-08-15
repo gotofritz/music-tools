@@ -13,6 +13,7 @@ dependencies = [
 
 [project.scripts]
 rearrange="music_tools.main:main"
+loop="music_tools.loop:main"
 
 [dependency-groups]
 dev = [
