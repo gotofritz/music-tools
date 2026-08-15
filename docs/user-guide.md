@@ -35,7 +35,7 @@ Everything lives in one file: `~/.local/share/music-tools/practice.db`. Set
 ## A practice session
 
 ```bash
-uv run practice day new              # start the clock
+uv run practice start                # start the clock, or restart it
 uv run practice next                 # what is due, most overdue first
 uv run practice done "le freak"      # played it — schedule it and log the time
 uv run practice log                  # today's block, with subtotals
@@ -63,6 +63,9 @@ You never type a start time. The clock runs from the last thing you finished,
 so entries tile the session end to end. A day ends at 4am, not midnight —
 practice past midnight belongs to the evening it started in.
 
+If a name exists in two modules, say which: `uv run practice done SONGS/"le
+freak"`. If you mistype it, the message lists the near misses.
+
 ## Coming back after a break
 
 Following on from the last thing is right most of the time and wrong after a
@@ -83,9 +86,6 @@ logged is touched.
 
 `start` also opens the day if there is not one yet, so on an ordinary evening
 it does the same job as `day new` and you can use either.
-
-If a name exists in two modules, say which: `uv run practice done SONGS/"le
-freak"`. If you mistype it, the message lists the near misses.
 
 ## How fast you are playing it
 
