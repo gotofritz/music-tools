@@ -232,6 +232,34 @@ def day_new(ctx: click.Context) -> None:
     click.echo(f"{started.day.isoformat()} started, clock running from {now:%H:%M}")
 
 
+@practice.group("db")
+def db_group() -> None:
+    """The database file itself."""
+
+
+@db_group.command("dump")
+@click.option(
+    "--to",
+    "path",
+    type=click.Path(path_type=Path),
+    default=Path("backups/practice.sql"),
+    show_default=True,
+)
+@click.pass_context
+def db_dump(ctx: click.Context, path: Path) -> None:
+    """Dump the database to text, so the history can live in a git repository.
+
+    `sqlite3 .dump` without needing the `sqlite3` binary, and with the same
+    stable line ordering, so a backup diffs row by row.
+    """
+    conn = _connect(ctx)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as handle:
+        for line in conn.iterdump():
+            handle.write(line + "\n")
+    click.echo(f"dumped to {path}")
+
+
 @practice.command("log")
 @click.option("--day", "which", default="today", show_default=True, help="ISO date.")
 @click.pass_context
