@@ -8,8 +8,8 @@ it, and its Apps Script, are in `docs/raw/`), reproduces its schedule, and
 imports its history.
 
 ```bash
-uv run practice module list          # every module and the state of its queue
-uv run practice next SONGS           # that module's queue, most overdue first
+uv run practice module list          # every module: how many rows, how many due
+uv run practice next SONGS           # that module's rows, most overdue first
 uv run practice done "le freak"      # schedule it, and log the time
 uv run practice start                # back after a break: drop the gap
 uv run practice log                  # today's block, with subtotals
