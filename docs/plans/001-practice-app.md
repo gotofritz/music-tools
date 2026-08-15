@@ -64,9 +64,9 @@ here on: a **module** is a practice area (a sheet — SLAP, SONGS, TECHNIQUE); a
 DANCE), which no script reads and which is a plain label.
 
 **Exercise rows.** Column A is speed, written freely as `100%`, `80%`, `66`,
-`54`, `66/1` — a percentage of the original tempo for repertoire, a metronome
-BPM for technique. Then description, style, practice count `x`, last practiced,
-due, notes, and two recording columns.
+`54`, `66/1` — a percentage for repertoire, a metronome marking for technique.
+The next section takes that column seriously. Then description, style, practice
+count `x`, last practiced, due, notes, and two recording columns.
 
 **Marking one done** (`doneExercise_`): count +1, last practiced = now, next due
 = *f*(count), then a line into the log, then a re-sort by due date, then the
@@ -97,20 +97,68 @@ Two notes on that:
 - **The speed scaling is inverted, and the port fixes it.** At 80% the sheet
   computes `days * 100/80`, a 25% *longer* interval, so a tune still under tempo
   comes back *later* than one already at full speed — backwards. The port
-  divides instead:
-
-  ```
-  if speed matches ^(\d+)%$:  days = days * percent / 100
-  ```
-
-  so 80% gives 0.8× the interval and returns sooner, 100% is unscaled, and a
-  tune pushed past the original tempo drifts further out. Combined with the
-  `max(1, …)` floor already there, nothing can schedule below a day; `0%` is
-  treated as no scaling rather than dividing to zero. This is the one deliberate
-  behaviour change in the port. Existing due dates are imported verbatim, so
-  nothing shifts at the cutover; anything below 100% simply comes back sooner
-  from its next `done` onward.
+  multiplies by how close to target the exercise is being played (see **Tempo**
+  below), so 80% gives 0.8× the interval and returns sooner. Combined with the
+  `max(1, …)` floor already there, nothing can schedule below a day. This is the
+  one deliberate behaviour change in the port. Existing due dates are imported
+  verbatim, so nothing shifts at the cutover; anything below target simply comes
+  back sooner from its next `done` onward.
 - **The table plateaus at 120 days**, and `Long` at 180. Pinned by test.
+
+## Tempo
+
+The sheet's speed column is really a small language, and different tools speak
+different dialects of it — Transcribe! works in percentages of the original
+recording, GarageBand and metronome apps in BPM. Both get typed into the same
+column. The app parses it rather than treating it as a label, which means an
+exercise has to know **what tempo it is aiming at**:
+
+```
+exercise.target_bpm     the goal — the tune's real tempo, or the marking on
+                        the page for an exercise
+exercise.speed          what it is currently practised at, in the notation
+                        below, stored verbatim as typed
+```
+
+The notation, and what it resolves to:
+
+| Written | Means | BPM |
+| --- | --- | --- |
+| `123` | 123 BPM | 123 |
+| `123/1` | the same, spelled out | 123 |
+| `123/2` | 123 a minute, one every 2nd beat | 246 |
+| `123/0.5` | 123 a minute, one every half beat | 61.5 |
+| `66%` | 66% of the target | 88 at a target of 133 |
+
+So `N/D` is `N * D`, with a bare `N` the `D = 1` case, and `N%` is
+`target_bpm * N / 100`. (`123/0.5` comes to 61.5, not the 62.5 in the note this
+came from — the arithmetic is exact, the memory was rounding.) Division is by a
+possibly fractional divisor, so the parser takes floats on both sides and
+returns a float; only display rounds.
+
+```python
+Tempo(written="66%", bpm=88.0, target_bpm=133.0, ratio=0.66)
+```
+
+`ratio = bpm / target_bpm` is what the schedule uses, which is the point of
+storing a target at all: it makes the two dialects comparable, so `88` and `66%`
+against a target of 133 schedule identically instead of only the percentage
+being recognised. Rules at the edges:
+
+- **No target, or a percentage with no target to resolve against** → `bpm` and
+  `ratio` are unknown, and the schedule does not scale. Nothing breaks; the
+  exercise behaves exactly as it does today until a target is filled in.
+- **Ratio above 1** — practised faster than target — is **capped at 1.0** rather
+  than stretching the interval. Past the goal, more speed is not more retention.
+  One line, flip it if the opposite feels right after a few weeks.
+- **Unparseable** (`fast`, `medium-ish`, an empty cell) → kept verbatim, shown
+  as typed, no scaling. The column has years of free text in it and the app must
+  not reject any of it.
+
+The day log stores both: `speed` verbatim as a snapshot of what was typed, and
+`bpm` resolved at the time, so a later change of target does not rewrite
+history. The UI shows the pair — `88 BPM (66%)` — because the notation carries
+intent the number loses.
 
 **The day log** is a running clock, not a form. `New Day` appends a row stamped
 with today and `FROM = now`. Each `done` sets that row's `TO = now`, fills in
@@ -192,7 +240,8 @@ CREATE TABLE exercise (
   module_id INTEGER NOT NULL REFERENCES module(id),
   name TEXT NOT NULL,               -- "Stomp!"
   style TEXT,                       -- the row's own MODULE tag
-  speed TEXT,                       -- verbatim: "80%", "66", "66/1"
+  speed TEXT,                       -- verbatim: "80%", "66", "66/1", "123/0.5"
+  target_bpm REAL,                  -- the goal tempo; null = unknown
   practiced_count INTEGER NOT NULL DEFAULT 0,
   last_practiced TEXT,              -- ISO date
   next_due TEXT,                    -- ISO date
@@ -215,7 +264,8 @@ CREATE TABLE practice_entry (
   exercise_id INTEGER REFERENCES exercise(id),   -- null = ad-hoc entry
   started_at TEXT NOT NULL,
   ended_at TEXT,                    -- null = the entry running right now
-  speed TEXT,
+  speed TEXT,                       -- snapshot, verbatim
+  bpm REAL,                         -- snapshot, resolved at the time
   description TEXT NOT NULL,        -- snapshot; exercises get renamed
   log_group TEXT,                   -- snapshot of module.log_group
   notes TEXT
@@ -224,7 +274,7 @@ CREATE INDEX entry_day ON practice_entry(day_id, started_at);
 ```
 
 Durations, subtotals and day totals are computed, never stored. `description`,
-`speed` and `log_group` are **snapshots** — the log is a historical record and
+`speed`, `bpm` and `log_group` are **snapshots** — the log is a record and
 must not change when an exercise is renamed or moved. That is also what the
 spreadsheet did, by accident of being a spreadsheet.
 
@@ -257,26 +307,35 @@ The spreadsheet's brain, with no UI.
 1. **Schema + migration runner.** Red: `migrate(conn)` on an empty database
    leaves `user_version = 1` and the tables above; running it twice is a no-op;
    a database from a future version refuses to open.
-2. **Scheduling.** Red: `next_due(count, last_practiced, speed, algorithm, rng)`
+2. **Tempo.** Red: `parse_tempo(written, target_bpm)` over the table above —
+   `123` → 123; `123/1` → 123; `123/2` → 246; `123/0.5` → 61.5; `66%` against a
+   target of 133 → 88 and a ratio of 0.66; `66/1` → 66, since that is in the
+   real data. Then the edges: `66%` with no target leaves `bpm` unknown and does
+   not raise; a bare BPM with no target resolves `bpm` but leaves `ratio`
+   unknown; `120` against a target of 100 gives a ratio capped at 1.0; `fast`
+   and `""` round-trip verbatim with everything else unknown. `written` always
+   survives unchanged — the parse never rewrites the user's cell.
+3. **Scheduling.** Red: `next_due(count, last_practiced, tempo, algorithm, rng)`
    parametrised over the five algorithms and the table above — `count=0` → 1 day;
    `count=8` reads `intervals[8]` given the count is passed post-increment;
    beyond the table, the plateau; jitter within ±5% for a seeded rng and
-   never below 1 day; `80%` shortens to 4/5 while `66` and `66/1` (no percent
-   sign) are unscaled, and `0%` is unscaled rather than a division by zero;
-   `Short`/`Long` scale by 0.5/1.5 with `ceil`. Rotate and No-Rotation take
-   the module's due dates as an argument and are pure. Clock and rng are
-   injected — no `freezegun`, no monkeypatching `random`.
-3. **Marking done.** Red: `mark_done(exercise, algorithm, now)` bumps the count,
+   never below 1 day; `Short`/`Long` scale by 0.5/1.5 with `ceil`. The tempo
+   comes in already parsed, so this takes `ratio` and nothing else: 0.8 shortens
+   to 4/5, an unknown ratio does not scale, and `88` against a target of 133
+   schedules identically to `66%` against the same target. Rotate and
+   No-Rotation take the module's due dates as an argument and are pure. Clock
+   and rng are injected — no `freezegun`, no monkeypatching `random`.
+4. **Marking done.** Red: `mark_done(exercise, algorithm, now)` bumps the count,
    stamps the date, computes the due date, closes the open `practice_entry` at
-   `now`, opens the next one, and returns both. Assert an exercise with no open
-   entry starts a day implicitly rather than raising.
-4. **Totals.** Red: `day_summary(day)` returns per-log-group durations and the
+   `now` with the tempo snapshot, opens the next one, and returns both. Assert an
+   exercise with no open entry starts a day implicitly rather than raising.
+5. **Totals.** Red: `day_summary(day)` returns per-log-group durations and the
    day total from entries, matching the sample data in `docs/raw/BASS.csv` —
    `2026-07-05` is `TECHNIQUE 00:19`, `REPERTOIRE 00:34`, total `00:53`. That
    sample is the fixture; if the port is right, the numbers come out equal.
-5. **The 4am boundary.** Red: an entry at `01:30` lands on the previous day;
+6. **The 4am boundary.** Red: an entry at `01:30` lands on the previous day;
    `04:30` starts a new one.
-6. **The importer.** Red: `import_sheets(day_log, module_sheets)` over the two
+7. **The importer.** Red: `import_sheets(day_log, module_sheets)` over the two
    files in `docs/raw/`. They are *tab*-separated despite the `.csv` extension,
    have trailing empty columns, forward-fill the day and module columns, and
    carry formula results (`MODULE SUBTOTAL`, `DAY TOTAL`) that are recomputed
@@ -285,6 +344,13 @@ The spreadsheet's brain, with no UI.
    verbatim including `66/1`; a description with a trailing `(note)` split back
    into description and note; a second run is idempotent. Rows that cannot be
    parsed are collected and reported, never dropped in silence.
+
+   `target_bpm` is **not in the sheet** and cannot be inferred — a row reading
+   `80%` says nothing about what 100% is. Import leaves it null, which by the
+   rules above means those exercises schedule unscaled, exactly as they did in
+   the sheet. Filling targets in is a one-column job in the app afterwards, and
+   the module view should make the missing ones visible so it can be done a few
+   at a time rather than as a migration chore.
 
 Write `docs/initial-context.md` here: the domain vocabulary above, the schema,
 and the module/log-group/style distinction that the sheet blurs.
@@ -298,11 +364,13 @@ uv run practice day new
 uv run practice next [MODULE]        # what is due, oldest first
 uv run practice done EXERCISE [--short|--long|--rotate|--hold]
 uv run practice log [--day today]    # the day block, with subtotals
-uv run practice add MODULE NAME --speed 80%
+uv run practice add MODULE NAME --speed 80% --target-bpm 133
+uv run practice speed EXERCISE 85%   # bump what it is practised at
 ```
 
 Red: click's `CliRunner` over a temp database — `done` prints the new due date
-and the log line, `log` renders the block in the same shape as the sheet.
+and the log line, both tempo dialects rendered as `88 BPM (66%)`, and `log`
+renders the block in the same shape as the sheet.
 
 ### Phase 3 — The app, and the cutover
 
@@ -311,12 +379,15 @@ used.
 
 - `GET /` — today: the running day log with live totals, plus what is due.
 - `GET /modules/{slug}` — the module's exercises, `ORDER BY next_due`, showing
-  speed, count, last, due, notes. This is the sheet, minus the sorting command.
+  speed as `88 BPM (66%)` against its target, count, last, due, notes. This is
+  the sheet, minus the sorting command. Exercises with no target are flagged, so
+  the gap the importer leaves gets closed by use rather than by a chore.
 - `POST /exercises/{id}/done?algorithm=…` — returns the updated row *and* the
   new log fragment as an HTMX out-of-band swap. One click, the two places that
   change both update.
 - `POST /days`, `POST /entries/{id}/stop`, `PATCH /exercises/{id}` for inline
-  edits of speed and notes.
+  edits of speed, target and notes — the speed field validating through
+  `parse_tempo` and echoing back the resolved BPM as you type.
 
 Red: `TestClient` over each route — status, and that the fragment contains the
 recomputed due date. The templates themselves are checked by hand.
@@ -339,6 +410,11 @@ audio, so the CLI keeps working on the same configs.
 `/api/preview` returns the generated audio, an `<audio>` element plays it, and
 the practice clock keeps running while it does. The full scenario now closes:
 due → loop → play → done, without leaving the page.
+
+The tempo model pays off again here: `playbackRate` is `ratio`, so the exercise
+plays at the speed it is recorded as being practised at, and nudging the slider
+is what edits `speed` — no typing a percentage into a field that some other tool
+already knows.
 
 ### Phase 6 — Markers without Transcribe!
 
