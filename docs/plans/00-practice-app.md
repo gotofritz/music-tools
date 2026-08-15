@@ -27,7 +27,7 @@ built from. The scenario that drives this plan:
 > and the day log both move on.
 
 This plan replaces the spreadsheet with a local Python app, then grows the loop
-tooling into it. `docs/plans/002-loop-editor.md` covers the loop half in detail
+tooling into it. `docs/plans/04-loop-editor.md` covers the loop half in detail
 and is a phase of this plan, not a separate effort.
 
 ## Assumptions
@@ -46,10 +46,10 @@ that first depends on it is named.
   configs already written by hand. Phase 4.
 - **A3 — History is migrated**, by a one-off importer that eats the sheet
   exports. The practice counts and due dates are the whole value of the
-  spreadsheet; starting fresh throws away the schedule. Phase 1.
+  spreadsheet; starting fresh throws away the schedule. Phase 2.
 - **A4 — All module sheets share the `BASS SONGS` column shape**, with an
   `extra` JSON column absorbing the odd per-module extras rather than a
-  per-module field definition. Phase 1; if some sheet turns out to be wildly
+  per-module field definition. Phase 2; if some sheet turns out to be wildly
   different, only the importer and one migration change.
 - **A5 — Single user, one machine, localhost only.** No auth, no accounts, bind
   `127.0.0.1`.
@@ -201,7 +201,7 @@ music_tools/
         static/…             # vendored htmx.min.js, css, loop grid js
     cli.py                   # click group: practice, db, import, serve
 tests/
-docs/initial-context.md      # written in Phase 1 — AGENTS.md points at it and
+docs/initial-context.md      # written in Phase 2 — AGENTS.md points at it and
                              # it does not exist yet
 ```
 
@@ -222,7 +222,7 @@ git repo and diff row by row. Run it from the app on shutdown too.
 
 ## Schema
 
-Sketch, not final; the migration in Phase 1 is the specification.
+Sketch, not final; the migration in Phase 2 is the specification.
 
 ```sql
 CREATE TABLE module (
@@ -279,150 +279,58 @@ must not change when an exercise is renamed or moved. That is also what the
 spreadsheet did, by accident of being a spreadsheet.
 
 Loop tables (`loop_config`, `loop_section`, and later `marker_file` /
-`marker`) are added in Phase 4 and specified in `002-loop-editor.md`.
+`marker`) are added in Phase 4 and specified in `04-loop-editor.md`.
 
 ## Phases
 
 Each phase leaves a working app and is worth stopping at. TDD throughout
 (`.claude/skills/tdd.md`): failing test, watch it fail, minimal green, refactor.
+Each has its own document with the steps, the test lists and the signatures;
+this is the map, not the territory.
 
-### Phase 0 — Test harness, and `loop.py` becomes importable
+| | Phase | Document | Leaves you with |
+| --- | --- | --- | --- |
+| 1 | Foundations | `01-foundations.md` | A test suite, CI, and an importable `loop.py` |
+| 2 | Domain, database, importer | `02-domain.md` | The sheet's brain in Python, plus a CLI and the migrated history |
+| 3 | The app, and the cutover | `03-web.md` | The spreadsheet retired |
+| 4 | Loops, attached to exercises | `04-loop-editor.md` | Loops built and generated from the tune that is due |
+| 5 | Play it in the app | `05-playback.md` | The scenario closed: due → loop → play → done |
+| 6 | Markers without Transcribe! | `06-markers.md` | New tunes marked up in the browser |
 
-`loop.py` is a PEP 723 single-file script, so nothing can import `Score`,
-`parse_markers` or `parse_pattern` from it and there is no test suite at all.
-Move it to `music_tools/loop.py`, register `loop` under `[project.scripts]`,
-add `pytest`/`ruff`/`ty` and a `Taskfile.yml` with a `qa` target — AGENTS.md
-already assumes `task` exists.
+**Phase 1 — Foundations.** `loop.py` is a PEP 723 single-file script, so nothing
+can import `Score` or `parse_markers` from it, and there is no suite at all.
+Move it into the package, add `pytest`/`ruff`/`ty`, a `Taskfile.yml` and a
+workflow — AGENTS.md already assumes both `task` and CI exist. Then pin the
+marker, pattern and drill behaviour with characterisation tests, so the later
+refactors have something to break loudly.
 
-The characterisation tests for `parse_markers` and pattern resolution are
-listed in detail in `002-loop-editor.md` steps 1–2; they belong to this phase
-because everything else builds on a `loop.py` that can be imported and is known
-not to have regressed. Honest caveat: those tests are red only because no suite
-exists, not because the behaviour is missing.
+**Phase 2 — Domain, database, importer.** The schema above, the tempo grammar,
+the five scheduling algorithms, marking done as one transaction, the day totals,
+and the importer that carries the sheet's history over. A thin click CLI comes
+with it — the domain proved before any HTML, and still useful after. The
+spreadsheet is technically redundant at the end of this phase; Phase 3 only
+makes it pleasant.
 
-### Phase 1 — Domain, database, importer
+**Phase 3 — The app, and the cutover.** FastAPI + Jinja2 + HTMX over the same
+functions: today's log with live totals, a page per module ordered by due date,
+one click to mark done. Then the cutover checklist — import for real, run both
+for a week, compare the totals, stop opening the sheet.
 
-The spreadsheet's brain, with no UI.
+**Phase 4 — Loops, attached to exercises.** An exercise gets a **loop** button;
+a loop belongs to the exercise; creating one asks for the audio snippet and a
+Transcribe! marker file and drops into the section editor — a grid labelled from
+the score, live pattern validation, drill expansion, generate. Saving writes both
+the database rows and a `*.loop.yml` beside the audio, so the CLI keeps working
+on the same configs.
 
-1. **Schema + migration runner.** Red: `migrate(conn)` on an empty database
-   leaves `user_version = 1` and the tables above; running it twice is a no-op;
-   a database from a future version refuses to open.
-2. **Tempo.** Red: `parse_tempo(written, target_bpm)` over the table above —
-   `123` → 123; `123/1` → 123; `123/2` → 246; `123/0.5` → 61.5; `66%` against a
-   target of 133 → 88 and a ratio of 0.66; `66/1` → 66, since that is in the
-   real data. Then the edges: `66%` with no target leaves `bpm` unknown and does
-   not raise; a bare BPM with no target resolves `bpm` but leaves `ratio`
-   unknown; `120` against a target of 100 gives a ratio capped at 1.0; `fast`
-   and `""` round-trip verbatim with everything else unknown. `written` always
-   survives unchanged — the parse never rewrites the user's cell.
-3. **Scheduling.** Red: `next_due(count, last_practiced, tempo, algorithm, rng)`
-   parametrised over the five algorithms and the table above — `count=0` → 1 day;
-   `count=8` reads `intervals[8]` given the count is passed post-increment;
-   beyond the table, the plateau; jitter within ±5% for a seeded rng and
-   never below 1 day; `Short`/`Long` scale by 0.5/1.5 with `ceil`. The tempo
-   comes in already parsed, so this takes `ratio` and nothing else: 0.8 shortens
-   to 4/5, an unknown ratio does not scale, and `88` against a target of 133
-   schedules identically to `66%` against the same target. Rotate and
-   No-Rotation take the module's due dates as an argument and are pure. Clock
-   and rng are injected — no `freezegun`, no monkeypatching `random`.
-4. **Marking done.** Red: `mark_done(exercise, algorithm, now)` bumps the count,
-   stamps the date, computes the due date, closes the open `practice_entry` at
-   `now` with the tempo snapshot, opens the next one, and returns both. Assert an
-   exercise with no open entry starts a day implicitly rather than raising.
-5. **Totals.** Red: `day_summary(day)` returns per-log-group durations and the
-   day total from entries, matching the sample data in `docs/raw/BASS.csv` —
-   `2026-07-05` is `TECHNIQUE 00:19`, `REPERTOIRE 00:34`, total `00:53`. That
-   sample is the fixture; if the port is right, the numbers come out equal.
-6. **The 4am boundary.** Red: an entry at `01:30` lands on the previous day;
-   `04:30` starts a new one.
-7. **The importer.** Red: `import_sheets(day_log, module_sheets)` over the two
-   files in `docs/raw/`. They are *tab*-separated despite the `.csv` extension,
-   have trailing empty columns, forward-fill the day and module columns, and
-   carry formula results (`MODULE SUBTOTAL`, `DAY TOTAL`) that are recomputed
-   and therefore ignored. Assert: 4 exercises with their counts and dates; the
-   day blocks reconstructed with entries tiled `FROM`→`TO`; `speed` kept
-   verbatim including `66/1`; a description with a trailing `(note)` split back
-   into description and note; a second run is idempotent. Rows that cannot be
-   parsed are collected and reported, never dropped in silence.
+**Phase 5 — Play it in the app.** A cached render served over a range-capable
+endpoint, an `<audio>` element, and a rate slider wired to the exercise's tempo
+ratio — so the speed you play at is the speed the schedule reads, typed once.
 
-   `target_bpm` is **not in the sheet** and cannot be inferred — a row reading
-   `80%` says nothing about what 100% is. Import leaves it null, which by the
-   rules above means those exercises schedule unscaled, exactly as they did in
-   the sheet. Filling targets in is a one-column job in the app afterwards, and
-   the module view should make the missing ones visible so it can be done a few
-   at a time rather than as a migration chore.
-
-Write `docs/initial-context.md` here: the domain vocabulary above, the schema,
-and the module/log-group/style distinction that the sheet blurs.
-
-### Phase 2 — Practice from the CLI
-
-Proves the domain before any HTML exists, and remains useful afterwards.
-
-```
-uv run practice day new
-uv run practice next [MODULE]        # what is due, oldest first
-uv run practice done EXERCISE [--short|--long|--rotate|--hold]
-uv run practice log [--day today]    # the day block, with subtotals
-uv run practice add MODULE NAME --speed 80% --target-bpm 133
-uv run practice speed EXERCISE 85%   # bump what it is practised at
-```
-
-Red: click's `CliRunner` over a temp database — `done` prints the new due date
-and the log line, both tempo dialects rendered as `88 BPM (66%)`, and `log`
-renders the block in the same shape as the sheet.
-
-### Phase 3 — The app, and the cutover
-
-FastAPI + Jinja2 + HTMX. This is the phase where the spreadsheet stops being
-used.
-
-- `GET /` — today: the running day log with live totals, plus what is due.
-- `GET /modules/{slug}` — the module's exercises, `ORDER BY next_due`, showing
-  speed as `88 BPM (66%)` against its target, count, last, due, notes. This is
-  the sheet, minus the sorting command. Exercises with no target are flagged, so
-  the gap the importer leaves gets closed by use rather than by a chore.
-- `POST /exercises/{id}/done?algorithm=…` — returns the updated row *and* the
-  new log fragment as an HTMX out-of-band swap. One click, the two places that
-  change both update.
-- `POST /days`, `POST /entries/{id}/stop`, `PATCH /exercises/{id}` for inline
-  edits of speed, target and notes — the speed field validating through
-  `parse_tempo` and echoing back the resolved BPM as you type.
-
-Red: `TestClient` over each route — status, and that the fragment contains the
-recomputed due date. The templates themselves are checked by hand.
-
-The cutover: import the real exports, use both for a week, diff the totals,
-then stop opening the sheet. Keep `docs/raw/` as the record of what was
-replaced.
-
-### Phase 4 — Loops, attached to exercises
-
-Detailed in `docs/plans/002-loop-editor.md`. In short: an exercise gets a
-**loop** button; a loop belongs to the exercise; creating one asks for the audio
-snippet and a Transcribe! marker file, and drops into the section editor —
-a grid labelled from the score, live pattern validation, drill expansion, and
-generate. Saving writes both the database rows and a `*.loop.yml` beside the
-audio, so the CLI keeps working on the same configs.
-
-### Phase 5 — Play it in the app
-
-`/api/preview` returns the generated audio, an `<audio>` element plays it, and
-the practice clock keeps running while it does. The full scenario now closes:
-due → loop → play → done, without leaving the page.
-
-The tempo model pays off again here: `playbackRate` is `ratio`, so the exercise
-plays at the speed it is recorded as being practised at, and nudging the slider
-is what edits `speed` — no typing a percentage into a field that some other tool
-already knows.
-
-### Phase 6 — Markers without Transcribe!
-
-Replace the `.txt` upload with marking in the browser: play the snippet, tap
-bars and beats, name text blocks, store markers as rows rather than an imported
-file. The `marker_file`/`marker` tables arrive here; `parse_markers` becomes one
-of two sources feeding the same `Score`. Transcribe! import stays, because
-existing tunes already have their markers there.
+**Phase 6 — Markers without Transcribe!** Tap bars and beats against the
+waveform and store markers as rows. `Score` already is the boundary, so the
+database becomes a second source feeding the same builder. Import and export of
+the `.txt` format both stay.
 
 ## Out of scope
 
