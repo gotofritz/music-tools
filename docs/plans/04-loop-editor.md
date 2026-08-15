@@ -1,6 +1,6 @@
 # The loop editor, inside the practice app
 
-**Phase 4 of `docs/plans/001-practice-app.md`.** Read that first: it sets the
+**Phase 4 of `docs/plans/00-practice-app.md`.** Read that first: it sets the
 stack (FastAPI + Jinja2 + HTMX, no Node), the storage (SQLite at
 `~/.local/share/music-tools/practice.db`, hand-written SQL, numbered
 migrations), and the domain (module → exercise → practice entry). This document
@@ -51,7 +51,7 @@ Adds to the tree in `001`:
 
 ```
 music_tools/
-    loop.py                        # already moved here in Phase 0
+    loop.py                        # already moved here in Phase 1
     db/migrations/003_loops.sql
     domain/loops.py                # loop config ↔ pydantic ↔ YAML
     web/routes/loops.py
@@ -176,81 +176,18 @@ mean changing `rearrange` for no gain.
 Each step is red/green: write the failing test, then the smallest change that
 passes it. Every step leaves the repo working.
 
-Steps 1–2 belong to **Phase 0** of the parent plan and are listed here because
-they are `loop.py`'s tests. They are *characterisation* tests, not true red —
-the behaviour already exists and they are red only because there is no test
-suite yet. Their job is to fail loudly if the later refactors break something.
-Steps 11–13 are UI; there is no JavaScript test framework here and adding one is
+`loop.py`'s own behaviour — marker parsing, pattern resolution, drill expansion —
+is pinned by the characterisation tests in `01-foundations.md`. This phase is
+where that pinning earns its keep: steps 1–3 change `loop.py`, and those tests
+are what says the change was safe.
+
+Steps 10–11 are UI; there is no JavaScript test framework here and adding one is
 YAGNI, so those are verified by hand.
 
 No binary fixtures: marker files are text, and audio comes from
 `AudioSegment.silent(duration=…)` in a fixture.
 
-### Step 1 — Test harness, and `loop.py` becomes importable
-
-`loop.py` is a PEP 723 single-file script with inline dependencies, so nothing
-can import `Score`, `parse_markers` or `parse_pattern` from it.
-
-**Red.** Add `pytest` as a dev dependency. `tests/test_score.py` opens with
-`from music_tools.loop import Score, parse_markers` → `ModuleNotFoundError`.
-Cover, using `tests/fixtures/d51.txt` and `tests/fixtures/jackson5.txt`:
-
-- `parse_markers` on the D51 file yields four bars `D51`–`D54` of four beats
-  each, beats `b1`/`b2` labelled in the first bar, one text block `JOHN`.
-- A trailing bar marker with no beats under it closes the last bar instead of
-  opening one, using the Two Way Pak E Way file that ends on a bare `93`, which
-  is addressable as the end of the score but never played.
-- A marker labelled `end` truncates the score there and everything after it is
-  dropped — undocumented behaviour that predates the pattern grammar, and the
-  reason nothing can shadow the reserved `END`.
-- `parse_markers` on the Jackson 5 file yields `A1`–`A4`, with five beats in `A3`.
-- `Marker (auto)` counts as a beat, not something to skip: Transcribe! writes it
-  for beats it worked out itself, and a file mixing `auto` and `beat` markers
-  must give every bar the same beat count. A kind that is neither bar nor beat
-  is counted into `score.ignored` and reported rather than dropped in silence.
-- `Score.build` shifts the first marker to `0.0`; the last bar ends at the
-  snippet duration. That anchoring is why audio before the first marker cannot
-  be addressed — a loop starting on an upbeat must mark that upbeat.
-- A first bar shorter than the bars after it is a pickup: `score.pickup` is set,
-  positional addressing starts at `[0]`, and `[1]` is the first full bar. A loop
-  with square edges keeps 1-based numbering and has no `[0]`.
-- The odd-beat-count warning covers interior bars only, since a snippet cut from
-  a recording is expected to be partial at both edges. A short bar in the middle
-  still warns; a short first or last bar does not.
-- `modal_beats` breaks a tie toward the longer count, so a `2+4+4+2` loop reads
-  as two full bars between two partial ones. Breaking it the other way blames
-  the two correct interior bars, which is what `Counter.most_common` does on its
-  own — the same trap that made the warning name the wrong bar on a `1+4` file.
-- Bars tile the snippet with no gaps or overlaps, and so do beats.
-- Markers longer than the snippet raise, with the "belong to this snippet"
-  message.
-
-**Green.** Move the module to `music_tools/loop.py`, drop the inline dependency
-block (`click`, `pyyaml` and `pydub` are already project dependencies), register
-`loop = "music_tools.loop:main"` under `[project.scripts]` following the existing
-`rearrange` entry, delete root `loop.py`. Invocation becomes
-`uv run loop config.yml`; update the docstring examples.
-
-### Step 2 — Pattern resolution locked down
-
-**Red.** `tests/test_patterns.py`, parametrised over every span form against the
-D51 score: `[1][2][3][4x]` tiling the snippet bar by bar; `[D51]…` matching it by
-label; `[1.1][1.2][1.3][1.4x][2]`; `[b1][b2]`; `[JOHN]` alone running to the end;
-the ranges `[1-3]`, `[1.4-3]`, `[JOHN-3.2]`, `[JOHN-D53]`, `[1.1-JOHN]`,
-`[1-3x]`; repeats and out-of-order runs written with explicit ends. The
-neighbour rule specifically: `[1]` alone is the whole snippet, `[1][3]` is bars
-1–2 then 3 to the end, and `[1][2]` matches `[1-2]` only because 2 follows. On
-the Two Way file, `[92-93]` naming the end marker as an end, equal to a bare
-`[92]` but usable anywhere in a pattern, and equal again to `[92-END]`. Errors:
-`[nope]`, `[JOHN-nope]`, `[]`, `[9]`, `[1.9]`, the backwards span `[JOHN-b2]`,
-the empty `[1][1]`, `[3][1]` and `[93]`, `{JOHN}` pointing at square brackets,
-and `[1]junk[2]`. Plus a third fixture containing a bar genuinely labelled
-`D51x`, asserting `[D51x]` plays it rather than silencing `D51`.
-
-**Green.** Nothing — these should pass on arrival. If any fails, step 1 broke
-something.
-
-### Step 3 — `root:` defaults to the config's directory
+### Step 1 — `root:` defaults to the config's directory
 
 **Red.** Write a config into `tmp_path` with no `root:` and a relative `snippet:`
 beside it, then load it from a different working directory. Currently resolves
@@ -260,7 +197,7 @@ to the config instead.
 **Green.** In `main`, use the config's parent as the root when the key is
 absent, rather than `Path("")`.
 
-### Step 4 — Generation split from I/O
+### Step 2 — Generation split from I/O
 
 `main` currently loads, builds, exports and launches Transcribe! inline, so
 generation cannot be tested without shelling out to a macOS-only binary.
@@ -274,7 +211,7 @@ not. Assert the section summary it returns matches what the CLI prints.
 export → open. Put the Transcribe! launch behind `--open/--no-open` (default on)
 so no test ever shells out.
 
-### Step 5 — Pattern validation as a service
+### Step 3 — Pattern validation as a service
 
 `Score.parse_pattern` raises `ClickException`, which is CLI-shaped and wrong to
 catch in a web handler.
@@ -287,7 +224,7 @@ both a valid pattern and `[nope]`.
 the parsing code, and have `main` convert it to `ClickException` so the CLI's
 output is unchanged. `validate_pattern` catches `PatternError`.
 
-### Step 6 — Loop configs in the database
+### Step 4 — Loop configs in the database
 
 **Red.** `tests/test_loops.py`: migration `003_loops.sql` creates the two
 tables; `create_loop(exercise_id, name, snippet, markers)` returns a config with
@@ -297,7 +234,7 @@ exercise cascades; deleting a section leaves the remaining positions contiguous.
 **Green.** The migration plus `domain/loops.py` repository functions, pydantic
 models following the style already in `music_tools/config.py`.
 
-### Step 7 — YAML round-trip
+### Step 5 — YAML round-trip
 
 The join between the database and the CLI, and the riskiest single piece — get
 it wrong and the app and the CLI disagree about what a config means.
@@ -313,7 +250,7 @@ preserved rather than dropped.
 
 **Green.** `to_yaml` / `from_yaml` in `domain/loops.py`.
 
-### Step 8 — Describing a config for the page
+### Step 6 — Describing a config for the page
 
 **Red.** Assert `describe_loop(config)` returns the config fields plus a score
 summary — bar names with beat counts, beat labels, text-block names — and that
@@ -324,7 +261,7 @@ than raising: the page must still open so the path can be fixed.
 
 **Green.** Pydantic view models.
 
-### Step 9 — Read routes
+### Step 7 — Read routes
 
 **Red.** `TestClient` against a temp database: `GET /exercises/{id}/loops` lists
 them; `GET /loops/{id}` returns 200 with the config and the score; an unknown id
@@ -337,7 +274,7 @@ roots with 403.
 already dependencies from Phase 3; add `httpx` as a dev dependency if
 `TestClient` has not already pulled it in, and `python-multipart` for the upload.
 
-### Step 10 — Write routes
+### Step 8 — Write routes
 
 **Red.** `PUT /loops/{id}` with a valid body saves and rewrites the YAML export;
 an invalid pattern returns 422 with the message **and leaves both the database
@@ -346,26 +283,26 @@ file writes it beside the snippet and creates the config; a second upload of the
 same name does not clobber the first. Section add / duplicate / delete /
 reorder each leave positions contiguous.
 
-**Green.** Implement, validating through step 5 before writing, and writing the
+**Green.** Implement, validating through step 3 before writing, and writing the
 YAML in the same transaction boundary as the rows — a save that fails leaves
 neither changed.
 
-### Step 11 — Generate
+### Step 9 — Generate
 
 **Red.** `POST /loops/{id}/generate` returns 200 and the output path; the file
 exists; its duration matches the sum of the resolved spans; no Transcribe!
 launch during tests.
 
-**Green.** Wire to `build_output` from step 4 with `open=False`.
+**Green.** Wire to `build_output` from step 2 with `open=False`.
 
-### Step 12 — The editor page
+### Step 10 — The editor page
 
 **Green** (verified by hand). The exercise row in a module gets a **loop**
 button. It opens the exercise's loops; a loop opens the editor: sections as
 cards, each with a grid labelled from the score (`A1`, `A2`… / `D51`, `b1`,
 `b2`…). Clicking a cell toggles `1`↔`x`. Sections can be added, duplicated,
 deleted and reordered. `markers:` mode is a text field validated on each
-keystroke against step 9, resolved spans shown underneath. A drill shows its
+keystroke against step 7, resolved spans shown underneath. A drill shows its
 expansion, with the step names as checkboxes. Save, and generate with the
 summary the CLI prints.
 
@@ -375,7 +312,7 @@ a couple of hundred lines. If it stops being tolerable, that is the signal to
 put a real frontend in front of the same routes, and nothing on the server
 changes when that happens.
 
-### Step 13 — Creating a loop from the practice flow
+### Step 11 — Creating a loop from the practice flow
 
 **Green** (verified by hand). The scenario end to end: SLAP says Stomp! is due →
 **loop** → no loops yet → the create form, pre-filled with the tune's directory
@@ -392,7 +329,7 @@ Then the parent plan's Phase 5 adds play-in-place, and Phase 6 replaces the
 Beyond the suite, on the real files:
 
 1. `uv run loop "~/…/Jacksons 5/practice.loop.yml"` produces what it does today,
-   confirming steps 1–4 changed nothing.
+   confirming steps 1–2 changed nothing.
 2. Import that same config into the app, save it untouched, and confirm the
    rewritten YAML differs from the original only in key order.
 3. Toggle a bar off in the grid, save, and confirm the YAML diff is the single
