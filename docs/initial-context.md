@@ -227,7 +227,10 @@ player, one instrument, and nothing would ever have read it. The
 importer's natural keys are `(module, name)` for exercises, enforced by a
 partial unique index, and `(day, started_at)` for entries, which is a lookup
 rather than a constraint because two exercises marked done in the same second
-share an instant.
+share an instant. The module half of that key is **given**, not derived:
+`--modules 'SONGS:<path>'`, because Google names a single-sheet export
+`<document> - <sheet>.tsv` and a name guessed off the file name would import
+the same sheet into a different module on a re-run.
 
 `practice db dump` (and `task db:dump`) writes `backups/practice.sql` through
 `sqlite3.iterdump`, so no `sqlite3` binary is needed and the practice history

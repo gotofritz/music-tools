@@ -49,7 +49,7 @@ from music_tools.domain.session import (
     start_day,
 )
 from music_tools.domain.tempo import format_tempo, parse_tempo
-from music_tools.importer.sheets import import_sheets
+from music_tools.importer.sheets import import_sheets, parse_module_argument
 
 
 @click.group()
@@ -545,8 +545,8 @@ def show_log(ctx: click.Context, which: str) -> None:
 @click.option(
     "--modules",
     multiple=True,
-    type=click.Path(exists=True, path_type=Path),
-    help="Module sheet exports, one per practice area.",
+    metavar="[NAME:]FILE",
+    help="A module sheet export. Prefix it with the module's name.",
 )
 @click.option(
     "--day-log",
@@ -555,10 +555,24 @@ def show_log(ctx: click.Context, which: str) -> None:
 )
 @click.pass_context
 def import_command(
-    ctx: click.Context, modules: tuple[Path, ...], day_log: Path | None
+    ctx: click.Context, modules: tuple[str, ...], day_log: Path | None
 ) -> None:
-    """Import the spreadsheet exports."""
+    """Import the spreadsheet exports.
+
+    Each `--modules` argument is a file, optionally prefixed with the name of
+    the module it holds:
+
+        --modules 'SONGS:~/Downloads/Bass Practice - SONGS.tsv'
+
+    Say the name: Google names a single-sheet export after the document and
+    then the sheet, so the file name alone would import that one as
+    `Practice - SONGS`.
+    """
     conn = _connect(ctx)
+    for source in modules:
+        _, path = parse_module_argument(source)
+        if not path.exists():
+            raise click.ClickException(f"no such file: {path}")
     report = import_sheets(conn, modules=list(modules), day_log=day_log)
     click.echo(
         "imported "

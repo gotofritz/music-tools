@@ -269,17 +269,34 @@ Export each sheet from Google Sheets (**File → Download → Tab-separated
 values**) and point the importer at them:
 
 ```bash
-uv run practice import --modules "BASS SONGS.csv" --modules "BASS SLAP.csv" \
-                       --day-log "BASS.csv"
+uv run practice import \
+  --modules 'SONGS:~/Downloads/Bass Practice - SONGS.tsv' \
+  --modules 'SLAP:~/Downloads/Bass Practice - SLAP.tsv' \
+  --day-log ~/Downloads/BASS.csv
 ```
 
-The file name gives the module — `BASS SONGS.csv` becomes the module `SONGS`,
-since every sheet in the export is named `BASS <something>` — and the top-left
-cell gives its log group. Practice
-counts, dates and speeds all come over as they are, so nothing in the schedule
-shifts on the day you switch. Running it twice changes nothing, so you can
-re-export and re-import as often as you like. Anything it cannot read is listed
-at the end rather than dropped in silence.
+**Say which module each file is**, in front of the path and separated by a
+colon. Google names a single-sheet download after the document and *then* the
+sheet — `Bass Practice - SONGS.tsv` — so left to guess, the importer would
+create a module called `Practice - SONGS`.
+
+Quote the whole argument, because those file names have spaces in them. The
+`~` still works inside the quotes; the importer expands it.
+
+A plain path with no `NAME:` in front of it still works, and the module is
+guessed from the file name less its first word — which is right for the old
+`BASS SONGS.csv` exports and wrong for anything Google names today.
+
+The top-left cell of the sheet gives the module's log group. Practice counts,
+dates and speeds all come over as they are, so nothing in the schedule shifts
+on the day you switch. Running it twice changes nothing — the second run
+updates the rows it matched, keyed on the module name you gave and the row's
+own name — so you can re-export and re-import as often as you like. Anything it
+cannot read is listed at the end rather than dropped in silence.
+
+Get the name wrong and you get a second module: `practice module list` shows
+it, `practice module delete <name>` removes it as long as nothing in the day
+log points at it, and then you can import again.
 
 ## Keeping a copy
 

@@ -11,7 +11,11 @@ from pathlib import Path
 import pytest
 
 from music_tools.db import repository as repo
-from music_tools.importer.sheets import import_sheets, split_trailing_note
+from music_tools.importer.sheets import (
+    import_sheets,
+    parse_module_argument,
+    split_trailing_note,
+)
 
 RAW = Path(__file__).parent.parent / "docs" / "raw"
 MODULE_FILE = RAW / "BASS SONGS.csv"
@@ -221,3 +225,79 @@ def test_the_importer_is_driven_by_paths_not_by_a_working_directory(db):
     assert report.modules_created == 1
     assert report.exercises_created == 4
     assert report.entries_created == 0
+
+
+# --- naming a module on the command line ------------------------------------
+
+
+def test_a_plain_path_still_takes_its_module_from_the_file_name():
+    assert parse_module_argument("docs/raw/BASS SONGS.csv") == (
+        None,
+        Path("docs/raw/BASS SONGS.csv"),
+    )
+
+
+def test_a_name_prefix_says_which_module_the_file_is():
+    """Google prepends the document name, so the file name cannot be trusted."""
+    assert parse_module_argument("SONGS:/tmp/Bass Practice - SONGS.tsv") == (
+        "SONGS",
+        Path("/tmp/Bass Practice - SONGS.tsv"),
+    )
+    assert parse_module_argument("  BASS SLAP : /tmp/sheet.tsv  ") == (
+        "BASS SLAP",
+        Path("/tmp/sheet.tsv"),
+    )
+
+
+def test_a_colon_in_a_file_that_exists_is_part_of_the_path(tmp_path):
+    """A real file wins over a prefix; a colon is legal in a Unix path."""
+    odd = tmp_path / "odd:name.tsv"
+    odd.write_text("SPEED\tNAME\n")
+
+    assert parse_module_argument(str(odd)) == (None, odd)
+
+
+@pytest.fixture
+def google_export(tmp_path):
+    """The module sheet, named the way Google Sheets exports it."""
+    path = tmp_path / "Bass Practice - SONGS.tsv"
+    path.write_bytes(MODULE_FILE.read_bytes())
+    return path
+
+
+def test_the_google_file_name_alone_names_the_module_wrongly(db, google_export):
+    import_sheets(db, modules=[google_export])
+
+    assert repo.find_module(db, "SONGS") is None
+    assert loaded(repo.find_module(db, "Practice - SONGS")).name == "Practice - SONGS"
+
+
+def test_the_prefix_names_the_module_whatever_the_file_is_called(db, google_export):
+    report = import_sheets(db, modules=[f"SONGS:{google_export}"])
+
+    module = loaded(repo.find_module(db, "SONGS"))
+    assert module.log_group == "REPERTOIRE"
+    assert report.exercises_created == 4
+    assert "le freak" in [
+        row.name for row in repo.exercises_due(db, module_id=module.id)
+    ]
+
+
+def test_a_prefixed_import_updates_the_module_it_names(db, google_export):
+    """Twice is once: the second run keys on the name the prefix gave."""
+    import_sheets(db, modules=[f"SONGS:{google_export}"])
+
+    again = import_sheets(db, modules=[f"SONGS:{google_export}"])
+
+    assert again.modules_created == 0
+    assert again.exercises_created == 0
+    assert again.exercises_updated == 4
+
+
+def test_a_tilde_is_expanded_because_quoting_stops_the_shell_doing_it():
+    """`--modules 'SONGS:~/Downloads/x.tsv'` — the quotes are needed for the
+    spaces in Google's file names, and they leave the tilde to us."""
+    name, path = parse_module_argument("SONGS:~/Downloads/x.tsv")
+
+    assert name == "SONGS"
+    assert path == Path.home() / "Downloads/x.tsv"
