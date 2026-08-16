@@ -130,10 +130,10 @@ async def done(
         module=context["modules_by_id"][result.exercise.module_id],
         today=context["today"],
     )
-    return fragment_or_redirect(
-        request,
-        row + render("_day_log.html", oob=True, **context) + _side_fragments(context),
-    )
+    response = row + _side_fragments(context)
+    if _is_today_page(request):
+        response += render("_day_log.html", oob=True, **context)
+    return fragment_or_redirect(request, response)
 
 
 @router.post("/entries")
@@ -336,3 +336,9 @@ def _algorithm(request: Request, form: dict[str, str]) -> Algorithm:
         raise HTTPException(
             status_code=400, detail=f"unknown algorithm {written!r}"
         ) from None
+
+
+def _is_today_page(request: Request) -> bool:
+    """Whether request came from today page (contains day-log element)."""
+    referer = request.headers.get("referer", "")
+    return "/modules/" not in referer
