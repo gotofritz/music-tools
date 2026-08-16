@@ -6,14 +6,21 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "click>=8.1.7",
-    "fastapi>=0.141.1",
+    "fastapi>=0.115",
     "jinja2>=3.1.6",
     "pydantic>=2.10.6",
     "pydub>=0.25.1",
-    "python-multipart>=0.0.32",
+    "python-multipart>=0.0.20",
     "pyyaml>=6.0.2",
-    "uvicorn>=0.52.3",
+    "uvicorn>=0.34",
 ]
+
+[tool.uv]
+# A rolling window rather than a fixed stamp: a release published in the last
+# week has had no time to be found broken, and a stamp that never moves quietly
+# freezes the project on whatever was current the day it was written. Needs
+# uv >= 0.11, which is where relative values were understood.
+exclude-newer = "7 days"
 
 [project.scripts]
 practice="music_tools.cli:practice"
