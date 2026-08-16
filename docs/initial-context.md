@@ -54,7 +54,7 @@ music_tools/
         views.py         what each page reads, gathered off the routes
         routes/          practice.py (the day), modules.py (the catalogue)
         templates/       base, today, module, and one fragment per swappable thing
-        static/          htmx.min.js (vendored, 2.0.4) and app.css
+        static/          htmx.min.js (vendored via pnpm, 2.0.4) and app.css
     loop.py              the loop tool: model, parsing, rendering, CLI
     main.py              rearrange: the CLI and the step interpreter
     config.py            rearrange: pydantic config models
@@ -364,8 +364,10 @@ layer can catch them without depending on click.
   model. Anything multi-user would need one from scratch.
 - **No Node, and no JavaScript framework.** Recorded in the plan as assumption
   A1 and worth keeping until something forces it. The only JavaScript in the
-  repo is the vendored `htmx.min.js`; upgrading it means replacing that file
-  and saying so in the commit.
+  repo is the vendored `htmx.min.js` (2.0.4), fetched with `pnpm` in a throwaway
+  directory and copied in — there is no `package.json`, no lockfile and no
+  build step in this repository. Upgrading it means repeating that fetch and
+  saying so in the commit; the README has the two lines.
 - **One macOS-only line**: `main` ends by launching Transcribe! on the output.
   Nothing in CI may call `main` until Phase 4 puts that behind a flag.
 - **`ruff` is pinned to the `E`/`F`/`I` rules** at line length 88, which is what
