@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}{{ module.name }} — practice{% endblock %}
+{% block main %}
+<h1>{{ module.name }} <span class="muted">{{ module.log_group }}</span></h1>
+
+<table>
+  <thead>
+    {% include "_queue_head.html" %}
+  </thead>
+  <tbody id="queue">
+    {% for exercise in exercises %}
+    {% include "_exercise_row.html" %}
+    {% endfor %}
+  </tbody>
+</table>
+{% if not exercises %}
+<p>Nothing in this module yet.</p>
+{% endif %}
+
+<section id="add">
+  <h2>Add a row</h2>
+  <form action="/exercises" method="post" hx-post="/exercises"
+        hx-target="#queue" hx-swap="beforeend">
+    <input type="hidden" name="module_id" value="{{ module.id }}">
+    <input type="text" name="name" placeholder="what to practise" size="24" required
+           aria-label="name">
+    <input type="text" name="speed" placeholder="80% or 96" size="8" aria-label="speed">
+    <input type="text" name="target_bpm" placeholder="target BPM" size="10"
+           aria-label="target BPM">
+    <input type="text" name="notes" placeholder="notes" size="18" aria-label="notes">
+    <button type="submit">add</button>
+  </form>
+</section>
+{% endblock %}

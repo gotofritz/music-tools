@@ -1,12 +1,56 @@
-{# One row of a queue. `module` is the module it belongs to, `today` the day. #}
+{# One row of a queue. `module` is the module it belongs to, `today` the day.
+
+   The edit form lives in one cell: a form that spanned several would be
+   hoisted out of the table by the browser. It is a real form with a real
+   action, so it works with the JavaScript off. #}
 <tr id="exercise-{{ exercise.id }}"
-    {% if exercise.next_due and exercise.next_due <= today %}class="overdue"{% endif %}>
+    class="{% if exercise.next_due and exercise.next_due <= today %}overdue{% endif %}">
   <td>{{ module.name }}</td>
-  <td class="name">{{ exercise.name }}</td>
-  <td>{{ tempo_text(exercise) }}</td>
+  <td class="name">
+    <form action="/exercises/{{ exercise.id }}" method="post"
+          hx-patch="/exercises/{{ exercise.id }}"
+          hx-target="#exercise-{{ exercise.id }}" hx-swap="outerHTML">
+      <input type="text" name="name" value="{{ exercise.name }}" size="22"
+             aria-label="name">
+      <input type="text" name="speed" value="{{ exercise.speed or "" }}" size="6"
+             aria-label="speed"
+             hx-get="/exercises/{{ exercise.id }}/tempo"
+             hx-trigger="keyup changed delay:300ms"
+             hx-params="speed,target_bpm"
+             hx-target="#tempo-{{ exercise.id }}">
+      <input type="text" name="target_bpm" value="{{ exercise.target_bpm or "" }}"
+             size="4" aria-label="target BPM"
+             hx-get="/exercises/{{ exercise.id }}/tempo"
+             hx-trigger="keyup changed delay:300ms"
+             hx-params="speed,target_bpm"
+             hx-target="#tempo-{{ exercise.id }}">
+      <input type="text" name="notes" value="{{ exercise.notes or "" }}" size="16"
+             aria-label="notes">
+      <button type="submit">save</button>
+    </form>
+  </td>
+  <td>
+    <span id="tempo-{{ exercise.id }}">{{ tempo_text(exercise) }}</span>
+    {% if exercise.target_bpm is none %}
+    <span class="no-target" title="a percentage cannot resolve without one">no target</span>
+    {% endif %}
+  </td>
+  <td>{{ exercise.last_practiced.isoformat() if exercise.last_practiced else "—" }}</td>
   <td>{{ format_due(exercise.next_due) }}</td>
   <td>{{ format_when(exercise.next_due, today) }}</td>
   <td>x{{ exercise.practiced_count }}</td>
-  <td>{{ exercise.notes or "" }}</td>
-  <td></td>
+  <td>
+    <form action="/exercises/{{ exercise.id }}/done" method="post"
+          hx-post="/exercises/{{ exercise.id }}/done"
+          hx-target="#exercise-{{ exercise.id }}" hx-swap="outerHTML">
+      <select name="algorithm" aria-label="how it comes back">
+        <option value="normal">normal</option>
+        <option value="short">short</option>
+        <option value="long">long</option>
+        <option value="rotate">rotate</option>
+        <option value="hold">hold</option>
+      </select>
+      <button type="submit">done</button>
+    </form>
+  </td>
 </tr>

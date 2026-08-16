@@ -18,12 +18,9 @@
   {% if due %}
   <table>
     <thead>
-      <tr>
-        <th>module</th><th>exercise</th><th>speed</th><th>due</th>
-        <th>when</th><th>count</th><th>notes</th><th>done</th>
-      </tr>
+      {% include "_queue_head.html" %}
     </thead>
-    <tbody>
+    <tbody id="queue">
       {% for exercise in due %}
       {% set module = modules_by_id[exercise.module_id] %}
       {% include "_exercise_row.html" %}

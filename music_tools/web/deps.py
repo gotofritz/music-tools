@@ -37,7 +37,7 @@ STATIC = Path(__file__).parent / "static"
 
 def get_conn(request: Request) -> Iterator[sqlite3.Connection]:
     """One connection per request, closed when it finishes."""
-    conn = open_db(request.app.state.db_path)
+    conn = open_db(request.app.state.db_path, check_same_thread=False)
     try:
         yield conn
     finally:
