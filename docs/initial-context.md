@@ -407,13 +407,16 @@ statistical ones.
 
 `docs/plans/00-practice-app.md` is the map. Phases 1 (test suite, CI, an
 importable `loop.py`), 2 (the domain, the database, the importer and the CLI)
-and 3 (the browser app) are done as code. What is left of Phase 3 is the
-cutover itself — steps in `docs/plans/03-web.md` that are a checklist rather
-than a commit: import the whole history for real, practise from both for a
-week, compare the day totals each evening, fill in the `target_bpm` the module
-view flags, and stop opening the sheet. Phases 4 to 6 attach loops to the
-exercise that is due, play them in the browser, and finally replace
-Transcribe! for marking up new tunes.
+and 3 (the browser app, and the cutover) are done: the history is imported and
+the spreadsheet is no longer used, so this repo is now the only record of what
+was practised and when. Two things follow from that. `task db:dump` and a
+committed `backups/practice.sql` are the whole of the version history a
+spreadsheet used to give away. And `target_bpm` is still missing on the rows
+the importer could not fill; the module view flags them, and they get filled in
+by use.
+
+Phases 4 to 6 attach loops to the exercise that is due, play them in the
+browser, and finally replace Transcribe! for marking up new tunes.
 
 Out of scope throughout: `rearrange` and its step DSL, the standalone
 `triads.py` / `intervals.py` / `generate_exercise.py` generators, merging

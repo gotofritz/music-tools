@@ -300,7 +300,7 @@ this is the map, not the territory.
 | --- | --- | --- | --- |
 | 1 | Foundations | `../archive/2026-08-15-1222-af747ab-01-foundations.md` (done) | A test suite, CI, and an importable `loop.py` |
 | 2 | Domain, database, importer | `../archive/2026-08-15-1541-647ef39-02-domain.md` (done) | The sheet's brain in Python, plus a CLI and the migrated history |
-| 3 | The app, and the cutover | `03-web.md` | The spreadsheet retired |
+| 3 | The app, and the cutover | `../archive/2026-08-16-1213-50e8430-03-web.md` (done) | The spreadsheet retired |
 | 4 | Loops, attached to exercises | `04-loop-editor.md` | Loops built and generated from the tune that is due |
 | 5 | Play it in the app | `05-playback.md` | The scenario closed: due → loop → play → done |
 | 6 | Markers without Transcribe! | `06-markers.md` | New tunes marked up in the browser |
@@ -321,8 +321,9 @@ makes it pleasant.
 
 **Phase 3 — The app, and the cutover.** FastAPI + Jinja2 + HTMX over the same
 functions: today's log with live totals, a page per module ordered by due date,
-one click to mark done. Then the cutover checklist — import for real, run both
-for a week, compare the totals, stop opening the sheet.
+one click to mark done. Then the cutover — the history imported for real and
+the sheet retired, in one move rather than the fortnight of parallel running
+the plan allowed for.
 
 **Phase 4 — Loops, attached to exercises.** An exercise gets a **loop** button;
 a loop belongs to the exercise; creating one asks for the audio snippet and a

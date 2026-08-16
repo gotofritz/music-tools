@@ -177,8 +177,7 @@ with a local app, and grows the loop tooling into it. Phase 1 (a test suite, CI
 and an importable `loop.py`) and Phase 2 (the domain, the database, the importer
 and the `practice` CLI) are done, which makes the spreadsheet technically
 redundant. Phase 3 (`practice serve`: the
-browser app, over the same domain functions) is code-complete, and its last
-step is a cutover checklist rather than a commit — practise from both for a
-week, compare the totals, then stop opening the sheet. Phases 4 to 6 attach
-loops to the exercise that is due, play them in the browser, and replace
-Transcribe! for marking up new tunes.
+browser app over the same domain functions, and the cutover) is done — the
+history is imported and the spreadsheet is retired. Phases 4 to 6 attach loops
+to the exercise that is due, play them in the browser, and replace Transcribe!
+for marking up new tunes.
