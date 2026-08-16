@@ -52,7 +52,7 @@ from music_tools.domain.tempo import format_tempo, parse_tempo
 from music_tools.importer.sheets import import_sheets, parse_module_argument
 
 
-@click.group()
+@click.group(context_settings={"help_option_names": ["-h", "--help"]})
 @click.option(
     "--db",
     "db_path",
