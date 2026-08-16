@@ -482,3 +482,14 @@ def test_a_new_row_is_due_straight_away(client, conn, songs):
     added = repo.find_exercises(conn, "love me jeje")
     assert [row.next_due for row in added] == [TODAY]
     assert "love me jeje" in client.get("/").text
+
+
+def test_the_empty_boxes_on_a_row_say_what_they_are_for(client, songs, le_freak):
+    """A blank input in a table is a mystery; the label is only for readers."""
+    page = client.get("/modules/songs").text
+    row = page[page.index('id="exercise-%d"' % le_freak.id) :]
+    row = row[: row.index("</tr>")]
+
+    assert 'placeholder="80% or 96"' in row  # speed
+    assert 'placeholder="target BPM"' in row
+    assert 'placeholder="notes"' in row

@@ -11,21 +11,21 @@
           hx-patch="/exercises/{{ exercise.id }}"
           hx-target="#exercise-{{ exercise.id }}" hx-swap="outerHTML">
       <input type="text" name="name" value="{{ exercise.name }}" size="22"
-             aria-label="name">
-      <input type="text" name="speed" value="{{ exercise.speed or "" }}" size="6"
-             aria-label="speed"
+             aria-label="name" placeholder="what to practise">
+      <input type="text" name="speed" value="{{ exercise.speed or "" }}" size="9"
+             aria-label="speed" placeholder="80% or 96"
              hx-get="/exercises/{{ exercise.id }}/tempo"
              hx-trigger="keyup changed delay:300ms"
              hx-params="speed,target_bpm"
              hx-target="#tempo-{{ exercise.id }}">
       <input type="text" name="target_bpm" value="{{ exercise.target_bpm or "" }}"
-             size="4" aria-label="target BPM"
+             size="9" aria-label="target BPM" placeholder="target BPM"
              hx-get="/exercises/{{ exercise.id }}/tempo"
              hx-trigger="keyup changed delay:300ms"
              hx-params="speed,target_bpm"
              hx-target="#tempo-{{ exercise.id }}">
       <input type="text" name="notes" value="{{ exercise.notes or "" }}" size="16"
-             aria-label="notes">
+             aria-label="notes" placeholder="notes">
       <button type="submit">save</button>
     </form>
   </td>
