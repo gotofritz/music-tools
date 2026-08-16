@@ -4,7 +4,7 @@ Architecture, boundaries and constraints. Read this before changing anything;
 update it in the same PR as any change to the architecture, the boundaries or
 the core patterns (`AGENTS.md`).
 
-Describing the repo as it stands at the end of Phase 2 of
+Describing the repo as it stands at the end of Phase 3 of
 `docs/plans/00-practice-app.md`, not as that plan leaves it.
 
 ## What this repo is
@@ -15,7 +15,9 @@ thing:
 
 - **`practice`** — the practice tracker: modules, exercises, spaced repetition
   and a day log, over SQLite. It replaces a Google Sheets app whose sample and
-  Apps Script are kept in `docs/raw/`, and which the importer reads.
+  Apps Script are kept in `docs/raw/`, and which the importer reads. It has two
+  front ends over one domain: a click CLI, and a local browser app
+  (`practice serve`).
 - **`loop`** — the audio half. It takes a snippet of audio, a marker file
   exported from Transcribe!, and a YAML config, and builds a rhythm-training
   file in which chosen bars, beats or marked spans are replaced by silence of
@@ -46,6 +48,13 @@ music_tools/
         session.py       start a day, mark done, day totals
     importer/
         sheets.py        the one-off spreadsheet importer
+    web/
+        app.py           create_app(db_path), and the `practice serve` launcher
+        deps.py          per-request connection, clock, rng, and the templates
+        views.py         what each page reads, gathered off the routes
+        routes/          practice.py (the day), modules.py (the catalogue)
+        templates/       base, today, module, and one fragment per swappable thing
+        static/          htmx.min.js (vendored, 2.0.4) and app.css
     loop.py              the loop tool: model, parsing, rendering, CLI
     main.py              rearrange: the CLI and the step interpreter
     config.py            rearrange: pydantic config models
@@ -57,7 +66,7 @@ tests/
     fixtures/*.txt       hand-written marker exports
     test_migrations.py test_tempo.py test_scheduling.py
     test_catalogue.py  test_session.py  test_importer.py test_cli.py
-    test_score.py      test_patterns.py test_drills.py
+    test_score.py      test_patterns.py test_drills.py  test_web.py
 docs/
     initial-context.md   this file
     user-guide.md        for the player, not the programmer
@@ -113,9 +122,9 @@ Three rules hold the shape:
 
 **The clock and the rng are injected everywhere.** Any function that would
 otherwise call `datetime.now()` takes `now` as an argument, and anything random
-takes a `random.Random`. `cli.py` is the only module that constructs either, so
-tests assert exact dates without `freezegun` and without monkeypatching
-`random`.
+takes a `random.Random`. Exactly two modules construct either — `cli.py` for
+the terminal and `web/deps.py` for the browser, one front end each — so tests
+assert exact dates without `freezegun` and without monkeypatching `random`.
 
 ### The tempo grammar
 
@@ -165,9 +174,17 @@ is **discarded** rather than closed at an invented time — it is the dangling
 
 Tiling is the default and not the rule. `restart_clock` (the `start` command)
 restamps the running entry's `started_at` to now, so the gap since the last
-`done` — a break — is not logged against whatever is played next. The rule
-underneath both cases is the same: **time nobody attributed is not practice
-time**, and the app will not invent an attribution for it.
+`done` — a break — is not logged against whatever is played next. `stop_clock`
+(the page's "stop the clock") ends a session the same way: an entry that
+already says what was played is closed at `now`, and the running one, which
+never does, is deleted. The rule underneath all three cases is the same:
+**time nobody attributed is not practice time**, and the app will not invent an
+attribution for it.
+
+`log_entry` is `mark_done` without the schedule half, for practice the
+catalogue does not know about — a warm-up, a jam, a lesson. It snapshots a
+description into the running entry, closes it, and opens the next one at the
+same instant, so an ad-hoc block still tiles.
 
 ### Archiving and deleting
 
@@ -199,6 +216,9 @@ numbered `.sql` migrations gated by `PRAGMA user_version` and applied in their
 own transaction. `open_db` sets `foreign_keys = ON` (off by default in SQLite,
 which would silently void every `REFERENCES`) and `journal_mode = WAL`. A
 database stamped newer than the code is refused rather than touched.
+`open_db(..., check_same_thread=False)` is for the web app alone: its handlers
+run on a thread pool, and a connection opened and closed inside one request is
+not shared with anything, which is what the check exists to catch.
 
 Four tables — `module`, `exercise`, `practice_day`, `practice_entry`. The
 schema sketch in `00-practice-app.md` also gave `module` an `instrument`
@@ -213,6 +233,56 @@ share an instant.
 `sqlite3.iterdump`, so no `sqlite3` binary is needed and the practice history
 can live in a git repository and diff row by row. The spreadsheet gave version history
 for free and a local file does not.
+
+## How the browser app is put together
+
+`practice serve` is the second front end over the same domain. It is FastAPI +
+Jinja2 + HTMX, server-rendered, with no Node and no JavaScript framework
+(assumption A1 of `00-practice-app.md`).
+
+```
+browser ──form/hx-post──▶ routes/ ──▶ domain/session, domain/catalogue ──▶ SQLite
+                             │                    ▲
+                          views.py ───────────────┘   (what a page reads)
+                             ▼
+                       Jinja2 fragments ── hx-swap-oob ──▶ log, totals, clock
+```
+
+- **`app.py` is a factory.** `create_app(db_path)` takes a path, migrates it
+  once, mounts `static/` and includes the two routers. Tests get their own
+  database without touching `MUSIC_TOOLS_DB`, and two apps in one process
+  cannot share one. `serve` binds `127.0.0.1` and opens a browser.
+- **`deps.py` is the wiring**: a connection per request, `get_now`, `get_rng`,
+  and the Jinja environment. The clock and the rng are dependencies for the
+  same reason the CLI passes them down — a test overrides them with
+  `app.dependency_overrides` and asserts exact dates.
+- **`views.py` is what a page reads.** A route writes, then re-reads through
+  the same context builder that rendered the page, so a fragment and the page
+  it is swapped into cannot disagree.
+- **`routes/` is thin.** Every handler is a domain call and a render. Domain
+  refusals map to status codes there and only there: `UnknownExercise` and
+  `NotFound` are 404, `InUse` is 409.
+
+Three rules hold this shape, and the tests in `tests/test_web.py` enforce them:
+
+- **Fragments, not JSON.** `POST /exercises/{id}/done` changes three things at
+  once, so it answers with the exercise row and swaps the day log, the totals
+  and the clock out of band (`hx-swap-oob`). The same id must not appear twice
+  in one response, or the swaps fight.
+- **Every action is a real form.** HTML forms send only GET and POST, so the
+  inline edit is registered for both `PATCH` and `POST`, and a request without
+  the `HX-Request` header gets a 303 back to the page it came from instead of a
+  fragment. A broken `htmx.min.js` costs page reloads, not the app.
+- **Nothing is fetched over the network.** `htmx.min.js` is vendored in
+  `static/`; there is no CDN link and no build step. Leaving Sheets was about
+  practising with the network off.
+
+Two behaviours are the web layer's own, both because of what the domain
+already does: a row added from the page is due **today** (`exercises_due` drops
+undated rows, so an undated one would never reach the list it was typed into),
+and a speed typed into the row resolves live through
+`GET /exercises/{id}/tempo`, which answers a quiet `?` rather than an error
+because it is reading a keystroke, not a submission.
 
 ## How `loop` is put together
 
@@ -284,13 +354,18 @@ layer can catch them without depending on click.
 ## Constraints
 
 - **Python 3.12+, `uv` for everything.** Dependencies are `click`, `pydantic`,
-  `pydub` and `pyyaml`; dev dependencies are `pytest`, `ruff` and `ty`.
+  `pydub`, `pyyaml`, and — for the browser app — `fastapi`, `jinja2`,
+  `uvicorn` and `python-multipart`; dev dependencies are `pytest`, `httpx`
+  (which `TestClient` needs), `ruff` and `ty`.
 - **`ffmpeg` must be on `PATH`** for anything that is not a `.wav`; pydub shells
   out to it. CI installs it. Nothing in the practice half needs it.
-- **One machine, one user, local files.** No auth, no accounts; when a server
-  arrives in Phase 3 it binds `127.0.0.1`.
+- **One machine, one user, local files.** No auth, no accounts, no sessions:
+  `practice serve` binds `127.0.0.1` and that is the whole of the security
+  model. Anything multi-user would need one from scratch.
 - **No Node, and no JavaScript framework.** Recorded in the plan as assumption
-  A1 and worth keeping until something forces it.
+  A1 and worth keeping until something forces it. The only JavaScript in the
+  repo is the vendored `htmx.min.js`; upgrading it means replacing that file
+  and saying so in the commit.
 - **One macOS-only line**: `main` ends by launching Transcribe! on the output.
   Nothing in CI may call `main` until Phase 4 puts that behind a flag.
 - **`ruff` is pinned to the `E`/`F`/`I` rules** at line length 88, which is what
@@ -320,11 +395,14 @@ statistical ones.
 ## Where this is going
 
 `docs/plans/00-practice-app.md` is the map. Phases 1 (test suite, CI, an
-importable `loop.py`) and 2 (the domain, the database, the importer and the
-CLI) are done, and the spreadsheet is technically redundant. Phase 3 puts a
-FastAPI/HTMX app over the same functions and retires the sheet for good; Phases
-4 to 6 attach loops to the exercise that is due, play them in the browser, and
-finally replace Transcribe! for marking up new tunes.
+importable `loop.py`), 2 (the domain, the database, the importer and the CLI)
+and 3 (the browser app) are done as code. What is left of Phase 3 is the
+cutover itself — steps in `docs/plans/03-web.md` that are a checklist rather
+than a commit: import the whole history for real, practise from both for a
+week, compare the day totals each evening, fill in the `target_bpm` the module
+view flags, and stop opening the sheet. Phases 4 to 6 attach loops to the
+exercise that is due, play them in the browser, and finally replace
+Transcribe! for marking up new tunes.
 
 Out of scope throughout: `rearrange` and its step DSL, the standalone
 `triads.py` / `intervals.py` / `generate_exercise.py` generators, merging

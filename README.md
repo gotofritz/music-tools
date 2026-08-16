@@ -8,12 +8,18 @@ it, and its Apps Script, are in `docs/raw/`), reproduces its schedule, and
 imports its history.
 
 ```bash
+uv run practice serve                # practise from a browser page
 uv run practice module list          # every module: how many rows, how many due
 uv run practice next SONGS           # that module's rows, most overdue first
 uv run practice done "le freak"      # schedule it, and log the time
 uv run practice start                # back after a break: drop the gap
 uv run practice log                  # today's block, with subtotals
 ```
+
+`practice serve` opens the same thing as a page on `127.0.0.1`: what is due,
+one click to mark it done, and a day log that fills itself in. It needs no
+network — the one JavaScript file it uses is served from the package — and it
+works with the JavaScript off, more slowly.
 
 **`loop`** is the audio half. Give it a few seconds of
 audio, a marker file exported from Transcribe!, and a short YAML file saying
@@ -54,6 +60,7 @@ source .venv/bin/activate
 
 ```bash
 uv run practice --help              # the tracker: module, next, done, log, import
+uv run practice serve               # the same thing as a page on 127.0.0.1:8765
 uv run loop practice.yml            # build the practice file
 uv run loop --expand practice.yml   # print what a drill stands for, and stop
 uv run loop --help                  # the full pattern grammar
@@ -64,6 +71,13 @@ The practice database lives at `~/.local/share/music-tools/practice.db`.
 `MUSIC_TOOLS_DB` moves it, and `--db` overrides both — which is how the tests
 run against a temporary file. Migrations are numbered `.sql` files applied on
 every open, gated by `PRAGMA user_version`.
+
+`practice serve --port 9000 --no-browser` moves the port and leaves the browser
+alone. It is FastAPI + Jinja2 + HTMX, server-rendered: routes return HTML
+fragments, `htmx.min.js` is vendored in `music_tools/web/static/` rather than
+loaded from a CDN, and there is no Node in the build. Every action is a real
+`<form>` progressively enhanced with `hx-post`, so the app degrades to page
+reloads rather than dying when the JavaScript does.
 
 `uv run loop --help` is the reference for the config format; the
 [user guide](docs/user-guide.md) is the same material written for a player.
@@ -88,6 +102,7 @@ music_tools/cli.py      practice: the click group, and the only clock and rng
 music_tools/db/         connection, migrations, repository (SQL in, models out)
 music_tools/domain/     tempo, scheduling, session, catalogue, models
 music_tools/importer/   the one-off spreadsheet importer
+music_tools/web/        the browser app: app.py, deps.py, routes/, templates/
 music_tools/loop.py     the loop tool: model, parsing, rendering, CLI
 music_tools/main.py     rearrange, plus config.py, generator.py, markers.py
 tests/                  conftest.py, fixtures, one suite per module
@@ -140,6 +155,9 @@ output, so no test may call it until that is behind a flag (Phase 4).
 with a local app, and grows the loop tooling into it. Phase 1 (a test suite, CI
 and an importable `loop.py`) and Phase 2 (the domain, the database, the importer
 and the `practice` CLI) are done, which makes the spreadsheet technically
-redundant. Phases 3 to 6 put a local FastAPI/HTMX app over the same functions,
-attach loops to the exercise that is due, play them in the browser, and replace
+redundant. Phase 3 (`practice serve`: the
+browser app, over the same domain functions) is code-complete, and its last
+step is a cutover checklist rather than a commit — practise from both for a
+week, compare the totals, then stop opening the sheet. Phases 4 to 6 attach
+loops to the exercise that is due, play them in the browser, and replace
 Transcribe! for marking up new tunes.

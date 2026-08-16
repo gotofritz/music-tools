@@ -7,7 +7,8 @@ There are two tools, and they are heading towards being one:
 
 - **`practice`** keeps track of *what* to play — every exercise, how fast you
   are playing it, when you last did it, and when it comes back. It is the
-  spreadsheet, as a program.
+  spreadsheet, as a program. It has two doors into the same file: the commands
+  below, and a page in your browser (`practice serve`, further down).
 - **`loop`** builds the practice track itself: a passage over and over with
   bits of it replaced by silence.
 
@@ -76,6 +77,62 @@ practice past midnight belongs to the evening it started in.
 
 If a name exists in two modules, say which: `uv run practice done SONGS/"le
 freak"`. If you mistype it, the message lists the near misses.
+
+## Practising from a browser page
+
+Everything above has a page, if you would rather click than type:
+
+```bash
+uv run practice serve
+```
+
+That opens a browser on `http://127.0.0.1:8765/`. It runs on your own machine
+and nowhere else: nothing is uploaded, nothing is fetched, and it works with
+the wifi off. Leave the Terminal window open while you practise, and press
+`ctrl-c` in it when you are done.
+
+`--port 9000` moves it if something else is on that port, and `--no-browser`
+starts it without opening a window.
+
+**The first page is today.**
+
+- **Due** lists what every module wants today, most overdue first, one line
+  each: the module, the row, the speed, when you last played it, when it was
+  due, and how many times you have practised it. Overdue rows are marked.
+- **done** is the button at the end of each line — the same thing as
+  `practice done`. The drop-down next to it is the same choice the flags give
+  you on the command line: `normal`, `short` (this one is not sticking), `long`
+  (this one is solid), `rotate` (to the back of the module's queue), `hold` (to
+  the front). Click it and the row, the log and the totals all update where
+  they are; the page does not reload.
+- **Log** is the day, line by line, with the entry that is running now counting
+  up. **Totals** underneath is the subtotal per log group and the total for the
+  day — the same numbers as `practice log`.
+- The clock in the top corner says whether time is being counted, and
+  **stop the clock** ends the session. The stretch since the last thing you
+  marked done is not logged: nobody said what it was, so it is not practice
+  time. It is the same rule as `practice start`, from the other end.
+
+If there is no day open yet, the page offers a **start a day** button instead
+of a log.
+
+**Each module has its own page**, reached from the links at the top: the whole
+queue, due or not, and every field editable in place. Change the name, the
+speed, the target or the notes and press **save** — the row re-reads itself
+with the speed worked out, so typing `85%` shows you `113 BPM (85%)` as you go.
+A row with no target is flagged in red, because a percentage of nothing cannot
+be resolved and cannot move the schedule; filling those in as you meet them is
+the tidiest way to close the gap the import leaves.
+
+At the bottom of a module page is **add a row**. Anything added there is due
+straight away, so it turns up on today's list — which is where you were when
+you thought of it.
+
+Editing a row never rewrites the day log, here or on the command line.
+
+The page and the commands are two doors into one file, so you can use both in
+the same session: mark something done in the browser and `practice log` in the
+Terminal shows it.
 
 ## Coming back after a break
 

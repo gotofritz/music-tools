@@ -3,6 +3,11 @@
 **Phase 3 of `docs/plans/00-practice-app.md`.** Depends on Phase 2: every route
 here is a thin call into `domain/session.py`.
 
+**Status.** Steps 1 to 6 are built and tested (`tests/test_web.py`,
+`music_tools/web/`, `practice serve`). Step 7 is the cutover, which is a
+fortnight of practising rather than a commit, so this document stays in
+`docs/plans/` until it is done and is archived then.
+
 ## Goal
 
 The spreadsheet stops being used. Practice is driven from a browser page: what
