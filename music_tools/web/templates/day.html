@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}{{ edit_day.isoformat() }} — practice{% endblock %}
+{% block main %}
+<h1>{{ edit_day.isoformat() }}</h1>
+{% if is_today %}
+{% include "_day_log.html" %}
+{% include "_day_totals.html" %}
+{% else %}
+{% include "_day_block.html" %}
+{% endif %}
+<p><a href="/">back to today</a></p>
+{% endblock %}

@@ -200,15 +200,26 @@ practised. The rule is that the day log is a record — the catalogue may not
 punch holes in it.
 
 The log is written as practice happens, and it can be corrected afterwards:
-`amend_entry` rewrites the fields it is passed on one finished entry. That
-reverses `03-web.md`, which left the log read-only on the grounds that a log
-you can rewrite casually is a log you cannot trust; the trust is kept by the
-narrowness instead. An entry stays on the day it happened on, nothing is
-deleted, and the **running** entry is refused outright (`EntryRunning`) —
-that one is the clock, `mark_done` and `stop_clock` write it, and a hand-edit
-would put the two out of step. Times are passed whole, so an entry that
-crossed midnight keeps both its dates, and nothing re-tiles: a correction may
-leave a gap, and a gap is time that is simply not in the total.
+`amend_entry` rewrites the fields it is passed on one finished entry. The
+limits on it are practical, not solemn — this is one player's practice log,
+and a wrong correction costs a wrong number about a tune:
+
+- **An entry keeps the day it happened on.** Moving one between days would
+  change two days' totals from one edit, which is more surprise than the edit
+  is worth. Only the time of day is editable, so an entry that crossed
+  midnight keeps both its dates.
+- **The running entry is refused** (`EntryRunning`). That one is the clock;
+  `mark_done` and `stop_clock` write it, and a hand-edit would put the two out
+  of step.
+- **Nothing re-tiles.** Shortening an entry leaves a gap, and a gap is time
+  that is not in the total — the same rule as everywhere else here.
+- **Nothing is deleted.** A line can be emptied; the day keeps its place.
+
+**Editing is per day and asked for.** `GET /days/{day}/edit` redraws that one
+day with boxes round its lines, `GET /days/{day}` puts it back, and both are
+real links so the toggle survives the JavaScript being off. The default is
+read-only because the log is mostly read: a page of input boxes reads like a
+form rather than a record of practice.
 
 `description`, `speed`, `bpm` and `log_group` on an entry are **snapshots**: the
 log is a record and must not change when an exercise is renamed, retuned or

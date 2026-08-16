@@ -1,11 +1,12 @@
 {# One line of the day log. `live` is the clock a running entry counts up to,
-   and `entry_target` is what an edit redraws — today's log, or a day block.
+   `entry_target` is what an edit redraws, and `editing` says whether this day
+   has been opened for correction.
 
-   A finished line is editable: the log is written as practice happens, and
-   what gets written can be wrong. The running line is not: that one is the
+   Read-only until asked: a log is for reading, and a page of boxes reads
+   like a form. The running line has no boxes even then — that one is the
    clock, and `done` and `stop` are what move it. #}
 <tr id="entry-{{ entry.id }}"{% if not entry.ended_at %} class="running"{% endif %}>
-  {% if entry.ended_at %}
+  {% if editing and entry.ended_at %}
   <td>
     <form action="/entries/{{ entry.id }}" method="post"
           hx-patch="/entries/{{ entry.id }}"
@@ -34,6 +35,14 @@
       <button type="submit">save</button>
     </form>
   </td>
+  {% elif entry.ended_at %}
+  <td>{{ entry.started_at.strftime("%H:%M") }}</td>
+  <td>{{ entry.ended_at.strftime("%H:%M") }}</td>
+  <td>{{ duration_text(entry, live) }}</td>
+  <td>{{ entry.description }}{% if entry.notes %}
+    <span class="note">({{ entry.notes }})</span>{% endif %}</td>
+  <td>{{ entry.speed or "" }}</td>
+  <td>{{ entry.log_group or "" }}</td>
   {% else %}
   <td>{{ entry.started_at.strftime("%H:%M") }}</td>
   <td>—</td>

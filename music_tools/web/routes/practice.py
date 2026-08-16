@@ -14,9 +14,8 @@ from fastapi.responses import HTMLResponse, Response
 
 from music_tools.db import repository as repo
 from music_tools.domain import session
-from music_tools.domain.models import PracticeEntry
 from music_tools.domain.scheduling import Algorithm
-from music_tools.domain.session import day_summary, practice_day_for
+from music_tools.domain.session import practice_day_for
 from music_tools.web import views
 from music_tools.web.deps import (
     fragment_or_redirect,
@@ -58,6 +57,32 @@ def earlier_days(
     return HTMLResponse(
         render("history.html", before=before, **views.chrome(conn, now=now), **context)
     )
+
+
+@router.get("/days/{day}", response_class=HTMLResponse)
+def one_day(
+    request: Request,
+    day: date,
+    conn: sqlite3.Connection = Depends(get_conn),
+    now: datetime = Depends(get_now),
+) -> HTMLResponse:
+    """One day, as written. The way back out of edit mode."""
+    return _day_view(request, conn, day=day, now=now, editing=False)
+
+
+@router.get("/days/{day}/edit", response_class=HTMLResponse)
+def edit_one_day(
+    request: Request,
+    day: date,
+    conn: sqlite3.Connection = Depends(get_conn),
+    now: datetime = Depends(get_now),
+) -> HTMLResponse:
+    """The same day with boxes round its lines, one day at a time.
+
+    Editing is per day and asked for: the log is read by default, and a page
+    of input boxes reads like a form rather than a record of practice.
+    """
+    return _day_view(request, conn, day=day, now=now, editing=True)
 
 
 @router.post("/days")
@@ -172,9 +197,19 @@ def amend_entry(
     except ValueError as unreadable:
         raise HTTPException(status_code=400, detail=str(unreadable)) from None
 
-    if practice_day_for(amended.started_at) == practice_day_for(now):
-        return fragment_or_redirect(request, _log_fragments(conn, now=now))
-    return fragment_or_redirect(request, _day_fragment(conn, amended, now=now))
+    # Still editing afterwards: the line below this one may be wrong too.
+    day = practice_day_for(amended.started_at)
+    if day == practice_day_for(now):
+        return fragment_or_redirect(
+            request, _log_fragments(conn, now=now, editing=True)
+        )
+    return fragment_or_redirect(
+        request,
+        render(
+            "_day_block.html",
+            **views.day_context(conn, now=now, day=day, editing=True),
+        ),
+    )
 
 
 @router.post("/entries/{entry_id}/stop")
@@ -192,12 +227,22 @@ def stop_entry(
     return fragment_or_redirect(request, _log_fragments(conn, now=now))
 
 
-def _day_fragment(
-    conn: sqlite3.Connection, entry: PracticeEntry, *, now: datetime
-) -> str:
-    """The finished day an amended entry belongs to, totals and all."""
-    day = practice_day_for(entry.started_at)
-    return render("_day_block.html", summary=day_summary(conn, day=day, now=now))
+def _day_view(
+    request: Request,
+    conn: sqlite3.Connection,
+    *,
+    day: date,
+    now: datetime,
+    editing: bool,
+) -> HTMLResponse:
+    """One day as a fragment for HTMX, and as a page for a plain browser."""
+    if repo.get_day(conn, day) is None:
+        raise HTTPException(status_code=404, detail=f"nothing logged on {day}")
+    context = views.day_context(conn, now=now, day=day, editing=editing)
+    if not is_htmx(request):
+        return HTMLResponse(render("day.html", **context))
+    fragment = "_day_log.html" if context["is_today"] else "_day_block.html"
+    return HTMLResponse(render(fragment, **context))
 
 
 def _at(written: str | None, current: datetime | None) -> datetime | None:
@@ -214,9 +259,11 @@ def _at(written: str | None, current: datetime | None) -> datetime | None:
         raise ValueError(f"cannot read the time {written!r}") from None
 
 
-def _log_fragments(conn: sqlite3.Connection, *, now: datetime) -> str:
+def _log_fragments(
+    conn: sqlite3.Connection, *, now: datetime, editing: bool = False
+) -> str:
     """The log itself, with the totals and the clock riding behind it."""
-    context = views.today_context(conn, now=now)
+    context = {**views.today_context(conn, now=now), "editing": editing}
     return render("_day_log.html", **context) + _side_fragments(context)
 
 

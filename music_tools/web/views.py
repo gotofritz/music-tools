@@ -49,8 +49,25 @@ def today_context(conn: sqlite3.Connection, *, now: datetime) -> dict[str, Any]:
         "day_started": day is not None,
         "summary": day_summary(conn, day=today, now=now),
         "live": now,
+        "editing": False,
         "modules_by_id": modules_by_id(conn),
         **history_context(conn, now=now, before=today),
+    }
+
+
+def day_context(
+    conn: sqlite3.Connection, *, now: datetime, day: date, editing: bool
+) -> dict[str, Any]:
+    """One day on its own — today's log, or a finished block, in either mode."""
+    is_today = day == practice_day_for(now)
+    return {
+        **chrome(conn, now=now),
+        "day": day,
+        "edit_day": day,
+        "is_today": is_today,
+        "editing": editing,
+        "live": now if is_today else None,
+        "summary": day_summary(conn, day=day, now=now),
     }
 
 

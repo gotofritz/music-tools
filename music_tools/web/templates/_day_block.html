@@ -4,12 +4,14 @@
    drift away from the lines underneath them. #}
 {% set entry_target = "#day-" ~ summary.day.isoformat() %}
 {% set live = None %}{# a finished day counts up to nothing #}
+{% set edit_day = summary.day %}
 <article class="day" id="day-{{ summary.day.isoformat() }}">
   <h3><time datetime="{{ summary.day.isoformat() }}">{{ summary.day.isoformat() }}</time>
     <span class="time">{{ format_duration(summary.total_seconds) }}</span>
     {% for group in summary.groups %}
     <span class="muted">{{ group.log_group }} {{ format_duration(group.seconds) }}</span>
     {% endfor %}
+    {% include "_edit_toggle.html" %}
   </h3>
   <table>
     <tbody>

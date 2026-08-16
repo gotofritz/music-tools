@@ -562,14 +562,58 @@ def test_a_day_with_no_history_behind_it_offers_nothing_to_load(client):
 # --- correcting a line of the log -------------------------------------------
 
 
-def test_a_finished_entry_is_editable_where_it_is(client, sample_block, conn):
+def test_the_log_is_read_only_until_you_ask_to_edit_it(client, sample_block, conn):
     entry = repo.entries_for_day(conn, sample_block.id)[0]
 
     page = client.get("/").text
 
-    assert f'action="/entries/{entry.id}"' in page
-    assert 'value="22:27"' in page  # its start, in a box
-    assert 'value="019 Tempo Builder"' in page
+    assert f'action="/entries/{entry.id}"' not in page  # no forms lying around
+    assert "<input" not in page
+    assert "019 Tempo Builder" in page  # just the day, as written
+    assert 'href="/days/2026-07-05/edit"' in page  # and a way in
+
+
+def test_the_edit_button_opens_that_day_and_nothing_else(client, earlier_days):
+    page = client.get("/").text
+
+    assert 'href="/days/2026-06-06/edit"' in page
+    assert 'href="/days/2026-06-05/edit"' in page  # one per day, not one for all
+
+
+def test_editing_a_day_puts_boxes_round_its_lines(client, earlier_days):
+    response = client.get("/days/2026-06-06/edit", headers=hx())
+
+    assert response.status_code == 200
+    assert 'id="day-2026-06-06"' in response.text  # the same block, swapped
+    assert 'value="day 6"' in response.text
+    assert 'value="20:00"' in response.text
+    assert 'href="/days/2026-06-06"' in response.text  # and a way back out
+
+
+def test_leaving_edit_mode_gives_the_plain_day_back(client, earlier_days):
+    response = client.get("/days/2026-06-06", headers=hx())
+
+    assert "<input" not in response.text
+    assert "day 6" in response.text
+    assert 'href="/days/2026-06-06/edit"' in response.text
+
+
+def test_todays_own_log_is_editable_the_same_way(client, sample_block):
+    response = client.get("/days/2026-07-05/edit", headers=hx())
+
+    assert '<section id="day-log"' in response.text  # today is the log, not a block
+    assert 'value="019 Tempo Builder"' in response.text
+
+
+def test_a_day_nothing_was_logged_on_is_404(client):
+    assert client.get("/days/2020-01-01/edit").status_code == 404
+
+
+def test_the_edit_link_is_a_whole_page_without_htmx(client, earlier_days):
+    response = client.get("/days/2026-06-06/edit")
+
+    assert "<html" in response.text
+    assert 'value="day 6"' in response.text
 
 
 def test_amending_a_past_entry_redraws_that_day_with_its_new_total(
@@ -588,7 +632,8 @@ def test_amending_a_past_entry_redraws_that_day_with_its_new_total(
     assert response.status_code == 200
     assert 'id="day-2026-06-06"' in response.text  # the block that was edited
     assert "00:45" in response.text  # 20:00 to the new 20:45
-    assert "day 6, longer than I thought" in response.text
+    assert 'value="day 6, longer than I thought"' in response.text
+    assert "<input" in response.text  # still editing: the next line may be wrong too
     after = repo.get_entry(conn, entry.id)
     assert after is not None
     assert after.ended_at == datetime(2026, 6, 6, 20, 45)
