@@ -192,6 +192,23 @@ def format_duration(seconds: int) -> str:
     return f"{minutes // 60:02d}:{minutes % 60:02d}"
 
 
+def format_due(due: date | None) -> str:
+    """The due date as the sheet showed it, or an em dash for undated rows."""
+    return due.isoformat() if due else "—"
+
+
+def format_when(due: date | None, today: date) -> str:
+    """`3 days overdue`, `due today`, `in 30 days`."""
+    if due is None:
+        return "no due date"
+    days = (due - today).days
+    if days == 0:
+        return "due today"
+    if days < 0:
+        return f"{-days} day{'s' if days != -1 else ''} overdue"
+    return f"in {days} day{'s' if days != 1 else ''}"
+
+
 def _start_day(
     conn: sqlite3.Connection, *, now: datetime, notes: str | None = None
 ) -> PracticeDay:

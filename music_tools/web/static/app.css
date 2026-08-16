@@ -1,0 +1,140 @@
+/* Hand-written and short, on purpose: one player, one screen, no build step. */
+
+:root {
+  --ink: #1c1b19;
+  --paper: #faf8f4;
+  --line: #d8d2c6;
+  --overdue: #a33;
+  --muted: #6d675d;
+}
+
+body {
+  margin: 0 auto;
+  max-width: 60rem;
+  padding: 1rem;
+  background: var(--paper);
+  color: var(--ink);
+  font: 15px/1.45 system-ui, sans-serif;
+}
+
+header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: baseline;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 0.5rem;
+}
+
+nav a {
+  margin-right: 0.75rem;
+  color: var(--ink);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+}
+
+nav a:hover,
+nav a:focus {
+  border-bottom-color: var(--ink);
+}
+
+h1 {
+  font-size: 1.4rem;
+}
+
+h2 {
+  font-size: 1rem;
+  text-transform: lowercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+th,
+td {
+  padding: 0.3rem 0.5rem 0.3rem 0;
+  border-bottom: 1px solid var(--line);
+  vertical-align: baseline;
+}
+
+tr.overdue .name {
+  color: var(--overdue);
+  font-weight: 600;
+}
+
+tr.running {
+  background: #fff6d8;
+}
+
+.clock {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+
+.no-target {
+  color: var(--overdue);
+  font-size: 0.8rem;
+}
+
+.note,
+.muted {
+  color: var(--muted);
+}
+
+form {
+  display: inline;
+}
+
+button {
+  font: inherit;
+  padding: 0.15rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: #fff;
+  cursor: pointer;
+}
+
+button:hover,
+button:focus {
+  border-color: var(--ink);
+}
+
+input,
+select {
+  font: inherit;
+  padding: 0.1rem 0.3rem;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: #fff;
+}
+
+#day-totals ul {
+  list-style: none;
+  padding: 0;
+}
+
+#day-totals .time {
+  font-variant-numeric: tabular-nums;
+}
+
+#day-totals .group {
+  display: inline-block;
+  min-width: 10rem;
+}
+
+.total {
+  font-weight: 600;
+}

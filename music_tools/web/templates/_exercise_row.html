@@ -1,0 +1,12 @@
+{# One row of a queue. `module` is the module it belongs to, `today` the day. #}
+<tr id="exercise-{{ exercise.id }}"
+    {% if exercise.next_due and exercise.next_due <= today %}class="overdue"{% endif %}>
+  <td>{{ module.name }}</td>
+  <td class="name">{{ exercise.name }}</td>
+  <td>{{ tempo_text(exercise) }}</td>
+  <td>{{ format_due(exercise.next_due) }}</td>
+  <td>{{ format_when(exercise.next_due, today) }}</td>
+  <td>x{{ exercise.practiced_count }}</td>
+  <td>{{ exercise.notes or "" }}</td>
+  <td></td>
+</tr>

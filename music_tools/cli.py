@@ -40,7 +40,9 @@ from music_tools.domain.scheduling import Algorithm
 from music_tools.domain.session import (
     day_summary,
     entry_duration,
+    format_due as _due_column,
     format_duration,
+    format_when as _when,
     mark_done,
     practice_day_for,
     restart_clock,
@@ -647,22 +649,6 @@ def _tempo(exercise: Exercise) -> str:
 
 def _plural(count: int, singular: str, plural: str | None = None) -> str:
     return f"{count} {singular if count == 1 else plural or singular + 's'}"
-
-
-def _due_column(due: date | None) -> str:
-    return due.isoformat() if due else "—"
-
-
-def _when(due: date | None, today: date) -> str:
-    """`3 days overdue`, `due today`, `in 30 days`."""
-    if due is None:
-        return "no due date"
-    days = (due - today).days
-    if days == 0:
-        return "due today"
-    if days < 0:
-        return f"{-days} day{'s' if days != -1 else ''} overdue"
-    return f"in {days} day{'s' if days != 1 else ''}"
 
 
 def _parse_day(which: str, now: datetime | None = None) -> date:

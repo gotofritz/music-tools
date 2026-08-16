@@ -1,0 +1,13 @@
+{# The running entry, visible from every page. #}
+<div id="clock" class="clock"{% if oob %} hx-swap-oob="true"{% endif %}>
+  {% if running %}
+  <span class="clock-running">running since {{ running.started_at.strftime("%H:%M") }}
+    ({{ duration_text(running, now) }})</span>
+  <form action="/entries/{{ running.id }}/stop" method="post"
+        hx-post="/entries/{{ running.id }}/stop" hx-target="#day-log">
+    <button type="submit">stop the clock</button>
+  </form>
+  {% else %}
+  <span class="clock-stopped">clock not running</span>
+  {% endif %}
+</div>
