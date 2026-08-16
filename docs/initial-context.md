@@ -27,8 +27,9 @@ thing:
   eventually and is explicitly out of scope for the current plan.
 
 The point of the plan is that the exercise being practised *is* the tune the
-loop is built from: due → loop → play → done. Phase 4 attaches loops to
-exercises; today they are two commands over one database's worth of vocabulary.
+loop is built from: due → start → play → done. Phase 4 attaches the tune's
+media to exercises; today they are two commands over one database's worth of
+vocabulary.
 
 ## Layout
 
@@ -382,8 +383,8 @@ Everything user-facing raises `click.ClickException`, and every message names
 the token that caused it. On failure `main` calls `diagnose`, which prints the
 section as written and the score as read, because nearly every failure is a
 mismatch between what the markers say and what the pattern assumed. Extracting a
-`PatternError` from `ClickException` belongs to Phase 4, where a web layer needs
-to catch these without depending on click.
+`PatternError` from `ClickException` belongs to Phase 7 (segments), where a web
+layer needs to catch these without depending on click.
 
 The practice half raises `click.ClickException` only from `cli.py`; the domain
 raises plain Python exceptions (`UnknownExercise`, `MigrationError`) so a web
@@ -413,7 +414,7 @@ layer can catch them without depending on click.
   build step in this repository. Upgrading it means repeating that fetch and
   saying so in the commit; the README has the two lines.
 - **One macOS-only line**: `main` ends by launching Transcribe! on the output.
-  Nothing in CI may call `main` until Phase 4 puts that behind a flag.
+  Nothing in CI may call `main` until Phase 7 puts that behind a flag.
 - **`ruff` is pinned to the `E`/`F`/`I` rules** at line length 88, which is what
   the existing code was written against; ruff 0.16's wider defaults flag ~30
   pre-existing things across the repo. `ty` is scoped away from the `rearrange`
@@ -450,8 +451,11 @@ spreadsheet used to give away. And `target_bpm` is still missing on the rows
 the importer could not fill; the module view flags them, and they get filled in
 by use.
 
-Phases 4 to 6 attach loops to the exercise that is due, play them in the
-browser, and finally replace Transcribe! for marking up new tunes.
+Phases 4 to 7 attach the tune's media to the exercise that is due, play it in
+the browser — waveform, slow-down, pitch — mark it up there, and rebuild the
+loop output from the markers by pointing at the page, replacing Transcribe!
+piece by piece. The YAML loop editor is parked at the back of the queue
+(`docs/plans/08-loop-editor.md`).
 
 Out of scope throughout: `rearrange` and its step DSL, the standalone
 `triads.py` / `intervals.py` / `generate_exercise.py` generators, merging

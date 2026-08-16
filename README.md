@@ -159,7 +159,7 @@ in a diff, and the importer is tested against the real spreadsheet export in
 tests comes from `AudioSegment.silent(duration=…)`.
 
 Nothing macOS-only may run in CI. `main` ends by launching Transcribe! on the
-output, so no test may call it until that is behind a flag (Phase 4).
+output, so no test may call it until that is behind a flag (Phase 7).
 
 ### Conventions
 
@@ -178,6 +178,8 @@ and an importable `loop.py`) and Phase 2 (the domain, the database, the importer
 and the `practice` CLI) are done, which makes the spreadsheet technically
 redundant. Phase 3 (`practice serve`: the
 browser app over the same domain functions, and the cutover) is done — the
-history is imported and the spreadsheet is retired. Phases 4 to 6 attach loops
-to the exercise that is due, play them in the browser, and replace Transcribe!
-for marking up new tunes.
+history is imported and the spreadsheet is retired. Phases 4 to 7 attach the
+tune's media to the exercise that is due, play it in the browser — waveform,
+slow-down, pitch — mark it up there, and rebuild the loop output from the
+markers by pointing at the page, replacing Transcribe! piece by piece. The
+YAML loop editor is parked at the back of the queue.
