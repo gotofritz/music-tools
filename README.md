@@ -47,9 +47,18 @@ Everything below is for developers.
 
 ### Setup
 
-Requires Python 3.12+, [uv](https://docs.astral.sh/uv/),
+Requires Python 3.12+, [uv](https://docs.astral.sh/uv/) **0.11 or newer**,
 [Task](https://taskfile.dev/), and `ffmpeg` on `PATH` (pydub shells out to it
-for anything that is not a `.wav`).
+for anything that is not a `.wav`). `uv self update` if yours is older: the
+project sets `exclude-newer = "7 days"` in `pyproject.toml`, and relative
+values are only understood from 0.11 on.
+
+That setting is a rolling window — nothing published in the last week is
+resolved — and being in `pyproject.toml` it also overrides any `exclude-newer`
+in your own `~/.config/uv/uv.toml`, which is the usual reason a sync here
+resolves to something ancient or refuses outright. `uv.lock` records it as
+`exclude-newer-span = "P7D"`; the `0001-01-01` stamp beside it is uv's own
+backwards-compatibility marker and means nothing.
 
 ```bash
 uv sync --all-groups

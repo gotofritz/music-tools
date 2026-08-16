@@ -356,7 +356,13 @@ layer can catch them without depending on click.
 
 ## Constraints
 
-- **Python 3.12+, `uv` for everything.** Dependencies are `click`, `pydantic`,
+- **Python 3.12+, `uv` 0.11+ for everything.** Dependency resolution is bounded
+  by `exclude-newer = "7 days"` in `pyproject.toml`: a rolling window, so a
+  release a few days old is never picked up, and — being project-level — it
+  overrides whatever fixed stamp a developer keeps in their own uv config.
+  Relative values need uv 0.11; the lock records the window as
+  `exclude-newer-span = "P7D"`.
+- **Dependencies** are `click`, `pydantic`,
   `pydub`, `pyyaml`, and — for the browser app — `fastapi`, `jinja2`,
   `uvicorn` and `python-multipart`; dev dependencies are `pytest`, `httpx`
   (which `TestClient` needs), `ruff` and `ty`.
