@@ -1,0 +1,23 @@
+{# One line of the day log. `live` is the clock a running entry counts up to. #}
+<tr id="entry-{{ entry.id }}"{% if not entry.ended_at %} class="running"{% endif %}>
+  <td>{{ entry.started_at.strftime("%H:%M") }}</td>
+  <td>{% if entry.ended_at %}{{ entry.ended_at.strftime("%H:%M") }}{% else %}—{% endif %}</td>
+  <td>{{ duration_text(entry, live) }}</td>
+  <td>
+    {% if entry.ended_at %}
+    {{ entry.description }}{% if entry.notes %} <span class="note">({{ entry.notes }})</span>{% endif %}
+    {% else %}
+    <em>running</em>
+    {% endif %}
+  </td>
+  <td>{{ entry.speed or "" }}</td>
+  <td>{{ entry.log_group or "" }}</td>
+  <td>
+    {% if not entry.ended_at %}
+    <form action="/entries/{{ entry.id }}/stop" method="post"
+          hx-post="/entries/{{ entry.id }}/stop" hx-target="#day-log">
+      <button type="submit">stop</button>
+    </form>
+    {% endif %}
+  </td>
+</tr>

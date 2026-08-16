@@ -1,0 +1,19 @@
+{# The day block. Swapped out of band after anything that logs time. #}
+<section id="day-log"{% if oob %} hx-swap-oob="true"{% endif %}>
+  <h2>Log</h2>
+  {% if summary.entries %}
+  <table>
+    <thead>
+      <tr><th>from</th><th>to</th><th>time</th><th>what</th><th>speed</th>
+        <th>group</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for entry in summary.entries %}
+      {% include "_entry_row.html" %}
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>Nothing logged yet today.</p>
+  {% endif %}
+</section>

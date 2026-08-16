@@ -1,0 +1,12 @@
+{# Subtotals per log group, and the day. Computed, never stored. #}
+<section id="day-totals"{% if oob %} hx-swap-oob="true"{% endif %}>
+  <h2>Totals</h2>
+  <ul>
+    {% for group in summary.groups %}
+    <li><span class="group">{{ group.log_group }}</span>
+      <span class="time">{{ format_duration(group.seconds) }}</span></li>
+    {% endfor %}
+    <li class="total"><span class="group">TOTAL</span>
+      <span class="time">{{ format_duration(summary.total_seconds) }}</span></li>
+  </ul>
+</section>

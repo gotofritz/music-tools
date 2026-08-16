@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}practice{% endblock %}</title>
+    <link rel="stylesheet" href="/static/app.css">
+    <script src="/static/htmx.min.js" defer></script>
+  </head>
+  <body>
+    <header>
+      <nav>
+        <a href="/">today</a>
+        {% for module in modules %}
+        <a href="/modules/{{ module.slug }}">{{ module.name }}</a>
+        {% endfor %}
+      </nav>
+      {% include "_clock.html" %}
+    </header>
+    <main>
+      {% block main %}{% endblock %}
+    </main>
+  </body>
+</html>
