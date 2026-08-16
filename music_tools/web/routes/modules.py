@@ -82,9 +82,9 @@ def add_exercise(
 ) -> Response:
     """Add a row to a module, due today.
 
-    `exercises_due` drops rows with no due date, so an undated row would never
-    reach today's list — which is where it was typed in from. A row added mid
-    session is something to play now.
+    Everything that asks what is due reads a date — `practice next`, the due
+    count on `module list` — so an undated row is invisible to all of them. A
+    row typed in during a session is something to play in that session.
     """
     fields = _fields(speed=speed, target_bpm=target_bpm, style=style, notes=notes)
     try:

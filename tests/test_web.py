@@ -137,8 +137,8 @@ def test_two_apps_do_not_share_a_database(tmp_path, le_freak, db_path):
     other = tmp_path / "other.db"
     migrate(open_db(other))
 
-    assert "le freak" in TestClient(create_app(db_path)).get("/").text
-    assert "le freak" not in TestClient(create_app(other)).get("/").text
+    assert "le freak" in TestClient(create_app(db_path)).get("/modules/songs").text
+    assert TestClient(create_app(other)).get("/modules/songs").status_code == 404
 
 
 # --- Step 2: today ----------------------------------------------------------
@@ -201,15 +201,11 @@ def test_the_running_entry_counts_up_to_now(client, conn, sample_block):
     assert "00:20" in page  # 22:27 to the pinned 22:47
 
 
-def test_what_is_due_is_listed_and_what_is_not_is_left_out(client, le_freak, espresso):
+def test_the_nav_names_every_module(client, songs, slap):
     page = client.get("/").text
 
-    assert "le freak" in page  # overdue since 2026-07-01
-    assert "espresso" not in page  # not due until 2026-07-20
-
-
-def test_the_due_list_names_the_module_each_row_belongs_to(client, le_freak):
-    assert "SONGS" in client.get("/").text
+    assert 'href="/modules/songs"' in page
+    assert 'href="/modules/slap"' in page
 
 
 # --- Step 3: a module view --------------------------------------------------
@@ -470,8 +466,9 @@ def test_adding_a_row_that_is_already_there_is_refused(client, songs, le_freak):
 def test_a_new_row_is_due_straight_away(client, conn, songs):
     """A row added mid-session is something to play now, not an undated one.
 
-    `exercises_due` drops rows with no due date, so a row added through the
-    page would never reach today's list — which is where it was added from.
+    Everything that asks what is due — `practice next`, the due count on
+    `module list` — reads a date, so an undated row is invisible to all of
+    them. A row typed in during a session is due in that session.
     """
     client.post(
         "/exercises",
@@ -481,7 +478,7 @@ def test_a_new_row_is_due_straight_away(client, conn, songs):
 
     added = repo.find_exercises(conn, "love me jeje")
     assert [row.next_due for row in added] == [TODAY]
-    assert "love me jeje" in client.get("/").text
+    assert repo.exercises_due(conn, on=TODAY) == added
 
 
 def test_the_empty_boxes_on_a_row_say_what_they_are_for(client, songs, le_freak):
@@ -493,3 +490,70 @@ def test_the_empty_boxes_on_a_row_say_what_they_are_for(client, songs, le_freak)
     assert 'placeholder="80% or 96"' in row  # speed
     assert 'placeholder="target BPM"' in row
     assert 'placeholder="notes"' in row
+
+
+# --- the days before today, under today -------------------------------------
+
+
+@pytest.fixture
+def earlier_days(conn):
+    """Six finished days before the pinned one, one entry each."""
+    for number in range(1, 7):
+        day = date(2026, 6, number)
+        record = repo.create_day(conn, day=day)
+        entry = repo.create_entry(
+            conn, day_id=record.id, started_at=datetime(2026, 6, number, 20)
+        )
+        repo.close_entry(
+            conn,
+            entry.id,
+            ended_at=datetime(2026, 6, number, 20, 15),
+            description=f"day {number}",
+            log_group="TECHNIQUE",
+        )
+    return None
+
+
+def test_today_shows_the_days_before_it_newest_first(client, earlier_days):
+    page = client.get("/").text
+
+    assert page.index("2026-06-06") < page.index("2026-06-05")
+    assert "00:15" in page  # each day's total
+    assert "day 6" in page  # and what was played
+
+
+def test_today_no_longer_lists_what_is_due(client, le_freak):
+    """The queue belongs to the module pages; today is the log."""
+    page = client.get("/").text
+
+    assert "le freak" not in page
+    assert 'href="/modules/songs"' in page  # still one click away
+
+
+def test_only_a_page_of_days_is_shown_with_a_way_to_get_more(client, earlier_days):
+    page = client.get("/").text
+
+    assert "2026-06-01" not in page  # the sixth-oldest, past the page of 5
+    assert "load more" in page
+    assert 'href="/days?before=2026-06-02"' in page  # carry on from the last shown
+
+
+def test_load_more_returns_the_next_page_and_its_own_button(client, earlier_days):
+    response = client.get("/days?before=2026-06-02", headers=hx())
+
+    assert response.status_code == 200
+    assert "2026-06-01" in response.text
+    assert "2026-06-06" not in response.text  # the page above it, not repeated
+    assert "load more" not in response.text  # nothing older to ask for
+
+
+def test_the_load_more_link_is_a_whole_page_without_htmx(client, earlier_days):
+    """No JavaScript: a real link to a real page, not a naked fragment."""
+    response = client.get("/days?before=2026-06-02")
+
+    assert "<html" in response.text
+    assert "2026-06-01" in response.text
+
+
+def test_a_day_with_no_history_behind_it_offers_nothing_to_load(client):
+    assert "load more" not in client.get("/").text

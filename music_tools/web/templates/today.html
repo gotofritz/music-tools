@@ -13,22 +13,12 @@
 {% include "_day_log.html" %}
 {% include "_day_totals.html" %}
 
-<section id="due">
-  <h2>Due</h2>
-  {% if due %}
-  <table>
-    <thead>
-      {% include "_queue_head.html" %}
-    </thead>
-    <tbody id="queue">
-      {% for exercise in due %}
-      {% set module = modules_by_id[exercise.module_id] %}
-      {% include "_exercise_row.html" %}
-      {% endfor %}
-    </tbody>
-  </table>
+<section id="history">
+  <h2>Earlier</h2>
+  {% if history %}
+  {% include "_history_page.html" %}
   {% else %}
-  <p>Nothing is due. Pick something from a module.</p>
+  <p>Nothing logged before today.</p>
   {% endif %}
 </section>
 {% endblock %}

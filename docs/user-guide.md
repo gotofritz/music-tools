@@ -96,18 +96,15 @@ starts it without opening a window.
 
 **The first page is today.**
 
-- **Due** lists what every module wants today, most overdue first, one line
-  each: the module, the row, the speed, when you last played it, when it was
-  due, and how many times you have practised it. Overdue rows are marked.
-- **done** is the button at the end of each line — the same thing as
-  `practice done`. The drop-down next to it is the same choice the flags give
-  you on the command line: `normal`, `short` (this one is not sticking), `long`
-  (this one is solid), `rotate` (to the back of the module's queue), `hold` (to
-  the front). Click it and the row, the log and the totals all update where
-  they are; the page does not reload.
-- **Log** is the day, line by line, with the entry that is running now counting
+- **Log** is today, line by line, with the entry that is running now counting
   up. **Totals** underneath is the subtotal per log group and the total for the
   day — the same numbers as `practice log`.
+- **Earlier** is the five days before it, newest first, each with what you
+  played, its subtotals and its total. **load more** adds the next five. There
+  is no date picker and no search: it is a log, and you read it backwards.
+- What is **due** is not here — it lives on the module pages, one click away in
+  the bar at the top, because a queue belongs to the module it is scheduled
+  in.
 - The clock in the top corner says whether time is being counted, and
   **stop the clock** ends the session. The stretch since the last thing you
   marked done is not logged: nobody said what it was, so it is not practice
@@ -117,16 +114,23 @@ If there is no day open yet, the page offers a **start a day** button instead
 of a log.
 
 **Each module has its own page**, reached from the links at the top: the whole
-queue, due or not, and every field editable in place. Change the name, the
-speed, the target or the notes and press **save** — the row re-reads itself
+queue, most overdue first, and every field editable in place. **done** is the
+button at the end of each row — the same thing as `practice done`. The
+drop-down beside it is the choice the flags give you on the command line:
+`normal`, `short` (this one is not sticking), `long` (this one is solid),
+`rotate` (to the back of the module's queue), `hold` (to the front). Click it
+and the row, today's log and the totals all update where they are; the page
+does not reload.
+
+Change the name, the speed, the target or the notes and press **save** — the row re-reads itself
 with the speed worked out, so typing `85%` shows you `113 BPM (85%)` as you go.
 A row with no target is flagged in red, because a percentage of nothing cannot
 be resolved and cannot move the schedule; filling those in as you meet them is
 the tidiest way to close the gap the import leaves.
 
 At the bottom of a module page is **add a row**. Anything added there is due
-straight away, so it turns up on today's list — which is where you were when
-you thought of it.
+straight away, so it is at the top of that module's queue rather than waiting
+for a date you have to type.
 
 Editing a row never rewrites the day log, here or on the command line.
 

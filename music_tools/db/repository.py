@@ -263,6 +263,17 @@ def list_days(conn: sqlite3.Connection) -> list[PracticeDay]:
     return [PracticeDay.model_validate(dict(row)) for row in rows]
 
 
+def days_before(
+    conn: sqlite3.Connection, *, before: date, limit: int
+) -> list[PracticeDay]:
+    """The days strictly before `before`, most recent first: a page of history."""
+    rows = conn.execute(
+        "SELECT * FROM practice_day WHERE day < ? ORDER BY day DESC LIMIT ?",
+        (before.isoformat(), limit),
+    ).fetchall()
+    return [PracticeDay.model_validate(dict(row)) for row in rows]
+
+
 def create_entry(
     conn: sqlite3.Connection, *, day_id: int, started_at: datetime, **fields
 ) -> PracticeEntry:

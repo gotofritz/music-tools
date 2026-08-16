@@ -1,0 +1,12 @@
+{# A page of finished days, and the one control there is: load more.
+
+   The button is a real link to the same URL, so it works with the JavaScript
+   off; with it, HTMX swaps the next page in over the button itself. #}
+{% for summary in history %}
+{% include "_day_block.html" %}
+{% endfor %}
+{% if more_before %}
+<a class="load-more" href="/days?before={{ more_before.isoformat() }}"
+   hx-get="/days?before={{ more_before.isoformat() }}"
+   hx-target="this" hx-swap="outerHTML">load more</a>
+{% endif %}

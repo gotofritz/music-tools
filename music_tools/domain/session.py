@@ -247,6 +247,20 @@ def day_summary(
     )
 
 
+def recent_days(
+    conn: sqlite3.Connection, *, before: date, limit: int, now: datetime | None = None
+) -> list[DaySummary]:
+    """A page of finished days, most recent first, each with its own totals.
+
+    `before` is exclusive, so passing the last day of one page reads the next:
+    that is the whole of the pagination, and it needs no offset and no count.
+    """
+    return [
+        day_summary(conn, day=record.day, now=now)
+        for record in repo.days_before(conn, before=before, limit=limit)
+    ]
+
+
 def format_duration(seconds: int) -> str:
     """`00:53`, the way the sheet's TIME column read."""
     minutes = seconds // 60
