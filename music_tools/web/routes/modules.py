@@ -102,6 +102,28 @@ def add_exercise(
     return fragment_or_redirect(request, _row(conn, exercise, now=now))
 
 
+@router.post("/exercises/{exercise_id}/archive")
+def archive_row(
+    request: Request,
+    exercise_id: int,
+    conn: sqlite3.Connection = Depends(get_conn),
+    now: datetime = Depends(get_now),
+) -> Response:
+    """Take a row out of its module's queue, and off the page.
+
+    Archiving rather than deleting: it is reversible (`practice restore`), and
+    the day log keeps a row to point at, so what was practised stays readable.
+    The response is empty — the row it replaces is the whole change.
+    """
+    try:
+        catalogue.archive_exercise(conn, exercise_id, now=now)
+    except catalogue.NotFound:
+        raise HTTPException(
+            status_code=404, detail="no exercise with that id"
+        ) from None
+    return fragment_or_redirect(request, "")
+
+
 @router.get("/exercises/{exercise_id}/tempo", response_class=HTMLResponse)
 def tempo(
     exercise_id: int,
