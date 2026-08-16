@@ -300,7 +300,7 @@ this is the map, not the territory.
 | --- | --- | --- | --- |
 | 1 | Foundations | `../archive/2026-08-15-1222-af747ab-01-foundations.md` (done) | A test suite, CI, and an importable `loop.py` |
 | 2 | Domain, database, importer | `../archive/2026-08-15-1541-647ef39-02-domain.md` (done) | The sheet's brain in Python, plus a CLI and the migrated history |
-| 3 | The app, and the cutover | `../archive/2026-08-16-1213-50e8430-03-web.md` (done) | The spreadsheet retired |
+| 3 | The app, and the cutover | `../archive/2026-08-16-1213-21118f2-03-web.md` (done) | The spreadsheet retired |
 | 4 | Loops, attached to exercises | `04-loop-editor.md` | Loops built and generated from the tune that is due |
 | 5 | Play it in the app | `05-playback.md` | The scenario closed: due → loop → play → done |
 | 6 | Markers without Transcribe! | `06-markers.md` | New tunes marked up in the browser |
