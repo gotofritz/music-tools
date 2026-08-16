@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block title %}before {{ before.isoformat() }} — practice{% endblock %}
+{% block main %}
+<h1>Days before {{ before.isoformat() }}</h1>
+<section id="history">
+  {% include "_history_page.html" %}
+</section>
+{% endblock %}

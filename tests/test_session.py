@@ -17,6 +17,7 @@ from music_tools.domain.session import (
     format_duration,
     mark_done,
     practice_day_for,
+    recent_days,
     restart_clock,
     start_day,
 )
@@ -423,3 +424,48 @@ def test_start_discards_a_clock_left_running_on_an_earlier_day(db):
 
     yesterday = loaded(repo.get_day(db, date(2026, 7, 4)))
     assert repo.entries_for_day(db, yesterday.id) == []
+
+
+# --- the days before today --------------------------------------------------
+
+
+@pytest.fixture
+def three_days(db, slap):
+    """Three days of one entry each, a week apart."""
+    for day, hour in ((date(2026, 7, 1), 20), (date(2026, 7, 3), 21), (NOW.date(), 22)):
+        record = repo.create_day(db, day=day)
+        entry = repo.create_entry(
+            db,
+            day_id=record.id,
+            started_at=datetime(day.year, day.month, day.day, hour),
+        )
+        repo.close_entry(
+            db,
+            entry.id,
+            ended_at=datetime(day.year, day.month, day.day, hour, 30),
+            description="Stomp!",
+            log_group="TECHNIQUE",
+        )
+    return None
+
+
+def test_recent_days_reads_backwards_from_today(db, three_days):
+    days = recent_days(db, before=NOW.date(), limit=10)
+
+    assert [summary.day for summary in days] == [date(2026, 7, 3), date(2026, 7, 1)]
+    assert format_duration(days[0].total_seconds) == "00:30"
+    assert [entry.description for entry in days[0].entries] == ["Stomp!"]
+
+
+def test_recent_days_stops_at_the_limit_and_carries_on_from_a_date(db, three_days):
+    first = recent_days(db, before=NOW.date(), limit=1)
+
+    assert [summary.day for summary in first] == [date(2026, 7, 3)]
+
+    next_page = recent_days(db, before=first[-1].day, limit=1)
+
+    assert [summary.day for summary in next_page] == [date(2026, 7, 1)]
+
+
+def test_recent_days_is_empty_when_nothing_came_before(db, slap):
+    assert recent_days(db, before=NOW.date(), limit=5) == []

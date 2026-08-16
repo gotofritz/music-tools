@@ -280,6 +280,14 @@ Three rules hold this shape, and the tests in `tests/test_web.py` enforce them:
   `static/`; there is no CDN link and no build step. Leaving Sheets was about
   practising with the network off.
 
+**History is paginated by date, not by offset.** `GET /days?before=<iso>`
+reads the five finished days before that date, and the button asks for the
+oldest day it just drew — no counting, no `OFFSET`, and a page that cannot
+shift under an insert. One row past the page is read and thrown away, which is
+how the button knows whether to draw itself. The same URL is the link's `href`
+and HTMX's `hx-get`: with JavaScript the next page swaps in over the button,
+without it the link opens a page of history that carries its own button.
+
 Two behaviours are the web layer's own, both because of what the domain
 already does: a row added from the page is due **today** (`exercises_due` drops
 undated rows, so an undated one would never reach the list it was typed into),

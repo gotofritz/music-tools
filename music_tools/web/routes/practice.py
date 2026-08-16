@@ -1,4 +1,4 @@
-"""The day: what is due, one click to mark it done, and the running log.
+"""The day: the running log, the days behind it, and marking things done.
 
 Every route here is a call into `domain/session.py` and a render. The one that
 matters is `done`: it changes three things on screen at once, which is the
@@ -7,7 +7,7 @@ whole reason there is HTMX in this app rather than a page reload per exercise.
 
 import random
 import sqlite3
-from datetime import datetime
+from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
@@ -20,6 +20,7 @@ from music_tools.web.deps import (
     get_conn,
     get_now,
     get_rng,
+    is_htmx,
     render,
 )
 
@@ -31,8 +32,29 @@ def today(
     conn: sqlite3.Connection = Depends(get_conn),
     now: datetime = Depends(get_now),
 ) -> HTMLResponse:
-    """Today: the running log, the totals, and what is due."""
+    """Today: the running log, the totals, and the days before this one."""
     return HTMLResponse(render("today.html", **views.today_context(conn, now=now)))
+
+
+@router.get("/days", response_class=HTMLResponse)
+def earlier_days(
+    request: Request,
+    before: date,
+    conn: sqlite3.Connection = Depends(get_conn),
+    now: datetime = Depends(get_now),
+) -> HTMLResponse:
+    """The next page of finished days, older than `before`.
+
+    HTMX asks for the page on its own and swaps it in place of the button it
+    came from; a browser with no JavaScript follows the same URL as a link and
+    gets a page of history with a button of its own.
+    """
+    context = views.history_context(conn, now=now, before=before)
+    if is_htmx(request):
+        return HTMLResponse(render("_history_page.html", **context))
+    return HTMLResponse(
+        render("history.html", before=before, **views.chrome(conn, now=now), **context)
+    )
 
 
 @router.post("/days")
