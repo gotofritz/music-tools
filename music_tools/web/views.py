@@ -54,6 +54,5 @@ def today_context(conn: sqlite3.Connection, *, now: datetime) -> dict[str, Any]:
 def modules_by_id(conn: sqlite3.Connection) -> dict[int, Module]:
     """Enough to name the module a due row belongs to, without a join."""
     return {
-        module.id: module
-        for module in repo.list_modules(conn, include_archived=True)
+        module.id: module for module in repo.list_modules(conn, include_archived=True)
     }

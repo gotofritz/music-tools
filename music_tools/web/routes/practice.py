@@ -69,7 +69,9 @@ async def done(
             rng=rng,
         )
     except session.UnknownExercise:
-        raise HTTPException(status_code=404, detail="no exercise with that id") from None
+        raise HTTPException(
+            status_code=404, detail="no exercise with that id"
+        ) from None
 
     context = views.today_context(conn, now=now)
     row = render(
@@ -78,7 +80,10 @@ async def done(
         module=context["modules_by_id"][result.exercise.module_id],
         today=context["today"],
     )
-    return fragment_or_redirect(request, row + _oob_fragments(context))
+    return fragment_or_redirect(
+        request,
+        row + render("_day_log.html", oob=True, **context) + _side_fragments(context),
+    )
 
 
 @router.post("/entries")
@@ -119,17 +124,19 @@ def stop_entry(
 
 
 def _log_fragments(conn: sqlite3.Connection, *, now: datetime) -> str:
-    """The log, with the totals and the clock swapped out of band behind it."""
+    """The log itself, with the totals and the clock riding behind it."""
     context = views.today_context(conn, now=now)
-    return render("_day_log.html", **context) + _oob_fragments(context)
+    return render("_day_log.html", **context) + _side_fragments(context)
 
 
-def _oob_fragments(context: dict) -> str:
-    """Everything a write changes that is not the thing that was clicked."""
-    return (
-        render("_day_log.html", oob=True, **context)
-        + render("_day_totals.html", oob=True, **context)
-        + render("_clock.html", oob=True, **context)
+def _side_fragments(context: dict) -> str:
+    """The rest of what a write changes, as out-of-band swaps.
+
+    Not the log: whatever was clicked is already targeting one of these
+    sections, and the same id twice in one response is a fight over the swap.
+    """
+    return render("_day_totals.html", oob=True, **context) + render(
+        "_clock.html", oob=True, **context
     )
 
 

@@ -292,3 +292,37 @@ def test_a_row_in_the_log_is_not_deleted(stocked, run):
 
     assert result.exit_code != 0
     assert "archive" in result.output
+
+
+# --- serve: the browser front end -------------------------------------------
+
+
+@pytest.fixture
+def uvicorn_run(monkeypatch):
+    """Catch the app `serve` builds instead of binding a socket."""
+    calls = []
+    monkeypatch.setattr(
+        "uvicorn.run",
+        lambda app, **kwargs: calls.append((app, kwargs)),
+    )
+    return calls
+
+
+def test_serve_runs_the_app_over_the_named_database(run, uvicorn_run, tmp_path):
+    result = run("serve", "--no-browser")
+
+    assert result.exit_code == 0, result.output
+    app, kwargs = uvicorn_run[0]
+    assert app.state.db_path == tmp_path / "practice.db"
+    assert (kwargs["host"], kwargs["port"]) == ("127.0.0.1", 8765)
+
+
+def test_serve_opens_a_browser_unless_told_not_to(run, uvicorn_run, monkeypatch):
+    opened = []
+    monkeypatch.setattr("webbrowser.open", opened.append)
+
+    run("serve", "--no-browser")
+    assert opened == []
+
+    run("serve", "--port", "9001")
+    assert opened == ["http://127.0.0.1:9001/"]

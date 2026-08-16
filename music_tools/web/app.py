@@ -34,9 +34,23 @@ def create_app(db_path: str | Path) -> FastAPI:
 
 
 def serve(
-    db_path: str | Path, *, host: str = "127.0.0.1", port: int = 8765
-) -> None:  # pragma: no cover - the socket is the untestable part
-    """Run the app on the loopback interface. One machine, one user, no auth."""
+    db_path: str | Path,
+    *,
+    host: str = "127.0.0.1",
+    port: int = 8765,
+    open_browser: bool = True,
+) -> None:
+    """Run the app on the loopback interface. One machine, one user, no auth.
+
+    The browser is launched before `uvicorn.run` blocks, which is a race the
+    browser loses every time: starting one takes far longer than binding a
+    socket does.
+    """
+    import webbrowser
+
     import uvicorn
 
-    uvicorn.run(create_app(db_path), host=host, port=port, log_level="warning")
+    app = create_app(db_path)
+    if open_browser:
+        webbrowser.open(f"http://{host}:{port}/")
+    uvicorn.run(app, host=host, port=port, log_level="warning")
