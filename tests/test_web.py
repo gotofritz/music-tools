@@ -271,10 +271,24 @@ def test_done_moves_the_schedule_and_logs_the_time(client, conn, le_freak):
 
 
 def test_done_swaps_the_log_and_the_totals_out_of_band(client, le_freak):
-    response = client.post(f"/exercises/{le_freak.id}/done", headers=hx())
+    response = client.post(
+        f"/exercises/{le_freak.id}/done", headers=hx(referer="http://localhost/")
+    )
 
     assert f'id="exercise-{le_freak.id}"' in response.text
     assert '<section id="day-log" hx-swap-oob="true"' in response.text
+    assert '<section id="day-totals" hx-swap-oob="true"' in response.text
+    assert '<div id="clock" class="clock" hx-swap-oob="true"' in response.text
+
+
+def test_done_from_module_page_excludes_day_log(client, le_freak, songs):
+    response = client.post(
+        f"/exercises/{le_freak.id}/done",
+        headers=hx(referer=f"http://localhost/modules/{songs.id}"),
+    )
+
+    assert f'id="exercise-{le_freak.id}"' in response.text
+    assert '<section id="day-log" hx-swap-oob="true"' not in response.text
     assert '<section id="day-totals" hx-swap-oob="true"' in response.text
     assert '<div id="clock" class="clock" hx-swap-oob="true"' in response.text
 
