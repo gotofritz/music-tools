@@ -158,6 +158,17 @@ async def add_entry(
     return fragment_or_redirect(request, _log_fragments(conn, now=now))
 
 
+@router.post("/entries/restart")
+def restart_entry(
+    request: Request,
+    conn: sqlite3.Connection = Depends(get_conn),
+    now: datetime = Depends(get_now),
+) -> Response:
+    """Restart the clock after a break."""
+    session.restart_clock(conn, now=now)
+    return fragment_or_redirect(request, _log_fragments(conn, now=now))
+
+
 @router.api_route("/entries/{entry_id}", methods=["PATCH", "POST"])
 def amend_entry(
     request: Request,

@@ -9,5 +9,9 @@
   </form>
   {% else %}
   <span class="clock-stopped">clock not running</span>
+  <form action="/entries/restart" method="post"
+        hx-post="/entries/restart" hx-target="#day-log">
+    <button type="submit">restart the clock</button>
+  </form>
   {% endif %}
 </div>

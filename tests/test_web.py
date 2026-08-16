@@ -355,6 +355,24 @@ def test_stopping_an_unknown_entry_is_404(client):
     assert client.post("/entries/404/stop", headers=hx()).status_code == 404
 
 
+def test_restarting_the_clock_after_stopping(client, conn):
+    client.post("/days", headers=hx())
+    day = repo.get_day(conn, TODAY)
+    assert day is not None
+    running = repo.running_entry(conn, day_id=day.id)
+    assert running is not None
+
+    client.post(f"/entries/{running.id}/stop", headers=hx())
+    assert repo.running_entry(conn, day_id=day.id) is None
+
+    response = client.post("/entries/restart", headers=hx())
+
+    assert response.status_code == 200
+    restarted = repo.running_entry(conn, day_id=day.id)
+    assert restarted is not None
+    assert restarted.started_at == NOW
+
+
 # --- Step 5: editing in place -----------------------------------------------
 
 
