@@ -557,3 +557,97 @@ def test_the_load_more_link_is_a_whole_page_without_htmx(client, earlier_days):
 
 def test_a_day_with_no_history_behind_it_offers_nothing_to_load(client):
     assert "load more" not in client.get("/").text
+
+
+# --- correcting a line of the log -------------------------------------------
+
+
+def test_a_finished_entry_is_editable_where_it_is(client, sample_block, conn):
+    entry = repo.entries_for_day(conn, sample_block.id)[0]
+
+    page = client.get("/").text
+
+    assert f'action="/entries/{entry.id}"' in page
+    assert 'value="22:27"' in page  # its start, in a box
+    assert 'value="019 Tempo Builder"' in page
+
+
+def test_amending_a_past_entry_redraws_that_day_with_its_new_total(
+    client, conn, earlier_days
+):
+    day = repo.get_day(conn, date(2026, 6, 6))
+    assert day is not None
+    entry = repo.entries_for_day(conn, day.id)[0]
+
+    response = client.patch(
+        f"/entries/{entry.id}",
+        data={"ended_at": "20:45", "description": "day 6, longer than I thought"},
+        headers=hx(),
+    )
+
+    assert response.status_code == 200
+    assert 'id="day-2026-06-06"' in response.text  # the block that was edited
+    assert "00:45" in response.text  # 20:00 to the new 20:45
+    assert "day 6, longer than I thought" in response.text
+    after = repo.get_entry(conn, entry.id)
+    assert after is not None
+    assert after.ended_at == datetime(2026, 6, 6, 20, 45)
+
+
+def test_amending_todays_entry_redraws_the_log_and_the_totals(
+    client, conn, sample_block
+):
+    entry = repo.entries_for_day(conn, sample_block.id)[0]
+
+    response = client.patch(f"/entries/{entry.id}", data={"speed": "72%"}, headers=hx())
+
+    assert '<section id="day-log"' in response.text
+    assert '<section id="day-totals" hx-swap-oob="true"' in response.text
+    after = repo.get_entry(conn, entry.id)
+    assert after is not None
+    assert after.speed == "72%"
+
+
+def test_a_plain_form_post_amends_an_entry_too(client, conn, sample_block):
+    entry = repo.entries_for_day(conn, sample_block.id)[0]
+
+    response = client.post(
+        f"/entries/{entry.id}", data={"notes": "left hand only"}, headers=hx()
+    )
+
+    assert response.status_code == 200
+    after = repo.get_entry(conn, entry.id)
+    assert after is not None
+    assert after.notes == "left hand only"
+
+
+def test_the_running_entry_cannot_be_edited_by_hand(client, conn):
+    client.post("/days", headers=hx())
+    day = repo.get_day(conn, TODAY)
+    assert day is not None
+    running = repo.running_entry(conn, day_id=day.id)
+    assert running is not None
+
+    response = client.patch(
+        f"/entries/{running.id}", data={"description": "guessing"}, headers=hx()
+    )
+
+    assert response.status_code == 409
+    assert repo.running_entry(conn, day_id=day.id) is not None
+
+
+def test_an_unreadable_time_is_refused_rather_than_guessed(client, conn, sample_block):
+    entry = repo.entries_for_day(conn, sample_block.id)[0]
+
+    response = client.patch(
+        f"/entries/{entry.id}", data={"ended_at": "half past"}, headers=hx()
+    )
+
+    assert response.status_code == 400
+    after = repo.get_entry(conn, entry.id)
+    assert after is not None
+    assert after.ended_at == datetime(2026, 7, 5, 22, 34)  # unchanged
+
+
+def test_amending_an_entry_that_is_not_there_is_404(client):
+    assert client.patch("/entries/404", data={"speed": "90"}).status_code == 404

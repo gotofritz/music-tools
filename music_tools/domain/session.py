@@ -40,6 +40,10 @@ class UnknownEntry(LookupError):
     """No day-log entry with that id."""
 
 
+class EntryRunning(RuntimeError):
+    """The entry is the clock, and the clock is not edited by hand."""
+
+
 def practice_day_for(now: datetime) -> date:
     """Which practice day an instant falls in, at the 4am boundary."""
     return (now - timedelta(hours=END_OF_DAY_HOUR)).date()
@@ -245,6 +249,48 @@ def day_summary(
         ],
         total_seconds=total,
     )
+
+
+def amend_entry(
+    conn: sqlite3.Connection,
+    *,
+    entry_id: int,
+    started_at: datetime | None = None,
+    ended_at: datetime | None = None,
+    description: str | None = None,
+    speed: str | None = None,
+    log_group: str | None = None,
+    notes: str | None = None,
+) -> PracticeEntry:
+    """Correct a line of the log. Only what is passed is rewritten.
+
+    The log is a record, and the app writes it as practice happens — but the
+    record can be wrong: a clock left running through supper, a name typed in
+    a hurry. Correcting it is a deliberate act, and narrow by design. An entry
+    keeps the day it happened on, nothing is deleted, and the running entry is
+    refused: that one is the clock, written by `mark_done` and `stop_clock`,
+    and hand-editing it would make the two disagree.
+
+    Times are passed whole, so an entry that crossed midnight keeps its dates.
+    Nothing re-tiles: closing a gap in the middle of a session is the caller's
+    business, and the day's total is the sum of its entries either way.
+    """
+    with transaction(conn):
+        entry = repo.get_entry(conn, entry_id)
+        if entry is None:
+            raise UnknownEntry(entry_id)
+        if entry.ended_at is None:
+            raise EntryRunning(entry_id)
+        fields = {
+            "started_at": started_at,
+            "ended_at": ended_at,
+            "description": description,
+            "speed": speed,
+            "log_group": log_group,
+            "notes": notes,
+        }
+        given = {name: value for name, value in fields.items() if value is not None}
+        return repo.update_entry(conn, entry.id, **given) if given else entry
 
 
 def recent_days(

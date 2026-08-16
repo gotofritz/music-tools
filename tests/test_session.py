@@ -13,7 +13,11 @@ from music_tools.db import repository as repo
 from music_tools.db.connection import transaction
 from music_tools.domain.scheduling import Algorithm
 from music_tools.domain.session import (
+    EntryRunning,
+    UnknownEntry,
+    amend_entry,
     day_summary,
+    entry_duration,
     format_duration,
     mark_done,
     practice_day_for,
@@ -469,3 +473,66 @@ def test_recent_days_stops_at_the_limit_and_carries_on_from_a_date(db, three_day
 
 def test_recent_days_is_empty_when_nothing_came_before(db, slap):
     assert recent_days(db, before=NOW.date(), limit=5) == []
+
+
+# --- amending what the log says ---------------------------------------------
+
+
+@pytest.fixture
+def logged(db, slap):
+    """One finished entry on the sample day, and the clock running after it."""
+    day = repo.create_day(db, day=NOW.date())
+    entry = repo.create_entry(db, day_id=day.id, started_at=NOW)
+    repo.close_entry(
+        db,
+        entry.id,
+        ended_at=NOW + timedelta(minutes=20),
+        description="Stomp!",
+        speed="80%",
+        log_group="TECHNIQUE",
+    )
+    return repo.create_entry(db, day_id=day.id, started_at=NOW + timedelta(minutes=20))
+
+
+def test_amending_an_entry_rewrites_only_what_was_given(db, logged):
+    entry = repo.entries_for_day(db, logged.day_id)[0]
+
+    amended = amend_entry(db, entry_id=entry.id, description="Stomp! (Godsmack)")
+
+    assert amended.description == "Stomp! (Godsmack)"
+    assert amended.speed == "80%"  # untouched
+    assert amended.log_group == "TECHNIQUE"
+    assert amended.started_at == NOW
+
+
+def test_amending_the_times_moves_the_day_total(db, logged):
+    entry = repo.entries_for_day(db, logged.day_id)[0]
+
+    amend_entry(db, entry_id=entry.id, ended_at=NOW + timedelta(minutes=35))
+
+    summary = day_summary(db, day=NOW.date())
+    assert format_duration(summary.total_seconds) == "00:35"
+
+
+def test_an_entry_that_crossed_midnight_keeps_its_own_dates(db, logged):
+    entry = repo.entries_for_day(db, logged.day_id)[0]
+
+    amended = amend_entry(
+        db,
+        entry_id=entry.id,
+        started_at=datetime(2026, 7, 5, 23, 50),
+        ended_at=datetime(2026, 7, 6, 0, 20),
+    )
+
+    assert entry_duration(amended) == 30 * 60
+
+
+def test_the_running_entry_is_not_amended_here(db, logged):
+    """The clock is the clock: `done` and `stop` write it, not the editor."""
+    with pytest.raises(EntryRunning):
+        amend_entry(db, entry_id=logged.id, description="whatever I am playing")
+
+
+def test_amending_something_that_is_not_there_is_an_error(db):
+    with pytest.raises(UnknownEntry):
+        amend_entry(db, entry_id=404, description="nothing")

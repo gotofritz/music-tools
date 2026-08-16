@@ -1,23 +1,51 @@
-{# One line of the day log. `live` is the clock a running entry counts up to. #}
+{# One line of the day log. `live` is the clock a running entry counts up to,
+   and `entry_target` is what an edit redraws — today's log, or a day block.
+
+   A finished line is editable: the log is written as practice happens, and
+   what gets written can be wrong. The running line is not: that one is the
+   clock, and `done` and `stop` are what move it. #}
 <tr id="entry-{{ entry.id }}"{% if not entry.ended_at %} class="running"{% endif %}>
-  <td>{{ entry.started_at.strftime("%H:%M") }}</td>
-  <td>{% if entry.ended_at %}{{ entry.ended_at.strftime("%H:%M") }}{% else %}—{% endif %}</td>
+  {% if entry.ended_at %}
+  <td>
+    <form action="/entries/{{ entry.id }}" method="post"
+          hx-patch="/entries/{{ entry.id }}"
+          hx-target="{{ entry_target }}" hx-swap="outerHTML">
+      <input type="text" name="started_at" value="{{ entry.started_at.strftime("%H:%M") }}"
+             size="5" aria-label="from" placeholder="from">
+  </td>
+  <td>
+      <input type="text" name="ended_at" value="{{ entry.ended_at.strftime("%H:%M") }}"
+             size="5" aria-label="to" placeholder="to">
+  </td>
   <td>{{ duration_text(entry, live) }}</td>
   <td>
-    {% if entry.ended_at %}
-    {{ entry.description }}{% if entry.notes %} <span class="note">({{ entry.notes }})</span>{% endif %}
-    {% else %}
-    <em>running</em>
-    {% endif %}
+      <input type="text" name="description" value="{{ entry.description }}" size="24"
+             aria-label="what" placeholder="what you played">
+      <input type="text" name="notes" value="{{ entry.notes or "" }}" size="14"
+             aria-label="notes" placeholder="notes">
   </td>
-  <td>{{ entry.speed or "" }}</td>
-  <td>{{ entry.log_group or "" }}</td>
   <td>
-    {% if not entry.ended_at %}
+      <input type="text" name="speed" value="{{ entry.speed or "" }}" size="7"
+             aria-label="speed" placeholder="speed">
+  </td>
+  <td>
+      <input type="text" name="log_group" value="{{ entry.log_group or "" }}" size="11"
+             aria-label="log group" placeholder="group">
+      <button type="submit">save</button>
+    </form>
+  </td>
+  {% else %}
+  <td>{{ entry.started_at.strftime("%H:%M") }}</td>
+  <td>—</td>
+  <td>{{ duration_text(entry, live) }}</td>
+  <td><em>running</em></td>
+  <td>{{ entry.speed or "" }}</td>
+  <td>
     <form action="/entries/{{ entry.id }}/stop" method="post"
-          hx-post="/entries/{{ entry.id }}/stop" hx-target="#day-log">
+          hx-post="/entries/{{ entry.id }}/stop" hx-target="#day-log"
+          hx-swap="outerHTML">
       <button type="submit">stop</button>
     </form>
-    {% endif %}
   </td>
+  {% endif %}
 </tr>

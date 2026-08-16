@@ -7,13 +7,16 @@ whole reason there is HTMX in this app rather than a page reload per exercise.
 
 import random
 import sqlite3
-from datetime import date, datetime
+from datetime import date, datetime, time
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 
+from music_tools.db import repository as repo
 from music_tools.domain import session
+from music_tools.domain.models import PracticeEntry
 from music_tools.domain.scheduling import Algorithm
+from music_tools.domain.session import day_summary, practice_day_for
 from music_tools.web import views
 from music_tools.web.deps import (
     fragment_or_redirect,
@@ -130,6 +133,50 @@ async def add_entry(
     return fragment_or_redirect(request, _log_fragments(conn, now=now))
 
 
+@router.api_route("/entries/{entry_id}", methods=["PATCH", "POST"])
+def amend_entry(
+    request: Request,
+    entry_id: int,
+    started_at: str | None = Form(None),
+    ended_at: str | None = Form(None),
+    description: str | None = Form(None),
+    speed: str | None = Form(None),
+    log_group: str | None = Form(None),
+    notes: str | None = Form(None),
+    conn: sqlite3.Connection = Depends(get_conn),
+    now: datetime = Depends(get_now),
+) -> Response:
+    """Correct a line of the log, and redraw the day it belongs to.
+
+    Registered for POST as well as PATCH, like the exercise edit: HTML forms
+    send neither PATCH nor anything else HTMX might prefer.
+    """
+    entry = repo.get_entry(conn, entry_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="no entry with that id")
+    try:
+        amended = session.amend_entry(
+            conn,
+            entry_id=entry_id,
+            started_at=_at(started_at, entry.started_at),
+            ended_at=_at(ended_at, entry.ended_at),
+            description=description,
+            speed=speed,
+            log_group=log_group,
+            notes=notes,
+        )
+    except session.EntryRunning:
+        raise HTTPException(
+            status_code=409, detail="that entry is the running clock"
+        ) from None
+    except ValueError as unreadable:
+        raise HTTPException(status_code=400, detail=str(unreadable)) from None
+
+    if practice_day_for(amended.started_at) == practice_day_for(now):
+        return fragment_or_redirect(request, _log_fragments(conn, now=now))
+    return fragment_or_redirect(request, _day_fragment(conn, amended, now=now))
+
+
 @router.post("/entries/{entry_id}/stop")
 def stop_entry(
     request: Request,
@@ -143,6 +190,28 @@ def stop_entry(
     except session.UnknownEntry:
         raise HTTPException(status_code=404, detail="no entry with that id") from None
     return fragment_or_redirect(request, _log_fragments(conn, now=now))
+
+
+def _day_fragment(
+    conn: sqlite3.Connection, entry: PracticeEntry, *, now: datetime
+) -> str:
+    """The finished day an amended entry belongs to, totals and all."""
+    day = practice_day_for(entry.started_at)
+    return render("_day_block.html", summary=day_summary(conn, day=day, now=now))
+
+
+def _at(written: str | None, current: datetime | None) -> datetime | None:
+    """`22:46` on the date the entry already had, so midnight is not crossed.
+
+    An entry keeps the day it happened on: only the time of day is editable,
+    and an entry that ran to 00:20 keeps that end on the following date.
+    """
+    if written is None or current is None:
+        return None
+    try:
+        return datetime.combine(current.date(), time.fromisoformat(written.strip()))
+    except ValueError:
+        raise ValueError(f"cannot read the time {written!r}") from None
 
 
 def _log_fragments(conn: sqlite3.Connection, *, now: datetime) -> str:
