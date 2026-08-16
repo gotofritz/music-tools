@@ -19,6 +19,7 @@ from music_tools.domain.models import (
     DaySummary,
     DoneResult,
     GroupTotal,
+    LogResult,
     PracticeDay,
     PracticeEntry,
     RestartResult,
@@ -33,6 +34,10 @@ END_OF_DAY_HOUR = 4
 
 class UnknownExercise(LookupError):
     """No exercise with that id."""
+
+
+class UnknownEntry(LookupError):
+    """No day-log entry with that id."""
 
 
 def practice_day_for(now: datetime) -> date:
@@ -131,6 +136,62 @@ def mark_done(
         )
         opened = repo.create_entry(conn, day_id=day.id, started_at=now)
         return DoneResult(exercise=updated, closed=closed, opened=opened)
+
+
+def log_entry(
+    conn: sqlite3.Connection,
+    *,
+    description: str,
+    now: datetime,
+    log_group: str | None = None,
+    speed: str | None = None,
+    notes: str | None = None,
+) -> LogResult:
+    """Log something that is not in the catalogue: a warm-up, a jam, a lesson.
+
+    `mark_done` without the schedule half — the running entry is closed with
+    what was played written into it, and the next one opens at the same
+    instant, so the session still tiles end to end.
+    """
+    with transaction(conn):
+        day = _start_day(conn, now=now)
+        running = repo.running_entry(conn, day_id=day.id)
+        if running is None:  # pragma: no cover - _start_day just opened one
+            running = repo.create_entry(conn, day_id=day.id, started_at=now)
+        closed = repo.close_entry(
+            conn,
+            running.id,
+            ended_at=now,
+            description=description,
+            log_group=log_group,
+            speed=speed,
+            notes=notes,
+        )
+        opened = repo.create_entry(conn, day_id=day.id, started_at=now)
+        return LogResult(closed=closed, opened=opened)
+
+
+def stop_clock(
+    conn: sqlite3.Connection, *, entry_id: int, now: datetime
+) -> PracticeEntry | None:
+    """Stop the clock: the session is over, and nothing follows this entry.
+
+    An entry that already says what was played is closed at `now`. The running
+    one never does — `mark_done` writes the description as it closes a line,
+    not as it opens the next — so stopping discards it. That is the same rule
+    `restart_clock` follows: time nobody attributed is not practice time, and
+    the app will not invent an attribution for it.
+    """
+    with transaction(conn):
+        entry = repo.get_entry(conn, entry_id)
+        if entry is None:
+            raise UnknownEntry(entry_id)
+        if entry.ended_at is not None:
+            return entry
+        if entry.description:
+            return repo.close_entry(conn, entry.id, ended_at=now)
+        repo.delete_entry(conn, entry.id)
+        return None
 
 
 def entry_duration(entry: PracticeEntry, *, now: datetime | None = None) -> int:

@@ -84,6 +84,13 @@ class DoneResult(BaseModel):
     opened: PracticeEntry
 
 
+class LogResult(BaseModel):
+    """What logging an ad-hoc entry did: one line closed, the next opened."""
+
+    closed: PracticeEntry
+    opened: PracticeEntry
+
+
 class RestartResult(BaseModel):
     """What `restart_clock` did: a fresh entry, and the gap it threw away."""
 

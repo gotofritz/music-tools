@@ -22,11 +22,20 @@ def default_db_path() -> Path:
     return Path(override) if override else DEFAULT_DB_PATH
 
 
-def open_db(path: str | Path) -> sqlite3.Connection:
-    """Open (creating if needed) a practice database with the pragmas set."""
+def open_db(path: str | Path, *, check_same_thread: bool = True) -> sqlite3.Connection:
+    """Open (creating if needed) a practice database with the pragmas set.
+
+    `check_same_thread=False` is for the web app, whose request handlers are
+    run on a thread pool: a connection is opened and closed within one
+    request, but not necessarily on the thread that opened it. Nothing shares
+    a connection across requests, which is the thing the check is guarding
+    against.
+    """
     if path != ":memory:":
         Path(path).parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path, isolation_level=None)
+    conn = sqlite3.connect(
+        path, isolation_level=None, check_same_thread=check_same_thread
+    )
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA journal_mode = WAL")

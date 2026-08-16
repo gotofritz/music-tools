@@ -129,6 +129,16 @@ def delete_module(
 # --- rows -------------------------------------------------------------------
 
 
+def add_exercise(
+    conn: sqlite3.Connection, *, module_id: int, name: str, **fields
+) -> Exercise:
+    """Add a row to a module, refusing a name the module already uses."""
+    module = _module(conn, module_id)
+    if repo.find_exercises(conn, name, module_id=module.id):
+        raise InUse(f"there is already a row called {name} here")
+    return repo.create_exercise(conn, module_id=module.id, name=name, **fields)
+
+
 def update_exercise(conn: sqlite3.Connection, exercise_id: int, **fields) -> Exercise:
     """Edit a row. The day log is a snapshot and does not follow."""
     exercise = _exercise(conn, exercise_id)
