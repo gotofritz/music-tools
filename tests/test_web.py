@@ -8,7 +8,7 @@ The clock and the rng are dependencies, overridden here the way `cli.py`
 injects them, so a test can pin "now" without `freezegun`.
 """
 
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time
 
 import pytest
 from fastapi.testclient import TestClient
@@ -177,9 +177,7 @@ def test_a_form_post_without_htmx_redirects_back_to_the_page(client):
     assert response.headers["location"] == "/"
 
 
-def test_the_log_renders_in_start_order_with_the_sheets_subtotals(
-    client, sample_block
-):
+def test_the_log_renders_in_start_order_with_the_sheets_subtotals(client, sample_block):
     page = client.get("/").text
 
     assert page.index("019 Tempo Builder") < page.index("le freak")
@@ -203,9 +201,7 @@ def test_the_running_entry_counts_up_to_now(client, conn, sample_block):
     assert "00:20" in page  # 22:27 to the pinned 22:47
 
 
-def test_what_is_due_is_listed_and_what_is_not_is_left_out(
-    client, le_freak, espresso
-):
+def test_what_is_due_is_listed_and_what_is_not_is_left_out(client, le_freak, espresso):
     page = client.get("/").text
 
     assert "le freak" in page  # overdue since 2026-07-01
@@ -408,7 +404,9 @@ def test_setting_a_target_re_resolves_every_percentage_on_the_row(
 def test_renaming_a_row_does_not_rewrite_the_log(client, conn, le_freak):
     client.post(f"/exercises/{le_freak.id}/done", headers=hx())
 
-    client.patch(f"/exercises/{le_freak.id}", data={"name": "Le Freak (Chic)"}, headers=hx())
+    client.patch(
+        f"/exercises/{le_freak.id}", data={"name": "Le Freak (Chic)"}, headers=hx()
+    )
 
     day = repo.get_day(conn, TODAY)
     assert day is not None
@@ -467,3 +465,20 @@ def test_adding_a_row_that_is_already_there_is_refused(client, songs, le_freak):
     )
 
     assert response.status_code == 409
+
+
+def test_a_new_row_is_due_straight_away(client, conn, songs):
+    """A row added mid-session is something to play now, not an undated one.
+
+    `exercises_due` drops rows with no due date, so a row added through the
+    page would never reach today's list — which is where it was added from.
+    """
+    client.post(
+        "/exercises",
+        data={"module_id": str(songs.id), "name": "love me jeje"},
+        headers=hx(),
+    )
+
+    added = repo.find_exercises(conn, "love me jeje")
+    assert [row.next_due for row in added] == [TODAY]
+    assert "love me jeje" in client.get("/").text

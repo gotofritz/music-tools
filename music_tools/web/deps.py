@@ -12,11 +12,12 @@ is happy with that, and it keeps the app free of any long-lived global state —
 import random
 import sqlite3
 from collections.abc import Iterator
-from datetime import date, datetime
+from datetime import datetime
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlsplit
 
-from fastapi import Depends, Request
+from fastapi import Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
@@ -27,7 +28,6 @@ from music_tools.domain.session import (
     format_due,
     format_duration,
     format_when,
-    practice_day_for,
 )
 from music_tools.domain.tempo import format_tempo, parse_tempo
 
@@ -54,14 +54,11 @@ def get_rng() -> random.Random:
     return random.Random()
 
 
-def get_today(now: datetime = Depends(get_now)) -> date:
-    """Which practice day we are in, at the 4am boundary."""
-    return practice_day_for(now)
-
-
 def tempo_text(exercise: Exercise) -> str:
     """`88 BPM (66%)` when the row has a target, the raw text when it does not."""
-    return format_tempo(parse_tempo(exercise.speed or "", target_bpm=exercise.target_bpm))
+    return format_tempo(
+        parse_tempo(exercise.speed or "", target_bpm=exercise.target_bpm)
+    )
 
 
 def duration_text(entry: PracticeEntry, now: datetime | None) -> str:
@@ -76,13 +73,14 @@ def _environment() -> Environment:
         trim_blocks=True,
         lstrip_blocks=True,
     )
-    env.globals.update(
-        format_due=format_due,
-        format_duration=format_duration,
-        format_when=format_when,
-        tempo_text=tempo_text,
-        duration_text=duration_text,
-    )
+    helpers: dict[str, Any] = {
+        "format_due": format_due,
+        "format_duration": format_duration,
+        "format_when": format_when,
+        "tempo_text": tempo_text,
+        "duration_text": duration_text,
+    }
+    env.globals.update(helpers)
     return env
 
 

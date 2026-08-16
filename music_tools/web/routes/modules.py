@@ -14,6 +14,7 @@ from fastapi.responses import HTMLResponse, Response
 from music_tools.db import repository as repo
 from music_tools.domain import catalogue
 from music_tools.domain.models import Exercise, Module
+from music_tools.domain.session import practice_day_for
 from music_tools.domain.tempo import format_tempo, parse_tempo
 from music_tools.web import views
 from music_tools.web.deps import fragment_or_redirect, get_conn, get_now, render
@@ -53,12 +54,15 @@ def edit_exercise(
     now: datetime = Depends(get_now),
 ) -> Response:
     """Edit a row in place, and hand back the row as it now reads."""
-    fields = _fields(name=name, speed=speed, target_bpm=target_bpm, style=style,
-                     notes=notes)
+    fields = _fields(
+        name=name, speed=speed, target_bpm=target_bpm, style=style, notes=notes
+    )
     try:
         exercise = catalogue.update_exercise(conn, exercise_id, **fields)
     except catalogue.NotFound:
-        raise HTTPException(status_code=404, detail="no exercise with that id") from None
+        raise HTTPException(
+            status_code=404, detail="no exercise with that id"
+        ) from None
     except catalogue.InUse as clash:
         raise HTTPException(status_code=409, detail=str(clash)) from None
     return fragment_or_redirect(request, _row(conn, exercise, now=now))
@@ -76,11 +80,20 @@ def add_exercise(
     conn: sqlite3.Connection = Depends(get_conn),
     now: datetime = Depends(get_now),
 ) -> Response:
-    """Add a row to a module. New rows have no due date and so are due now."""
+    """Add a row to a module, due today.
+
+    `exercises_due` drops rows with no due date, so an undated row would never
+    reach today's list — which is where it was typed in from. A row added mid
+    session is something to play now.
+    """
     fields = _fields(speed=speed, target_bpm=target_bpm, style=style, notes=notes)
     try:
         exercise = catalogue.add_exercise(
-            conn, module_id=module_id, name=name, **fields
+            conn,
+            module_id=module_id,
+            name=name,
+            next_due=practice_day_for(now),
+            **fields,
         )
     except catalogue.NotFound:
         raise HTTPException(status_code=404, detail="no module with that id") from None

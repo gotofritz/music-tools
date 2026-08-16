@@ -40,9 +40,9 @@ from music_tools.domain.scheduling import Algorithm
 from music_tools.domain.session import (
     day_summary,
     entry_duration,
-    format_due as _due_column,
+    format_due,
     format_duration,
-    format_when as _when,
+    format_when,
     mark_done,
     practice_day_for,
     restart_clock,
@@ -93,7 +93,7 @@ def module_list(ctx: click.Context, archived: bool) -> None:
             f"{row.module.name:<14} {row.module.log_group:<12}"
             f" {_plural(row.exercises, 'row'):<10}"
             f" {row.due} due"
-            f"   next {_due_column(row.next_due)}{state}"
+            f"   next {format_due(row.next_due)}{state}"
         )
 
 
@@ -284,7 +284,7 @@ def edit_exercise(
         updated = update_exercise(conn, found.id, **fields)
     click.echo(
         f"{_module_name(conn, updated)}/{updated.name}"
-        f"  {_tempo(updated)}  due {_due_column(updated.next_due)}"
+        f"  {_tempo(updated)}  due {format_due(updated.next_due)}"
     )
 
 
@@ -422,8 +422,8 @@ def done(
     today = practice_day_for(now)
     click.echo(
         f"{updated.name} done — practised {updated.practiced_count} times,"
-        f" next due {_due_column(updated.next_due)}"
-        f" ({_when(updated.next_due, today)})"
+        f" next due {format_due(updated.next_due)}"
+        f" ({format_when(updated.next_due, today)})"
     )
     entry = result.closed
     click.echo(
@@ -449,6 +449,24 @@ def start(ctx: click.Context) -> None:
     if result.dropped_seconds:
         dropped = f" — {format_duration(result.dropped_seconds)} of break not logged"
     click.echo(f"clock running from {now:%H:%M}{dropped}")
+
+
+@practice.command("serve")
+@click.option("--host", default="127.0.0.1", show_default=True)
+@click.option("--port", default=8765, show_default=True)
+@click.option(
+    "--browser/--no-browser", default=True, help="Open a browser on the page."
+)
+@click.pass_context
+def serve_command(ctx: click.Context, host: str, port: int, browser: bool) -> None:
+    """Practise from a browser page instead of the terminal.
+
+    Loopback only: one player, one machine, no accounts, and no network
+    needed — `htmx.min.js` is served from the package, not a CDN.
+    """
+    from music_tools.web.app import serve
+
+    serve(ctx.obj, host=host, port=port, open_browser=browser)
 
 
 @practice.group()
@@ -602,8 +620,8 @@ def _find_module(
 def _row_line(exercise: Exercise, today: date) -> str:
     """One row of a module's queue, without repeating the module's name."""
     return (
-        f"  {_due_column(exercise.next_due):<12}"
-        f" {_when(exercise.next_due, today):<16}"
+        f"  {format_due(exercise.next_due):<12}"
+        f" {format_when(exercise.next_due, today):<16}"
         f" {exercise.name:<26}"
         f" {_tempo(exercise):<20} x{exercise.practiced_count}"
     )
