@@ -345,3 +345,19 @@ def test_import_says_which_file_it_cannot_find(run):
 
     assert result.exit_code != 0
     assert "/no/such/sheet.tsv" in result.output
+
+
+def test_help_answers_to_both_spellings(run):
+    """`loop` already takes -h; the tracker should not be the odd one out."""
+    short = run("-h")
+    long = run("--help")
+
+    assert short.exit_code == 0
+    assert short.output == long.output
+
+
+def test_subcommands_take_the_short_help_too(run):
+    result = run("done", "-h")
+
+    assert result.exit_code == 0
+    assert "Mark an exercise practised" in result.output

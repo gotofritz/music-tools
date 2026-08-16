@@ -271,7 +271,7 @@ def create_output(
     return output
 
 
-@click.command()
+@click.command(context_settings={"help_option_names": ["-h", "--help"]})
 @click.option("--config", "-c", type=click.Path(exists=True))
 def main(
     config: str,
