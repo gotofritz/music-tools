@@ -182,3 +182,18 @@ select {
 .load-more:focus {
   border-color: var(--ink);
 }
+
+button.remove {
+  color: var(--overdue);
+}
+
+.edit-day {
+  font-size: 0.8rem;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.edit-day:hover,
+.edit-day:focus {
+  color: var(--ink);
+}

@@ -213,13 +213,18 @@ and a wrong correction costs a wrong number about a tune:
   of step.
 - **Nothing re-tiles.** Shortening an entry leaves a gap, and a gap is time
   that is not in the total — the same rule as everywhere else here.
-- **Nothing is deleted.** A line can be emptied; the day keeps its place.
+- **A line can be removed** (`delete_entry`), for the block that should never
+  have been written down — a session logged twice, or against the wrong thing
+  entirely. Correcting it is the usual move; removing it is for when there is
+  nothing to correct. The day itself stays, empty totals and all.
 
 **Editing is per day and asked for.** `GET /days/{day}/edit` redraws that one
-day with boxes round its lines, `GET /days/{day}` puts it back, and both are
-real links so the toggle survives the JavaScript being off. The default is
-read-only because the log is mostly read: a page of input boxes reads like a
-form rather than a record of practice.
+day with boxes round its lines and a **remove** button on each, `GET /days/{day}`
+puts it back, and both are real links so the toggle survives the JavaScript
+being off. The default is read-only because the log is mostly read: a page of
+input boxes reads like a form rather than a record of practice. Removal is
+`DELETE /entries/{id}`, with `POST /entries/{id}/delete` as the same handler
+for a form, and `hx-confirm` in front of it.
 
 `description`, `speed`, `bpm` and `log_group` on an entry are **snapshots**: the
 log is a record and must not change when an exercise is renamed, retuned or

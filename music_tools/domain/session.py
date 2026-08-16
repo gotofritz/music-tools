@@ -293,6 +293,24 @@ def amend_entry(
         return repo.update_entry(conn, entry.id, **given) if given else entry
 
 
+def delete_entry(conn: sqlite3.Connection, *, entry_id: int) -> None:
+    """Take a line out of the log altogether.
+
+    For the block that should never have been written down — a session logged
+    twice, or against the wrong thing entirely. Correcting the line is the
+    usual move (`amend_entry`); this is for when there is nothing to correct.
+    The running entry is refused for the same reason it cannot be amended:
+    that one is the clock, and `stop_clock` is what drops it.
+    """
+    with transaction(conn):
+        entry = repo.get_entry(conn, entry_id)
+        if entry is None:
+            raise UnknownEntry(entry_id)
+        if entry.ended_at is None:
+            raise EntryRunning(entry_id)
+        repo.delete_entry(conn, entry.id)
+
+
 def recent_days(
     conn: sqlite3.Connection, *, before: date, limit: int, now: datetime | None = None
 ) -> list[DaySummary]:
