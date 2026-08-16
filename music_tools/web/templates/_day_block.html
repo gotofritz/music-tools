@@ -1,5 +1,10 @@
-{# One finished day of the log: what was played, and what it added up to. #}
-<article class="day">
+{# One finished day of the log: what was played, and what it added up to.
+
+   The whole block is what an edit redraws, so the heading's totals cannot
+   drift away from the lines underneath them. #}
+{% set entry_target = "#day-" ~ summary.day.isoformat() %}
+{% set live = None %}{# a finished day counts up to nothing #}
+<article class="day" id="day-{{ summary.day.isoformat() }}">
   <h3><time datetime="{{ summary.day.isoformat() }}">{{ summary.day.isoformat() }}</time>
     <span class="time">{{ format_duration(summary.total_seconds) }}</span>
     {% for group in summary.groups %}
@@ -9,15 +14,7 @@
   <table>
     <tbody>
       {% for entry in summary.entries %}
-      <tr>
-        <td>{{ entry.started_at.strftime("%H:%M") }}</td>
-        <td>{% if entry.ended_at %}{{ entry.ended_at.strftime("%H:%M") }}{% else %}—{% endif %}</td>
-        <td>{{ duration_text(entry, None) }}</td>
-        <td>{{ entry.description }}{% if entry.notes %}
-          <span class="note">({{ entry.notes }})</span>{% endif %}</td>
-        <td>{{ entry.speed or "" }}</td>
-        <td>{{ entry.log_group or "" }}</td>
-      </tr>
+      {% include "_entry_row.html" %}
       {% endfor %}
     </tbody>
   </table>

@@ -102,9 +102,16 @@ starts it without opening a window.
 - **Earlier** is the five days before it, newest first, each with what you
   played, its subtotals and its total. **load more** adds the next five. There
   is no date picker and no search: it is a log, and you read it backwards.
+- **Every finished line is editable, today's and any earlier day's.** Change
+  the times, what you played, the speed, the group or the notes, and press
+  **save** — the day redraws with its totals worked out again. Use it for the
+  clock you left running through supper, or a name typed in a hurry.
 - What is **due** is not here — it lives on the module pages, one click away in
   the bar at the top, because a queue belongs to the module it is scheduled
   in.
+- The line that is **running** has no boxes: that one is the clock, and
+  **done** and **stop the clock** are what move it. It becomes editable once
+  it is closed, like every other line.
 - The clock in the top corner says whether time is being counted, and
   **stop the clock** ends the session. The stretch since the last thing you
   marked done is not logged: nobody said what it was, so it is not practice
@@ -132,7 +139,14 @@ At the bottom of a module page is **add a row**. Anything added there is due
 straight away, so it is at the top of that module's queue rather than waiting
 for a date you have to type.
 
-Editing a row never rewrites the day log, here or on the command line.
+Editing a row never rewrites the day log, here or on the command line — what
+you played last Tuesday is still called what it was called last Tuesday. The
+log is corrected on its own, line by line, in the pages above.
+
+Two things editing the log will not do. A line stays on the day it happened
+on, so a session logged against the wrong evening cannot be dragged to another
+one. And nothing is deleted: a line you no longer want can be emptied, but the
+day it belongs to keeps its place in the history.
 
 The page and the commands are two doors into one file, so you can use both in
 the same session: mark something done in the browser and `practice log` in the

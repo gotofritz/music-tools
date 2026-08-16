@@ -199,6 +199,17 @@ is empty or `force`d, and refuses either way once any of its rows has been
 practised. The rule is that the day log is a record — the catalogue may not
 punch holes in it.
 
+The log is written as practice happens, and it can be corrected afterwards:
+`amend_entry` rewrites the fields it is passed on one finished entry. That
+reverses `03-web.md`, which left the log read-only on the grounds that a log
+you can rewrite casually is a log you cannot trust; the trust is kept by the
+narrowness instead. An entry stays on the day it happened on, nothing is
+deleted, and the **running** entry is refused outright (`EntryRunning`) —
+that one is the clock, `mark_done` and `stop_clock` write it, and a hand-edit
+would put the two out of step. Times are passed whole, so an entry that
+crossed midnight keeps both its dates, and nothing re-tiles: a correction may
+leave a gap, and a gap is time that is simply not in the total.
+
 `description`, `speed`, `bpm` and `log_group` on an entry are **snapshots**: the
 log is a record and must not change when an exercise is renamed, retuned or
 moved. Durations, subtotals and day totals are **computed, never stored** —
