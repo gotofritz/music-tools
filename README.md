@@ -79,6 +79,18 @@ loaded from a CDN, and there is no Node in the build. Every action is a real
 `<form>` progressively enhanced with `hx-post`, so the app degrades to page
 reloads rather than dying when the JavaScript does.
 
+The vendored file is htmx 2.0.4, fetched once with `pnpm` outside the
+repository — there is no `package.json` here and there is not going to be one:
+
+```bash
+cd "$(mktemp -d)" && pnpm add htmx.org@2.0.4
+cp node_modules/htmx.org/dist/htmx.min.js \
+   ~/music-tools/music_tools/web/static/htmx.min.js
+```
+
+Upgrading it means running that with a newer version, checking the page still
+works, and saying so in the commit.
+
 `uv run loop --help` is the reference for the config format; the
 [user guide](docs/user-guide.md) is the same material written for a player.
 
