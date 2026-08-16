@@ -1,7 +1,8 @@
 {# Today's block. Swapped out of band after anything that logs time. #}
 {% set entry_target = "#day-log" %}
+{% set edit_day = day %}
 <section id="day-log"{% if oob %} hx-swap-oob="true"{% endif %}>
-  <h2>Log</h2>
+  <h2>Log {% if summary.entries %}{% include "_edit_toggle.html" %}{% endif %}</h2>
   {% if summary.entries %}
   <table>
     <thead>

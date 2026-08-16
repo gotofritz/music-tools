@@ -102,16 +102,17 @@ starts it without opening a window.
 - **Earlier** is the five days before it, newest first, each with what you
   played, its subtotals and its total. **load more** adds the next five. There
   is no date picker and no search: it is a log, and you read it backwards.
-- **Every finished line is editable, today's and any earlier day's.** Change
-  the times, what you played, the speed, the group or the notes, and press
-  **save** — the day redraws with its totals worked out again. Use it for the
-  clock you left running through supper, or a name typed in a hurry.
+- **edit**, beside a day, puts boxes round that day's lines — and only that
+  day's. Change the times, what you played, the speed, the group or the notes,
+  press **save**, and the day redraws with its totals worked out again. Fix as
+  many lines as you like; **done** puts the day back to plain reading. Use it
+  for the clock you left running through supper, or a name typed in a hurry.
 - What is **due** is not here — it lives on the module pages, one click away in
   the bar at the top, because a queue belongs to the module it is scheduled
   in.
-- The line that is **running** has no boxes: that one is the clock, and
-  **done** and **stop the clock** are what move it. It becomes editable once
-  it is closed, like every other line.
+- The line that is **running** gets no boxes even in edit mode: that one is
+  the clock, and **done** and **stop the clock** are what move it. It becomes
+  editable once it is closed, like every other line.
 - The clock in the top corner says whether time is being counted, and
   **stop the clock** ends the session. The stretch since the last thing you
   marked done is not logged: nobody said what it was, so it is not practice

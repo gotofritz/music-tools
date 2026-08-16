@@ -1,0 +1,11 @@
+{# In and out of edit mode for one day. A real link either way, so the page
+   works without JavaScript; with it, the day swaps in place. #}
+{% if editing %}
+<a class="edit-day" href="/days/{{ edit_day.isoformat() }}"
+   hx-get="/days/{{ edit_day.isoformat() }}"
+   hx-target="{{ entry_target }}" hx-swap="outerHTML">done</a>
+{% else %}
+<a class="edit-day" href="/days/{{ edit_day.isoformat() }}/edit"
+   hx-get="/days/{{ edit_day.isoformat() }}/edit"
+   hx-target="{{ entry_target }}" hx-swap="outerHTML">edit</a>
+{% endif %}
