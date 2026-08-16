@@ -3,6 +3,245 @@
 This guide is for playing, not programming. It assumes you can open a
 Terminal window and type into it, and nothing else.
 
+There are two tools, and they are heading towards being one:
+
+- **`practice`** keeps track of *what* to play — every exercise, how fast you
+  are playing it, when you last did it, and when it comes back. It is the
+  spreadsheet, as a program.
+- **`loop`** builds the practice track itself: a passage over and over with
+  bits of it replaced by silence.
+
+Part 1 below is `practice`. Part 2 is `loop`. Read whichever you need.
+
+Ask a developer to do the one-off setup in [README.md](../README.md#setup)
+first.
+
+---
+
+# Part 1 — Keeping track of what to practise
+
+**The module is the unit.** A module is a practice area — `SLAP`, `SONGS`,
+`TECHNIQUE` — one per sheet, back when this was a spreadsheet. Each one holds
+its own list of rows, ordered by the date each row is next due, and the modules
+never affect each other: a row is scheduled against the module it is in, and
+you ask one module at a time what to play.
+
+- A **row** (an **exercise**) belongs to exactly one module: a tune or a study,
+  with the speed you play it at, how many times you have practised it, and the
+  date it is next due.
+- The **day log** is what you actually did, in blocks of a day, with a subtotal
+  per **log group** (`TECHNIQUE`, `REPERTOIRE`) and a total for the day. The log
+  group is a property of the module, which is how a day's practice adds up
+  across several of them.
+
+Everything lives in one file: `~/.local/share/music-tools/practice.db`. Set
+`MUSIC_TOOLS_DB` to keep it somewhere else, or pass `--db` to any command.
+
+## A practice session
+
+```bash
+uv run practice start                # start the clock, or restart it
+uv run practice next SONGS           # what that module wants, most overdue first
+uv run practice done "le freak"      # played it — schedule it and log the time
+uv run practice log                  # today's block, with subtotals
+```
+
+`next MODULE` prints that module's rows, the most overdue first:
+
+```
+SONGS (REPERTOIRE) — 1 due of 4 rows
+  2026-12-03   3 days overdue   le freak      87.8 BPM (66%)   x12
+  2027-01-05   in 33 days       espresso      70%              x13
+```
+
+— the heading says how many of its rows are actually due today or earlier, then
+one line per row: the date it was due, how late that is, what speed you are
+playing it at, and how many times you have practised it.
+
+Bare `next` does the same for every module, one block each, because that is what
+modules are: separate lists that happen to live in the same file.
+
+`done` is the one that matters. It bumps the count, stamps today, works out
+when the exercise comes back, closes the entry that was running and starts the
+next one, all at once:
+
+```
+le freak done — practised 13 times, next due 2027-01-15 (in 153 days)
+logged 22:46-23:03  00:17  REPERTOIRE  87.8 BPM (66%)
+```
+
+You never type a start time. The clock runs from the last thing you finished,
+so entries tile the session end to end. A day ends at 4am, not midnight —
+practice past midnight belongs to the evening it started in.
+
+If a name exists in two modules, say which: `uv run practice done SONGS/"le
+freak"`. If you mistype it, the message lists the near misses.
+
+## Coming back after a break
+
+Following on from the last thing is right most of the time and wrong after a
+break: the coffee, the phone call and the walk round the block would all be
+logged against whatever you play next. So when you sit down again:
+
+```bash
+uv run practice start
+```
+
+```
+clock running from 23:40 — 00:37 of break not logged
+```
+
+The clock now runs from this moment, and the gap is gone — it was not practice,
+so it is not in the log and not in the day's total. Nothing that was already
+logged is touched.
+
+`start` also opens the day if there is not one yet, so on an ordinary evening
+it does the same job as `day new` and you can use either.
+
+## How fast you are playing it
+
+The speed column understands two dialects, because Transcribe! counts in
+percentages and metronomes count in BPM:
+
+| You type | It means | At a target of 133 |
+| --- | --- | --- |
+| `123` | 123 BPM | 123 |
+| `123/1` | the same, spelled out | 123 |
+| `123/2` | 123 a minute, one every 2nd beat | 246 |
+| `123/0.5` | 123 a minute, one every half beat | 61.5 |
+| `66%` | 66% of what you are aiming at | 87.8 |
+
+```bash
+uv run practice speed "le freak" 85%
+uv run practice speed "le freak" 85% --target-bpm 133
+```
+
+The **target** is the tempo the exercise is aiming at — the tune's real tempo,
+or the marking on the page. It is worth filling in, because it is what makes
+the two dialects comparable, and because **an exercise you are playing under
+tempo comes back sooner**. At 80% of target the interval is 80% as long. Past
+the target nothing shrinks further.
+
+Anything the app cannot read — `fast`, `medium-ish`, an empty cell — is kept
+exactly as you typed it and simply does not affect the schedule.
+
+## When it comes back
+
+Intervals grow the way they did in the spreadsheet: 1, 1, 2, 3, 5, 8, 13, 21,
+34, 55, 89 days and on up to a ceiling of 120, with a few percent of jitter so
+everything does not pile up on the same day. Four variations, when the default
+is wrong:
+
+| Command | What it does |
+| --- | --- |
+| `practice done X` | the normal interval |
+| `practice done X --short` | half of it — this one is not sticking |
+| `practice done X --long` | half again as long — this one is solid |
+| `practice done X --rotate` | to the back of this module's queue |
+| `practice done X --hold` | to the front: practised, but not learned |
+
+## Looking after the modules
+
+```bash
+uv run practice module list                    # every module: how many rows, how many due
+uv run practice module show SONGS              # one module in full, due or not
+uv run practice module add SLAP --log-group TECHNIQUE
+uv run practice module rename SLAP "BASS SLAP"
+uv run practice module edit SLAP --log-group TECHNIQUE --position 1
+```
+
+`module list` is the "where am I?" command — run it before deciding which module
+to sit down with:
+
+```
+SONGS          REPERTOIRE   4 rows     1 due   next 2026-11-14
+SLAP           TECHNIQUE    9 rows     3 due   next 2026-08-12
+```
+
+One line per module: its name, the day-log bucket its time counts towards, how
+many rows are in it, how many of those are due today or earlier, and the date
+the next one falls due. A `—` in the last column means nothing in that module
+has a date yet. Archived modules are left out; `module list --archived` shows
+them too.
+
+`module show MODULE` then prints that module's rows in full, however many there
+are — `next` stops at ten. `module show SLAP --archived` includes the rows you
+have archived.
+
+`--position` is the order the modules are listed in. `--log-group` is which
+bucket the module's time subtotals into in the day log.
+
+## Adding and changing rows
+
+```bash
+uv run practice add SLAP "Stomp!" --speed 80% --target-bpm 133 --due 2026-09-01
+uv run practice edit "Stomp!" --name "Stomp! (Godsmack)" --speed 85% --count 4
+uv run practice speed "Stomp!" 85%             # shorthand for edit --speed
+```
+
+Editing a row never rewrites the day log. What you played last Tuesday was
+called what it was called last Tuesday.
+
+## Putting things away
+
+Two ways, and the difference matters:
+
+```bash
+uv run practice archive "Stomp!"        # out of the module, still in the log
+uv run practice restore "Stomp!"
+uv run practice module archive SLAP     # the module and all its rows at once
+uv run practice module restore SLAP
+
+uv run practice delete "Stomp!"         # gone, and only for mistakes
+uv run practice module delete SLAP [--force]
+```
+
+**Archiving is the normal move.** The row leaves the module's list and stops
+turning up in `next`, and everything it did is still in the day log and still
+adds up. Archiving a module takes all of its rows out in one go.
+
+**Deleting is for mistakes** — the module you named wrong five minutes ago. It
+is refused for anything the day log points at, and tells you to archive it
+instead; a log with a hole in it is worse than a module you have stopped using.
+`module delete --force` takes the rows with it, and is refused just the same
+once any of them has been practised.
+
+## Bringing the spreadsheet over
+
+Export each sheet from Google Sheets (**File → Download → Tab-separated
+values**) and point the importer at them:
+
+```bash
+uv run practice import --modules "BASS SONGS.csv" --modules "BASS SLAP.csv" \
+                       --day-log "BASS.csv"
+```
+
+The file name gives the module — `BASS SONGS.csv` becomes the module `SONGS`,
+since every sheet in the export is named `BASS <something>` — and the top-left
+cell gives its log group. Practice
+counts, dates and speeds all come over as they are, so nothing in the schedule
+shifts on the day you switch. Running it twice changes nothing, so you can
+re-export and re-import as often as you like. Anything it cannot read is listed
+at the end rather than dropped in silence.
+
+## Keeping a copy
+
+The spreadsheet gave you version history for free and a file on your disk does
+not:
+
+```bash
+uv run practice db dump    # writes backups/practice.sql
+```
+
+(or `task db:dump`, which is the same thing)
+
+That is plain text, one line per row, so it can live in a git repository and be
+read in a diff.
+
+---
+
+# Part 2 — Building a practice track
+
 ## What the tool does
 
 You have a tricky four bars. You can play them slowly. You cannot play them
@@ -26,9 +265,7 @@ it replaces, so the pulse never moves.
 - **A settings file.** A short text file, ending in `.yml`, where you say
   what you want. This guide is mostly about writing that.
 
-Ask a developer to do the one-off setup on page
-[README.md](../README.md#setup) first. After that you only ever type one
-command.
+After the one-off setup you only ever type one command.
 
 ## Marking up the snippet
 
