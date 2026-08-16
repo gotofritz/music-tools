@@ -696,3 +696,75 @@ def test_an_unreadable_time_is_refused_rather_than_guessed(client, conn, sample_
 
 def test_amending_an_entry_that_is_not_there_is_404(client):
     assert client.patch("/entries/404", data={"speed": "90"}).status_code == 404
+
+
+# --- taking a line out of the log -------------------------------------------
+
+
+def test_a_line_can_be_removed_while_the_day_is_open_for_editing(
+    client, conn, sample_block
+):
+    entry = repo.entries_for_day(conn, sample_block.id)[0]  # 22:27-22:34, 00:07
+
+    response = client.delete(f"/entries/{entry.id}", headers=hx())
+
+    assert response.status_code == 200
+    assert repo.get_entry(conn, entry.id) is None
+    assert "019 Tempo Builder" not in response.text
+    assert "00:46" in response.text  # the day total, seven minutes lighter
+
+
+def test_removing_a_line_from_an_earlier_day_redraws_that_day(
+    client, conn, earlier_days
+):
+    day = repo.get_day(conn, date(2026, 6, 6))
+    assert day is not None
+    entry = repo.entries_for_day(conn, day.id)[0]
+
+    response = client.delete(f"/entries/{entry.id}", headers=hx())
+
+    assert 'id="day-2026-06-06"' in response.text
+    assert "00:00" in response.text  # nothing left on it
+    assert repo.get_entry(conn, entry.id) is None
+
+
+def test_the_remove_button_is_only_there_in_edit_mode_and_asks_first(
+    client, conn, earlier_days
+):
+    day = repo.get_day(conn, date(2026, 6, 6))
+    assert day is not None
+    entry = repo.entries_for_day(conn, day.id)[0]
+
+    plain = client.get("/days/2026-06-06", headers=hx()).text
+    editing = client.get("/days/2026-06-06/edit", headers=hx()).text
+
+    assert f"/entries/{entry.id}/delete" not in plain
+    assert f'action="/entries/{entry.id}/delete"' in editing
+    assert "hx-confirm" in editing  # one click from gone is one click too few
+
+
+def test_a_plain_form_post_removes_a_line_too(client, conn, sample_block):
+    """No JavaScript: HTML forms cannot send DELETE, so POST does it."""
+    entry = repo.entries_for_day(conn, sample_block.id)[0]
+
+    response = client.post(f"/entries/{entry.id}/delete", headers=hx())
+
+    assert response.status_code == 200
+    assert repo.get_entry(conn, entry.id) is None
+
+
+def test_the_running_line_cannot_be_removed(client, conn):
+    client.post("/days", headers=hx())
+    day = repo.get_day(conn, TODAY)
+    assert day is not None
+    running = repo.running_entry(conn, day_id=day.id)
+    assert running is not None
+
+    response = client.delete(f"/entries/{running.id}", headers=hx())
+
+    assert response.status_code == 409
+    assert repo.get_entry(conn, running.id) is not None
+
+
+def test_removing_a_line_that_is_not_there_is_404(client):
+    assert client.delete("/entries/404", headers=hx()).status_code == 404

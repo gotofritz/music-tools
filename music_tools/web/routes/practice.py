@@ -199,16 +199,33 @@ def amend_entry(
 
     # Still editing afterwards: the line below this one may be wrong too.
     day = practice_day_for(amended.started_at)
-    if day == practice_day_for(now):
-        return fragment_or_redirect(
-            request, _log_fragments(conn, now=now, editing=True)
-        )
+    return fragment_or_redirect(request, _amended_day(conn, day=day, now=now))
+
+
+@router.api_route("/entries/{entry_id}", methods=["DELETE"])
+@router.post("/entries/{entry_id}/delete")
+def remove_entry(
+    request: Request,
+    entry_id: int,
+    conn: sqlite3.Connection = Depends(get_conn),
+    now: datetime = Depends(get_now),
+) -> Response:
+    """Take a line out of the log, and redraw the day without it.
+
+    HTMX sends the `DELETE`; the `/delete` path is the same handler for a
+    plain form, which can only manage GET and POST.
+    """
+    entry = repo.get_entry(conn, entry_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="no entry with that id")
+    try:
+        session.delete_entry(conn, entry_id=entry_id)
+    except session.EntryRunning:
+        raise HTTPException(
+            status_code=409, detail="that entry is the running clock"
+        ) from None
     return fragment_or_redirect(
-        request,
-        render(
-            "_day_block.html",
-            **views.day_context(conn, now=now, day=day, editing=True),
-        ),
+        request, _amended_day(conn, day=practice_day_for(entry.started_at), now=now)
     )
 
 
@@ -225,6 +242,15 @@ def stop_entry(
     except session.UnknownEntry:
         raise HTTPException(status_code=404, detail="no entry with that id") from None
     return fragment_or_redirect(request, _log_fragments(conn, now=now))
+
+
+def _amended_day(conn: sqlite3.Connection, *, day: date, now: datetime) -> str:
+    """The day a correction landed on, still open for the next one."""
+    if day == practice_day_for(now):
+        return _log_fragments(conn, now=now, editing=True)
+    return render(
+        "_day_block.html", **views.day_context(conn, now=now, day=day, editing=True)
+    )
 
 
 def _day_view(

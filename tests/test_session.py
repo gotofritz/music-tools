@@ -17,6 +17,7 @@ from music_tools.domain.session import (
     UnknownEntry,
     amend_entry,
     day_summary,
+    delete_entry,
     entry_duration,
     format_duration,
     mark_done,
@@ -536,3 +537,23 @@ def test_the_running_entry_is_not_amended_here(db, logged):
 def test_amending_something_that_is_not_there_is_an_error(db):
     with pytest.raises(UnknownEntry):
         amend_entry(db, entry_id=404, description="nothing")
+
+
+def test_a_line_can_be_taken_out_of_the_log(db, logged):
+    entry = repo.entries_for_day(db, logged.day_id)[0]
+
+    delete_entry(db, entry_id=entry.id)
+
+    assert repo.get_entry(db, entry.id) is None
+    assert day_summary(db, day=NOW.date()).total_seconds == 0
+
+
+def test_the_running_line_is_not_deleted_by_hand(db, logged):
+    """The clock again: `stop` drops it, and knows what that means."""
+    with pytest.raises(EntryRunning):
+        delete_entry(db, entry_id=logged.id)
+
+
+def test_deleting_something_that_is_not_there_is_an_error(db):
+    with pytest.raises(UnknownEntry):
+        delete_entry(db, entry_id=404)

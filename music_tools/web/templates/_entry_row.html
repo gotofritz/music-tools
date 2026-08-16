@@ -34,6 +34,12 @@
              aria-label="log group" placeholder="group">
       <button type="submit">save</button>
     </form>
+    <form action="/entries/{{ entry.id }}/delete" method="post"
+          hx-delete="/entries/{{ entry.id }}"
+          hx-target="{{ entry_target }}" hx-swap="outerHTML"
+          hx-confirm="Remove this line from the log?">
+      <button type="submit" class="remove">remove</button>
+    </form>
   </td>
   {% elif entry.ended_at %}
   <td>{{ entry.started_at.strftime("%H:%M") }}</td>
