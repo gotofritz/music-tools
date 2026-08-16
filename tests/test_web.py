@@ -768,3 +768,51 @@ def test_the_running_line_cannot_be_removed(client, conn):
 
 def test_removing_a_line_that_is_not_there_is_404(client):
     assert client.delete("/entries/404", headers=hx()).status_code == 404
+
+
+# --- taking a row out of a module -------------------------------------------
+
+
+def test_a_row_can_be_archived_from_its_module(client, conn, songs, le_freak):
+    response = client.post(f"/exercises/{le_freak.id}/archive", headers=hx())
+
+    assert response.status_code == 200
+    assert response.text.strip() == ""  # the row goes, and nothing replaces it
+    assert "le freak" not in client.get("/modules/songs").text
+
+
+def test_archiving_a_row_keeps_the_log_it_appears_in(client, conn, le_freak):
+    client.post(f"/exercises/{le_freak.id}/done", headers=hx())
+
+    client.post(f"/exercises/{le_freak.id}/archive", headers=hx())
+
+    day = repo.get_day(conn, TODAY)
+    assert day is not None
+    logged = [entry for entry in repo.entries_for_day(conn, day.id) if entry.ended_at]
+    assert [entry.description for entry in logged] == ["le freak"]
+    # archived, not deleted: the log still has a row to point at
+    after = repo.get_exercise(conn, le_freak.id)
+    assert after is not None
+    assert after.archived_at == NOW
+
+
+def test_the_module_page_offers_the_button_and_asks_first(client, songs, le_freak):
+    page = client.get("/modules/songs").text
+
+    assert f'action="/exercises/{le_freak.id}/archive"' in page
+    assert "hx-confirm" in page  # one click from gone is one click too few
+
+
+def test_archiving_a_row_that_is_not_there_is_404(client):
+    assert client.post("/exercises/404/archive", headers=hx()).status_code == 404
+
+
+def test_archiving_without_htmx_goes_back_to_the_module(client, songs, le_freak):
+    response = client.post(
+        f"/exercises/{le_freak.id}/archive",
+        headers={"Referer": "http://testserver/modules/songs"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/modules/songs"

@@ -52,5 +52,11 @@
       </select>
       <button type="submit">done</button>
     </form>
+    <form action="/exercises/{{ exercise.id }}/archive" method="post"
+          hx-post="/exercises/{{ exercise.id }}/archive"
+          hx-target="#exercise-{{ exercise.id }}" hx-swap="outerHTML"
+          hx-confirm="Archive {{ exercise.name }}? The day log keeps it.">
+      <button type="submit" class="remove">archive</button>
+    </form>
   </td>
 </tr>

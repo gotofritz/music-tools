@@ -140,6 +140,12 @@ A row with no target is flagged in red, because a percentage of nothing cannot
 be resolved and cannot move the schedule; filling those in as you meet them is
 the tidiest way to close the gap the import leaves.
 
+**archive**, at the end of a row, takes it out of the module — off the page,
+out of `next`, out of the due counts. It asks first. Nothing is lost: the day
+log keeps every block you ever played it for, and `uv run practice restore
+"le freak"` puts the row back if you change your mind. Use it for the tune you
+have finished with, and for the row you typed in by mistake.
+
 At the bottom of a module page is **add a row**. Anything added there is due
 straight away, so it is at the top of that module's queue rather than waiting
 for a date you have to type.
