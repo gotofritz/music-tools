@@ -326,3 +326,22 @@ def test_serve_opens_a_browser_unless_told_not_to(run, uvicorn_run, monkeypatch)
 
     run("serve", "--port", "9001")
     assert opened == ["http://127.0.0.1:9001/"]
+
+
+def test_import_takes_the_module_name_from_the_argument(run, tmp_path):
+    """Google exports as `<document> - <sheet>.tsv`, so the name is passed in."""
+    export = tmp_path / "Bass Practice - SONGS.tsv"
+    export.write_bytes((RAW / "BASS SONGS.csv").read_bytes())
+
+    result = run("import", "--modules", f"SONGS:{export}")
+
+    assert result.exit_code == 0, result.output
+    assert "SONGS" in run("module", "list").output
+    assert "Practice - SONGS" not in run("module", "list").output
+
+
+def test_import_says_which_file_it_cannot_find(run):
+    result = run("import", "--modules", "SONGS:/no/such/sheet.tsv")
+
+    assert result.exit_code != 0
+    assert "/no/such/sheet.tsv" in result.output

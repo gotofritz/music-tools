@@ -4,8 +4,11 @@ The exports are tab-separated despite the `.csv` extension and carry a long
 tail of empty columns on every row. Two shapes:
 
 - **A module sheet** (`BASS SONGS.csv`) — one row per exercise. The module name
-  comes from the file name, less the `BASS ` the exports all carry; the first
-  header cell gives the log group, which is the `A1` the Apps Script read.
+  is given on the command line as `SONGS:<path>`, or guessed from the file
+  name, less the `BASS ` the exports all carry; the first header cell gives the
+  log group, which is the `A1` the Apps Script read. Google names a single-sheet
+  export `<document> - <sheet>.tsv`, which the guess reads wrongly, so saying
+  the name is the reliable way round.
 - **The day log** (`BASS.csv`) — one row per entry, in day blocks. `DAY` is
   written only on the first row of a block and `MODULE` only when it changes,
   so both forward-fill. The subtotal and total columns are formula results and
@@ -77,22 +80,51 @@ def module_name_from(path: Path) -> str:
     Every sheet in the export is named for the instrument and then the module.
     There is only ever one instrument, so the first word is dropped — unless
     it is the whole name, which is the sheet the day log lives on.
+
+    This is a guess, and Google spoils it: exporting a single sheet writes
+    `<document> - <sheet>.tsv`, so the file is called something like
+    `Bass Practice - SONGS.tsv` and the guess comes out as `Practice - SONGS`.
+    Say the name outright — `SONGS:<path>` — and this is not consulted.
     """
     first, _, rest = path.stem.partition(" ")
     return (rest or first).strip()
 
 
+def parse_module_argument(token: str) -> tuple[str | None, Path]:
+    """`SONGS:<path>` -> `("SONGS", path)`; a bare path -> `(None, path)`.
+
+    A colon is legal in a Unix file name, so a token that names a file that
+    exists is a path and nothing else. Everything else with a colon in it is
+    read as a name and the file it belongs to.
+
+    `~` is expanded here: Google's file names have spaces in them, so the
+    argument has to be quoted, and quoting is exactly what stops the shell
+    doing it.
+    """
+    if Path(token).expanduser().exists() or ":" not in token:
+        return None, Path(token).expanduser()
+    name, _, rest = token.partition(":")
+    if not name.strip() or not rest.strip():
+        return None, Path(token).expanduser()
+    return name.strip(), Path(rest.strip()).expanduser()
+
+
 def import_sheets(
     conn: sqlite3.Connection,
     *,
-    modules: Sequence[Path] = (),
-    day_log: Path | None = None,
+    modules: Sequence[str | Path] = (),
+    day_log: str | Path | None = None,
 ) -> ImportReport:
-    """Import module sheets and then the day log, in one transaction."""
+    """Import module sheets and then the day log, in one transaction.
+
+    A module is either a path, whose file name is read for the module's name,
+    or `NAME:path`, which says it outright.
+    """
     report = ImportReport()
     with transaction(conn):
-        for path in modules:
-            _import_module(conn, Path(path), report)
+        for source in modules:
+            name, path = parse_module_argument(str(source))
+            _import_module(conn, path, report, name=name)
         if day_log is not None:
             _import_day_log(conn, Path(day_log), report)
     return report
@@ -107,13 +139,19 @@ def read_rows(path: Path) -> Iterator[list[str]]:
             yield [cell.strip() for cell in row]
 
 
-def _import_module(conn: sqlite3.Connection, path: Path, report: ImportReport) -> None:
+def _import_module(
+    conn: sqlite3.Connection,
+    path: Path,
+    report: ImportReport,
+    *,
+    name: str | None = None,
+) -> None:
     rows = list(read_rows(path))
     if not rows:
         report.problems.append(f"{path.name}: empty file")
         return
 
-    name = module_name_from(path)
+    name = name or module_name_from(path)
     log_group = _cell(rows[0], COL_SPEED) or name
     module = repo.find_module(conn, name)
     if module is None:
