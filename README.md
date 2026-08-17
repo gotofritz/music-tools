@@ -1,5 +1,8 @@
 # music-tools
 
+[![qa](https://github.com/gotofritz/music-tools/actions/workflows/qa.yml/badge.svg)](https://github.com/gotofritz/music-tools/actions/workflows/qa.yml)
+[![coverage](https://raw.githubusercontent.com/gotofritz/music-tools/badges/coverage.svg)](https://github.com/gotofritz/music-tools/actions/workflows/qa.yml)
+
 Bass practice tooling for one player on one machine.
 
 **`practice`** is the practice tracker: modules of exercises, spaced
@@ -123,6 +126,10 @@ CI runs `task qa` on every push to `main` and every pull request
 regenerates the coverage badge onto the `badges` branch — generated output,
 kept off `main`. Coverage measures `music_tools/` less the `rearrange`
 modules, which have no suite and are out of scope for the practice app.
+
+The two badges at the top read from that: the first is the workflow's own
+status badge, the second is `coverage.svg` off the `badges` branch. The
+coverage one stays broken until the first push to `main` creates that branch.
 
 ### Layout
 
