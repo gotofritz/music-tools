@@ -31,6 +31,7 @@ loop="music_tools.loop:main"
 dev = [
     "httpx>=0.28.1",
     "pytest>=8.3.4",
+    "pytest-cov>=6.0",
     "ruff>=0.9.0",
     "ty>=0.0.1a5",
 ]
@@ -44,6 +45,20 @@ packages = ["music_tools"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["music_tools"]
+# The rearrange half is out of scope for the practice app and has no suite of
+# its own; measuring it would report a number about code nobody is changing.
+omit = [
+    "music_tools/config.py",
+    "music_tools/generator.py",
+    "music_tools/main.py",
+    "music_tools/markers.py",
+]
+
+[tool.coverage.report]
+exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError"]
 
 [tool.ruff]
 line-length = 88

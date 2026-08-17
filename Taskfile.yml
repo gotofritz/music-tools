@@ -2,9 +2,9 @@ version: "3"
 
 tasks:
   test:
-    desc: Run the test suite
+    desc: Run the test suite, with coverage
     cmds:
-      - uv run pytest
+      - uv run pytest --cov --cov-report=term-missing
 
   lint:
     desc: Lint and check formatting

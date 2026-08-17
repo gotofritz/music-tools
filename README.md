@@ -112,14 +112,17 @@ works, and saying so in the commit.
 
 ```bash
 task qa       # lint, types, tests — run this before opening a PR
-task test     # uv run pytest
+task test     # pytest, with a coverage report
 task lint     # ruff check + ruff format --check
 task types    # ty check
 task db:dump  # back the practice database up to backups/practice.sql
 ```
 
 CI runs `task qa` on every push to `main` and every pull request
-(`.github/workflows/qa.yml`).
+(`.github/workflows/qa.yml`). A push to `main` also uploads `.coverage` and
+regenerates the coverage badge onto the `badges` branch — generated output,
+kept off `main`. Coverage measures `music_tools/` less the `rearrange`
+modules, which have no suite and are out of scope for the practice app.
 
 ### Layout
 
