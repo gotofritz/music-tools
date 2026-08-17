@@ -12,4 +12,5 @@ wheels/
 # Coverage: written by `task test`, uploaded by CI, never committed
 .coverage
 coverage.svg
+badge/
 htmlcov/
