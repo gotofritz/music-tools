@@ -4,7 +4,8 @@
 
 Two things exist today and want to be one thing.
 
-**A Google Sheets app** (`docs/raw/`) tracks bass practice. One sheet per
+**A Google Sheets app** (retired, and its sample removed once the history was
+imported — `git log` has it) tracked bass practice. One sheet per
 practice area — `BASS SONGS`, `BASS SLAP`, `BASS TECHNIQUE` — each row an
 exercise carrying a speed, a practice count, a last-practiced date and a due
 date. A menu command marks an exercise done: it bumps the count, stamps today,
@@ -46,13 +47,15 @@ that first depends on it is named.
   `*.loop.yml` on every save, belonged to the YAML editor now at the back of
   the queue (`08-loop-editor.md`). Hand-written YAML and the CLI stay the loop
   workflow; Phase 7 rebuilds the output in the browser without the format.
-- **A3 — History is migrated**, by a one-off importer that eats the sheet
+- **A3 — History is migrated** (done, and the importer deleted with the sheet
+  exports afterwards), by a one-off importer that ate the sheet
   exports. The practice counts and due dates are the whole value of the
   spreadsheet; starting fresh throws away the schedule. Phase 2.
 - **A4 — All module sheets share the `BASS SONGS` column shape**, with an
   `extra` JSON column absorbing the odd per-module extras rather than a
   per-module field definition. Phase 2; if some sheet turns out to be wildly
-  different, only the importer and one migration change.
+  different, only the importer and one migration change. (Held; the import is
+  done and the importer is gone.)
 - **A5 — Single user, one machine, localhost only.** No auth, no accounts, bind
   `127.0.0.1`.
 
@@ -199,14 +202,12 @@ music_tools/
         models.py            # Module, Exercise, PracticeDay, PracticeEntry, …
         scheduling.py        # the five algorithms, pure, injected clock + rng
         session.py           # start day, mark done, close entry, totals
-    importer/
-        sheets.py            # the one-off TSV importer
     web/
         app.py               # FastAPI + uvicorn launcher
         routes/…             # practice.py, modules.py, loops.py, media.py
         templates/…          # Jinja2, HTMX fragments
         static/…             # vendored htmx.min.js, css, loop grid js
-    cli.py                   # click group: practice, db, import, serve
+    cli.py                   # click group: practice, db, serve
 tests/
 docs/initial-context.md      # written in Phase 2 — AGENTS.md points at it and
                              # it does not exist yet
@@ -260,7 +261,7 @@ CREATE TABLE exercise (
 );
 CREATE INDEX exercise_due ON exercise(module_id, next_due);
 CREATE UNIQUE INDEX exercise_name ON exercise(module_id, name)
-  WHERE archived_at IS NULL;      -- the importer's natural key
+  WHERE archived_at IS NULL;      -- was the importer's natural key
 
 CREATE TABLE practice_day (
   id INTEGER PRIMARY KEY,

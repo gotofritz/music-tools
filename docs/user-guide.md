@@ -138,7 +138,7 @@ Change the name, the speed, the target or the notes and press **save** — the r
 with the speed worked out, so typing `85%` shows you `113 BPM (85%)` as you go.
 A row with no target is flagged in red, because a percentage of nothing cannot
 be resolved and cannot move the schedule; filling those in as you meet them is
-the tidiest way to close the gap the import leaves.
+the tidiest way to close the gap the spreadsheet left behind.
 
 **archive**, at the end of a row, takes it out of the module — off the page,
 out of `next`, out of the due counts. It asks first. Nothing is lost: the day
@@ -290,41 +290,6 @@ is refused for anything the day log points at, and tells you to archive it
 instead; a log with a hole in it is worse than a module you have stopped using.
 `module delete --force` takes the rows with it, and is refused just the same
 once any of them has been practised.
-
-## Bringing the spreadsheet over
-
-Export each sheet from Google Sheets (**File → Download → Tab-separated
-values**) and point the importer at them:
-
-```bash
-uv run practice import \
-  --modules 'SONGS:~/Downloads/Bass Practice - SONGS.tsv' \
-  --modules 'SLAP:~/Downloads/Bass Practice - SLAP.tsv' \
-  --day-log ~/Downloads/BASS.csv
-```
-
-**Say which module each file is**, in front of the path and separated by a
-colon. Google names a single-sheet download after the document and *then* the
-sheet — `Bass Practice - SONGS.tsv` — so left to guess, the importer would
-create a module called `Practice - SONGS`.
-
-Quote the whole argument, because those file names have spaces in them. The
-`~` still works inside the quotes; the importer expands it.
-
-A plain path with no `NAME:` in front of it still works, and the module is
-guessed from the file name less its first word — which is right for the old
-`BASS SONGS.csv` exports and wrong for anything Google names today.
-
-The top-left cell of the sheet gives the module's log group. Practice counts,
-dates and speeds all come over as they are, so nothing in the schedule shifts
-on the day you switch. Running it twice changes nothing — the second run
-updates the rows it matched, keyed on the module name you gave and the row's
-own name — so you can re-export and re-import as often as you like. Anything it
-cannot read is listed at the end rather than dropped in silence.
-
-Get the name wrong and you get a second module: `practice module list` shows
-it, `practice module delete <name>` removes it as long as nothing in the day
-log points at it, and then you can import again.
 
 ## Keeping a copy
 

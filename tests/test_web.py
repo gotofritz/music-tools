@@ -99,7 +99,7 @@ def espresso(conn, songs):
 
 @pytest.fixture
 def sample_block(conn):
-    """The 2026-07-05 block of `docs/raw/BASS.csv`: 00:19, 00:34, 00:53."""
+    """The `sample_day` block, as the spreadsheet totalled it: 00:19, 00:34, 00:53."""
     day = repo.create_day(conn, day=TODAY)
     block = [
         ("22:27", "22:34", "TECHNIQUE", "019 Tempo Builder"),
