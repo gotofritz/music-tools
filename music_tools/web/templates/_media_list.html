@@ -1,0 +1,102 @@
+{# Everything attached to an exercise, with the controls that manage it.
+
+   The players live on the card in the day log — this is the page for putting
+   the material together, not for practising from it. A file card carries its
+   members' names and mix state, because a track set is one thing to play and
+   those are its channels. #}
+<section id="media-list">
+  {% if not cards %}
+  <p>Nothing attached yet.</p>
+  {% endif %}
+  {% for card in cards %}
+  <article class="attachment" id="attachment-{{ card.sources[0].id }}">
+    <h3>{{ card.kind }}{% if card.is_set %} — a track set of
+      {{ card.sources | length }}{% endif %}
+      {% if card.label %}<span class="muted">{{ card.label }}</span>{% endif %}</h3>
+
+    <form action="/media/{{ card.sources[0].id }}/move" method="post"
+          hx-post="/media/{{ card.sources[0].id }}/move"
+          hx-target="#media-list" hx-swap="outerHTML">
+      <input type="hidden" name="direction" value="up">
+      <button type="submit" aria-label="move up">up</button>
+    </form>
+    <form action="/media/{{ card.sources[0].id }}/move" method="post"
+          hx-post="/media/{{ card.sources[0].id }}/move"
+          hx-target="#media-list" hx-swap="outerHTML">
+      <input type="hidden" name="direction" value="down">
+      <button type="submit" aria-label="move down">down</button>
+    </form>
+
+    {% if card.group %}
+    <form action="/groups/{{ card.group.id }}/label" method="post"
+          hx-post="/groups/{{ card.group.id }}/label"
+          hx-target="#media-list" hx-swap="outerHTML">
+      <input type="text" name="label" value="{{ card.group.label or "" }}" size="14"
+             aria-label="what this set is" placeholder="stems, with click">
+      <button type="submit">name the set</button>
+    </form>
+    {% endif %}
+
+    <table>
+      <tbody>
+        {% for source in card.sources %}
+        <tr id="media-{{ source.id }}">
+          <td>
+            {% if source.kind == "text" %}
+            <span class="muted">{{ source.body }}</span>
+            {% elif source.kind == "youtube" %}
+            <a href="{{ source.url }}" rel="noreferrer">{{ source.url }}</a>
+            {% else %}
+            <span class="muted">{{ source.path }}</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if source.kind == "file" %}
+            <form action="/media/{{ source.id }}" method="post"
+                  hx-patch="/media/{{ source.id }}"
+                  hx-target="#media-list" hx-swap="outerHTML">
+              <input type="text" name="label" value="{{ source.label or "" }}" size="10"
+                     aria-label="track name" placeholder="bass, drums">
+              <input type="text" name="gain" value="{{ source.gain }}" size="4"
+                     aria-label="gain">
+              <input type="text" name="pan" value="{{ source.pan }}" size="4"
+                     aria-label="pan">
+              <label>muted
+                <input type="checkbox" name="muted"{% if source.muted %} checked{% endif %}>
+              </label>
+              <button type="submit">save</button>
+            </form>
+            {% elif source.label %}
+            <span class="muted">{{ source.label }}</span>
+            {% endif %}
+          </td>
+          <td>
+            <form action="/media/{{ source.id }}/delete" method="post"
+                  hx-delete="/media/{{ source.id }}"
+                  hx-target="#media-list" hx-swap="outerHTML"
+                  hx-confirm="Remove this attachment? The file itself stays where it is.">
+              <button type="submit" class="remove">remove</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    {% if card.kind == "file" and card.group %}
+    {# Adding a file to an existing group is the only way to make a track set. #}
+    <form action="/exercises/{{ exercise.id }}/media" method="post"
+          hx-post="/exercises/{{ exercise.id }}/media"
+          hx-target="#media-list" hx-swap="outerHTML">
+      <input type="hidden" name="kind" value="file">
+      <input type="hidden" name="group_id" value="{{ card.group.id }}">
+      <input type="text" name="path" size="40" required
+             aria-label="path" placeholder="/absolute/path/to/drums.wav">
+      <input type="text" name="label" size="10" aria-label="track name"
+             placeholder="drums">
+      <button type="submit">add a track to this set</button>
+    </form>
+    {% endif %}
+  </article>
+  {% endfor %}
+</section>

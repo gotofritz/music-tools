@@ -48,6 +48,15 @@ PATH_KINDS = ("file", "musescore")
 #: scores directory, and the directory the database lives in.
 DEFAULT_ROOTS = (Path("~/Documents/MuseScore4/Scores/TUNES"),)
 
+#: How many tracks one set may hold. Phase 5b holds every member decoded in
+#: memory at once, and eight four-minute stems is already a few hundred
+#: megabytes.
+MAX_TRACKS = 8
+
+#: How far apart two members of a set may be, in seconds. Stems exported from
+#: one session differ by a frame or two; anything more is a different take.
+DURATION_TOLERANCE = 0.25
+
 
 class NotFound(LookupError):
     """No exercise with that id."""
@@ -67,6 +76,18 @@ class OutsideRoots(ValueError):
 
 class MissingFile(ValueError):
     """The path is inside the roots, and there is nothing there."""
+
+
+class SetTooBig(ValueError):
+    """A track set holds at most `MAX_TRACKS`."""
+
+
+class MembersDisagree(ValueError):
+    """The file is not the same length as the set it would join."""
+
+
+class UnreadableAudio(BadMedia):
+    """The length of the file cannot be read, so a set cannot be checked."""
 
 
 class MediaCard(BaseModel):
@@ -310,7 +331,9 @@ def add_to_set(
 ) -> MediaSource:
     """Add a file to an existing group: the only way to make a track set.
 
-    Step 5 of the plan fills this in with the two checks a set has to pass.
+    Members have to agree, and there are at most eight of them. Both are
+    checked here rather than in the browser, because here the message can name
+    the file that disagrees; there it is a stall or a crash.
     """
     group = repo.get_media_group(conn, group_id)
     if group is None:
@@ -318,6 +341,22 @@ def add_to_set(
     resolved = resolve_within_roots(path, roots=roots)
     if not resolved.is_file():
         raise MissingFile(f"there is nothing at {resolved}")
+
+    members = repo.media_sources_in_group(conn, group_id=group.id)
+    if len(members) >= MAX_TRACKS:
+        raise SetTooBig(f"a track set holds {MAX_TRACKS} at most, and this one is full")
+    joining = probe_duration(resolved)
+    for member in members:
+        if member.path is None:  # pragma: no cover - a file always has a path
+            continue
+        length = probe_duration(Path(member.path))
+        if abs(length - joining) > DURATION_TOLERANCE:
+            raise MembersDisagree(
+                f"{resolved.name} is {joining:.2f}s and"
+                f" {Path(member.path).name} is {length:.2f}s;"
+                " a set plays as one thing, so its members have to match"
+            )
+
     with transaction(conn):
         return repo.create_media_source(
             conn,
@@ -329,6 +368,58 @@ def add_to_set(
             path=str(resolved),
             label=label,
         )
+
+
+def probe_duration(path: Path) -> float:
+    """How long a file is, in seconds, read through pydub.
+
+    Only a set needs this, which is why a single attachment never pays for it:
+    a lone `.mp4` attaches without ffmpeg being asked anything.
+    """
+    from pydub import AudioSegment
+
+    try:
+        return AudioSegment.from_file(path).duration_seconds
+    except Exception as unreadable:  # pydub raises whatever ffmpeg gave it
+        raise UnreadableAudio(
+            f"cannot read the length of {path.name}: {unreadable}"
+        ) from None
+
+
+def describe(
+    conn: sqlite3.Connection,
+    *,
+    source_id: int,
+    label: str | None = None,
+    gain: float | None = None,
+    pan: float | None = None,
+    muted: bool | None = None,
+) -> MediaSource:
+    """Name a track, and set where it sits in the mix.
+
+    The mix state lives on the member because that is what Phase 5b reads.
+    Solo is not here: it is a view over the mute state, and which track is
+    soloed does not deserve to outlive the page.
+    """
+    source = _source(conn, source_id)
+    if gain is not None and not 0.0 <= gain <= 2.0:
+        raise BadMedia(f"a gain runs from 0 to 2, not {gain}")
+    if pan is not None and not -1.0 <= pan <= 1.0:
+        raise BadMedia(f"a pan runs from -1 (left) to +1 (right), not {pan}")
+    fields = {"label": label, "gain": gain, "pan": pan, "muted": muted}
+    given = {name: value for name, value in fields.items() if value is not None}
+    if not given:
+        return source
+    return repo.update_media_source(conn, source.id, **given)
+
+
+def label_set(
+    conn: sqlite3.Connection, *, group_id: int, label: str | None
+) -> MediaGroup:
+    """Name a set as a whole: "stems", "with click"."""
+    if repo.get_media_group(conn, group_id) is None:
+        raise UnknownMedia(group_id)
+    return repo.update_media_group(conn, group_id, label=label)
 
 
 def _place(conn: sqlite3.Connection, card: MediaCard, *, position: int) -> None:

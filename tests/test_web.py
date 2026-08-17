@@ -1041,3 +1041,268 @@ def test_a_module_row_offers_start_and_then_done(client, conn, songs, le_freak):
     page = client.get("/modules/songs").text
     assert f'action="/entries/{running(conn).id}/done"' in page
     assert f'action="/entries/{running(conn).id}/discard"' in page
+
+
+# --- attaching media from the page ------------------------------------------
+
+
+def test_the_media_page_lists_the_roots_paths_are_confined_to(client, le_freak, roots):
+    page = client.get(f"/exercises/{le_freak.id}/media").text
+
+    assert "le freak" in page
+    assert str(roots) in page  # a path is typed in, so say where it may point
+
+
+def test_a_file_is_attached_from_the_page(client, conn, le_freak, loop_wav):
+    response = client.post(
+        f"/exercises/{le_freak.id}/media",
+        data={"kind": "file", "path": str(loop_wav), "label": "the loop"},
+        headers=hx(),
+    )
+
+    assert response.status_code == 200
+    assert 'id="media-list"' in response.text
+    cards = media.exercise_media(conn, exercise_id=le_freak.id)
+    assert [card.kind for card in cards] == ["file"]
+    assert cards[0].sources[0].label == "the loop"
+
+
+def test_a_youtube_url_is_attached_from_the_page(client, conn, le_freak):
+    client.post(
+        f"/exercises/{le_freak.id}/media",
+        data={"kind": "youtube", "url": "https://youtu.be/Kt2GdFbdVxo"},
+        headers=hx(),
+    )
+
+    cards = media.exercise_media(conn, exercise_id=le_freak.id)
+    assert [card.sources[0].url for card in cards] == ["https://youtu.be/Kt2GdFbdVxo"]
+
+
+def test_text_is_attached_from_the_page(client, conn, le_freak):
+    client.post(
+        f"/exercises/{le_freak.id}/media",
+        data={"kind": "text", "body": "two octaves, thumb on the E"},
+        headers=hx(),
+    )
+
+    cards = media.exercise_media(conn, exercise_id=le_freak.id)
+    assert cards[0].sources[0].body == "two octaves, thumb on the E"
+
+
+def test_a_path_outside_the_roots_is_refused_with_a_message(
+    client, conn, le_freak, roots, tmp_path
+):
+    outside = tmp_path / "elsewhere.wav"
+    outside.write_bytes(b"")
+
+    response = client.post(
+        f"/exercises/{le_freak.id}/media",
+        data={"kind": "file", "path": str(outside)},
+        headers=hx(),
+    )
+
+    assert response.status_code == 400
+    assert "outside the configured roots" in response.text
+    assert media.exercise_media(conn, exercise_id=le_freak.id) == []
+
+
+def test_a_file_that_is_not_there_is_refused_with_a_message(client, le_freak, roots):
+    response = client.post(
+        f"/exercises/{le_freak.id}/media",
+        data={"kind": "file", "path": str(roots / "nothing.wav")},
+        headers=hx(),
+    )
+
+    assert response.status_code == 400
+    assert "nothing.wav" in response.text
+
+
+def test_attaching_to_an_exercise_that_is_not_there_is_404(client, roots):
+    response = client.post(
+        "/exercises/404/media", data={"kind": "text", "body": "x"}, headers=hx()
+    )
+
+    assert response.status_code == 404
+
+
+def test_a_kind_without_what_it_needs_is_refused_by_the_page(client, le_freak, roots):
+    response = client.post(
+        f"/exercises/{le_freak.id}/media", data={"kind": "text"}, headers=hx()
+    )
+
+    assert response.status_code == 400
+
+
+def test_an_attachment_can_be_removed_from_the_page(client, conn, le_freak, loop_wav):
+    source = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+
+    response = client.delete(f"/media/{source.id}", headers=hx())
+
+    assert response.status_code == 200
+    assert media.exercise_media(conn, exercise_id=le_freak.id) == []
+    assert loop_wav.exists()  # referenced, never owned
+
+
+def test_a_plain_form_post_removes_an_attachment_too(client, conn, le_freak, loop_wav):
+    """No JavaScript: HTML forms cannot send DELETE, so POST does it."""
+    source = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+
+    response = client.post(f"/media/{source.id}/delete", headers=hx())
+
+    assert response.status_code == 200
+    assert media.exercise_media(conn, exercise_id=le_freak.id) == []
+
+
+def test_removing_an_attachment_that_is_not_there_is_404(client):
+    assert client.delete("/media/404", headers=hx()).status_code == 404
+
+
+def test_attachments_can_be_reordered_from_the_page(client, conn, le_freak, loop_wav):
+    first = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+    media.attach(conn, exercise_id=le_freak.id, kind="text", body="notes", now=NOW)
+
+    response = client.post(
+        f"/media/{first.id}/move", data={"direction": "down"}, headers=hx()
+    )
+
+    assert response.status_code == 200
+    cards = media.exercise_media(conn, exercise_id=le_freak.id)
+    assert [card.kind for card in cards] == ["text", "file"]
+
+
+def test_a_direction_nobody_knows_is_refused(client, conn, le_freak, loop_wav):
+    source = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+
+    response = client.post(
+        f"/media/{source.id}/move", data={"direction": "sideways"}, headers=hx()
+    )
+
+    assert response.status_code == 400
+
+
+def test_a_second_file_makes_a_track_set_from_the_page(
+    client, conn, le_freak, loop_wav, roots
+):
+    from pydub import AudioSegment
+
+    bass = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+    drums = roots / "S" / "le freak" / "drums.wav"
+    AudioSegment.silent(duration=4000).export(drums, format="wav")
+
+    response = client.post(
+        f"/exercises/{le_freak.id}/media",
+        data={
+            "kind": "file",
+            "path": str(drums),
+            "label": "drums",
+            "group_id": str(bass.group_id),
+        },
+        headers=hx(),
+    )
+
+    assert response.status_code == 200
+    card = media.exercise_media(conn, exercise_id=le_freak.id)[0]
+    assert card.is_set
+    assert [track.label for track in card.sources] == [None, "drums"]
+
+
+def test_a_member_that_disagrees_on_length_is_refused_with_the_file_named(
+    client, conn, le_freak, loop_wav, roots
+):
+    from pydub import AudioSegment
+
+    bass = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+    short = roots / "S" / "le freak" / "half.wav"
+    AudioSegment.silent(duration=2000).export(short, format="wav")
+
+    response = client.post(
+        f"/exercises/{le_freak.id}/media",
+        data={"kind": "file", "path": str(short), "group_id": str(bass.group_id)},
+        headers=hx(),
+    )
+
+    assert response.status_code == 409
+    assert "half.wav" in response.text
+    assert not media.exercise_media(conn, exercise_id=le_freak.id)[0].is_set
+
+
+def test_a_track_is_named_and_mixed_from_the_page(client, conn, le_freak, loop_wav):
+    source = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+
+    response = client.post(
+        f"/media/{source.id}",
+        data={"label": "bass DI", "gain": "0.5", "pan": "-0.4", "muted": "on"},
+        headers=hx(),
+    )
+
+    assert response.status_code == 200
+    after = repo.get_media_source(conn, source.id)
+    assert after is not None
+    assert (after.label, after.gain, after.pan, after.muted) == (
+        "bass DI",
+        0.5,
+        -0.4,
+        True,
+    )
+
+
+def test_a_mix_a_mixer_could_not_mean_is_refused(client, conn, le_freak, loop_wav):
+    source = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+
+    response = client.post(f"/media/{source.id}", data={"pan": "3"}, headers=hx())
+
+    assert response.status_code == 400
+
+
+def test_a_set_is_labelled_as_a_whole_from_the_page(client, conn, le_freak, loop_wav):
+    source = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+
+    response = client.post(
+        f"/groups/{source.group_id}/label", data={"label": "stems"}, headers=hx()
+    )
+
+    assert response.status_code == 200
+    assert media.exercise_media(conn, exercise_id=le_freak.id)[0].label == "stems"
+
+
+def test_the_module_page_links_to_an_exercises_media(client, songs, le_freak):
+    page = client.get("/modules/songs").text
+
+    assert f'href="/exercises/{le_freak.id}/media"' in page
+
+
+def test_attaching_without_htmx_redirects_back_to_the_media_page(
+    client, le_freak, roots
+):
+    """No JavaScript: a real form, a real redirect, a working app."""
+    response = client.post(
+        f"/exercises/{le_freak.id}/media",
+        data={"kind": "text", "body": "two octaves"},
+        headers={"Referer": f"http://testserver/exercises/{le_freak.id}/media"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == f"/exercises/{le_freak.id}/media"
+
+
+def test_the_media_page_is_404_for_an_exercise_that_is_not_there(client):
+    assert client.get("/exercises/404/media").status_code == 404

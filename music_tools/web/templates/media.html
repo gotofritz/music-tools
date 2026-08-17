@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}{{ exercise.name }} — media{% endblock %}
+{% block main %}
+<h1>{{ exercise.name }} <span class="muted">{{ module.name }}</span></h1>
+<p><a href="/modules/{{ module.slug }}">back to {{ module.name }}</a></p>
+
+{% include "_media_list.html" %}
+
+<section id="attach">
+  <h2>Attach something</h2>
+  <p class="muted">A file is referenced where it is, never copied, and a path
+    has to point inside{% if roots | length > 1 %} one of{% endif %}:
+    {% for root in roots %}<code>{{ root }}</code>{% if not loop.last %}, {% endif %}
+    {% endfor %}</p>
+
+  <form action="/exercises/{{ exercise.id }}/media" method="post"
+        hx-post="/exercises/{{ exercise.id }}/media"
+        hx-target="#media-list" hx-swap="outerHTML">
+    <input type="hidden" name="kind" value="file">
+    <input type="text" name="path" size="40" required aria-label="path"
+           placeholder="/absolute/path/to/loop.wav">
+    <input type="text" name="label" size="12" aria-label="label" placeholder="label">
+    <button type="submit">attach audio or video</button>
+  </form>
+
+  <form action="/exercises/{{ exercise.id }}/media" method="post"
+        hx-post="/exercises/{{ exercise.id }}/media"
+        hx-target="#media-list" hx-swap="outerHTML">
+    <input type="hidden" name="kind" value="youtube">
+    <input type="url" name="url" size="40" required aria-label="YouTube URL"
+           placeholder="https://www.youtube.com/watch?v=...">
+    <input type="text" name="label" size="12" aria-label="label" placeholder="label">
+    <button type="submit">attach a YouTube URL</button>
+  </form>
+
+  <form action="/exercises/{{ exercise.id }}/media" method="post"
+        hx-post="/exercises/{{ exercise.id }}/media"
+        hx-target="#media-list" hx-swap="outerHTML">
+    <input type="hidden" name="kind" value="musescore">
+    <input type="text" name="path" size="40" required aria-label="score path"
+           placeholder="/absolute/path/to/tune.mscz">
+    <input type="text" name="label" size="12" aria-label="label" placeholder="label">
+    <button type="submit">attach a score</button>
+  </form>
+
+  <form action="/exercises/{{ exercise.id }}/media" method="post"
+        hx-post="/exercises/{{ exercise.id }}/media"
+        hx-target="#media-list" hx-swap="outerHTML">
+    <input type="hidden" name="kind" value="text">
+    <textarea name="body" rows="3" cols="40" required aria-label="text"
+              placeholder="fingering, a chord chart, a reminder"></textarea>
+    <input type="text" name="label" size="12" aria-label="label" placeholder="label">
+    <button type="submit">attach text</button>
+  </form>
+</section>
+{% endblock %}

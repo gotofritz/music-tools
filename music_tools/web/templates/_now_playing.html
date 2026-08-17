@@ -14,7 +14,8 @@
   {% include "_media.html" %}
   {% endwith %}
   {% elif running_exercise %}
-  <p class="muted">Nothing attached to this one yet.</p>
+  <p class="muted">Nothing attached to this one yet —
+    <a href="/exercises/{{ running_exercise.id }}/media">attach the tune</a>.</p>
   {% endif %}
   <form class="finish" action="/entries/{{ running.id }}/done" method="post"
         hx-post="/entries/{{ running.id }}/done" hx-target="#day-log"

@@ -322,3 +322,223 @@ def test_deleting_an_exercise_takes_its_media_with_it(db, le_freak, audio_file):
 
     assert repo.get_media_source(db, source.id) is None
     assert repo.media_groups_for_exercise(db, exercise_id=le_freak.id) == []
+
+
+# --- track sets: several files that are one thing to play -------------------
+
+
+def test_a_second_file_added_to_a_group_makes_a_track_set(db, le_freak, audio_file):
+    bass = media.attach(
+        db,
+        exercise_id=le_freak.id,
+        kind="file",
+        path=str(audio_file("bass.wav")),
+        label="bass",
+        now=NOW,
+    )
+    assert bass.group_id is not None
+
+    drums = media.attach(
+        db,
+        exercise_id=le_freak.id,
+        kind="file",
+        path=str(audio_file("drums.wav")),
+        label="drums",
+        group_id=bass.group_id,
+        now=NOW,
+    )
+
+    cards = media.exercise_media(db, exercise_id=le_freak.id)
+    assert len(cards) == 1  # one player, not two cards in a row
+    assert cards[0].is_set
+    assert [track.label for track in cards[0].sources] == ["bass", "drums"]
+    assert drums.position == 1  # order down the mixer strip
+
+
+def test_a_set_is_at_most_eight_members(db, le_freak, audio_file):
+    first = media.attach(
+        db,
+        exercise_id=le_freak.id,
+        kind="file",
+        path=str(audio_file("track0.wav")),
+        now=NOW,
+    )
+    for number in range(1, 8):
+        media.attach(
+            db,
+            exercise_id=le_freak.id,
+            kind="file",
+            path=str(audio_file(f"track{number}.wav")),
+            group_id=first.group_id,
+            now=NOW,
+        )
+
+    with pytest.raises(media.SetTooBig):
+        media.attach(
+            db,
+            exercise_id=le_freak.id,
+            kind="file",
+            path=str(audio_file("track8.wav")),
+            group_id=first.group_id,
+            now=NOW,
+        )
+
+    card = media.exercise_media(db, exercise_id=le_freak.id)[0]
+    assert len(card.sources) == 8
+
+
+def test_a_member_that_disagrees_on_length_is_named_and_refused(
+    db, le_freak, audio_file
+):
+    first = media.attach(
+        db,
+        exercise_id=le_freak.id,
+        kind="file",
+        path=str(audio_file("bass.wav", seconds=4.0)),
+        now=NOW,
+    )
+    odd = audio_file("half.wav", seconds=2.0)
+
+    with pytest.raises(media.MembersDisagree) as refused:
+        media.attach(
+            db,
+            exercise_id=le_freak.id,
+            kind="file",
+            path=str(odd),
+            group_id=first.group_id,
+            now=NOW,
+        )
+
+    assert "half.wav" in str(refused.value)
+    assert len(media.exercise_media(db, exercise_id=le_freak.id)[0].sources) == 1
+
+
+def test_a_member_within_the_tolerance_is_allowed(db, le_freak, audio_file):
+    first = media.attach(
+        db,
+        exercise_id=le_freak.id,
+        kind="file",
+        path=str(audio_file("bass.wav", seconds=4.0)),
+        now=NOW,
+    )
+
+    media.attach(
+        db,
+        exercise_id=le_freak.id,
+        kind="file",
+        path=str(audio_file("drums.wav", seconds=4.1)),
+        group_id=first.group_id,
+        now=NOW,
+    )
+
+    assert len(media.exercise_media(db, exercise_id=le_freak.id)[0].sources) == 2
+
+
+def test_a_file_whose_length_cannot_be_read_is_not_added_to_a_set(
+    db, le_freak, audio_file, roots
+):
+    first = media.attach(
+        db,
+        exercise_id=le_freak.id,
+        kind="file",
+        path=str(audio_file("bass.wav")),
+        now=NOW,
+    )
+    nonsense = roots / "notes.txt"
+    nonsense.write_text("this is not audio")
+
+    with pytest.raises(media.UnreadableAudio):
+        media.attach(
+            db,
+            exercise_id=le_freak.id,
+            kind="file",
+            path=str(nonsense),
+            group_id=first.group_id,
+            now=NOW,
+        )
+
+
+def test_a_group_that_is_not_there_cannot_be_added_to(db, le_freak, audio_file):
+    with pytest.raises(media.UnknownMedia):
+        media.attach(
+            db,
+            exercise_id=le_freak.id,
+            kind="file",
+            path=str(audio_file("bass.wav")),
+            group_id=404,
+            now=NOW,
+        )
+
+
+def test_a_track_can_be_named_and_mixed(db, le_freak, audio_file):
+    track = media.attach(
+        db,
+        exercise_id=le_freak.id,
+        kind="file",
+        path=str(audio_file("bass.wav")),
+        now=NOW,
+    )
+
+    updated = media.describe(
+        db, source_id=track.id, label="bass DI", gain=0.5, pan=-0.4, muted=True
+    )
+
+    assert (updated.label, updated.gain, updated.pan, updated.muted) == (
+        "bass DI",
+        0.5,
+        -0.4,
+        True,
+    )
+
+
+def test_the_mix_stays_inside_what_a_mixer_can_mean(db, le_freak, audio_file):
+    track = media.attach(
+        db,
+        exercise_id=le_freak.id,
+        kind="file",
+        path=str(audio_file("bass.wav")),
+        now=NOW,
+    )
+
+    with pytest.raises(media.BadMedia):
+        media.describe(db, source_id=track.id, pan=2.0)
+    with pytest.raises(media.BadMedia):
+        media.describe(db, source_id=track.id, gain=-1.0)
+
+
+def test_a_set_can_be_labelled_as_a_whole(db, le_freak, audio_file):
+    track = media.attach(
+        db,
+        exercise_id=le_freak.id,
+        kind="file",
+        path=str(audio_file("bass.wav")),
+        now=NOW,
+    )
+
+    media.label_set(db, group_id=track.group_id or 0, label="stems")
+
+    assert media.exercise_media(db, exercise_id=le_freak.id)[0].label == "stems"
+
+
+def test_detaching_one_member_leaves_the_set_behind(db, le_freak, audio_file):
+    bass = media.attach(
+        db,
+        exercise_id=le_freak.id,
+        kind="file",
+        path=str(audio_file("bass.wav")),
+        now=NOW,
+    )
+    drums = media.attach(
+        db,
+        exercise_id=le_freak.id,
+        kind="file",
+        path=str(audio_file("drums.wav")),
+        group_id=bass.group_id,
+        now=NOW,
+    )
+
+    media.detach(db, source_id=drums.id)
+
+    card = media.exercise_media(db, exercise_id=le_freak.id)[0]
+    assert [track.id for track in card.sources] == [bass.id]
+    assert not card.is_set
