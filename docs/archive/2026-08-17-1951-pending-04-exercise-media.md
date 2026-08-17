@@ -3,8 +3,24 @@
 **Phase 4 of `docs/plans/00-practice-app.md`.** Read that first for the stack
 (FastAPI + Jinja2 + HTMX, no Node), the storage (SQLite, hand-written SQL,
 numbered migrations) and the domain (module → exercise → practice entry).
-Wishlist stage: the shape below is a direction, and the steps get their
-red/green detail when the phase starts.
+
+**Done.** All seven steps are built and tested (`music_tools/domain/media.py`,
+`music_tools/db/migrations/002_media.sql`, `music_tools/web/routes/media.py`,
+`tests/test_media.py`, and the reworked `domain/session.py`). Three notes on
+what the build decided where the plan left room:
+
+- **The card lives at the top of the day log**, and the header clock is gone
+  rather than repurposed. A module row carries the same **done** and **discard**
+  while it is the one running, so a session can be driven from either page.
+- **`done` acts on the entry, not on the exercise** (`POST /entries/{id}/done`),
+  which is what makes an ad-hoc line finishable by the same button. `practice
+  done NAME` with nothing running still schedules the row and logs no time for
+  it — practising away from the terminal is normal, and inventing a start time
+  is not.
+- **Paths are typed, not browsed.** The page names the roots and the domain
+  refuses anything outside them; a file browser belongs to the parked
+  loop-editor plan. Serving re-checks the roots, because they can be narrowed
+  after a row was written.
 
 ## Goal
 

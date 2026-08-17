@@ -320,7 +320,7 @@ steps as its phase starts, and is expected to bend on contact with reality.
 | 1 | Foundations | `../archive/2026-08-15-1222-af747ab-01-foundations.md` (done) | A test suite, CI, and an importable `loop.py` |
 | 2 | Domain, database, importer | `../archive/2026-08-15-1541-647ef39-02-domain.md` (done) | The sheet's brain in Python, plus a CLI and the migrated history |
 | 3 | The app, and the cutover | `../archive/2026-08-16-1213-21118f2-03-web.md` (done) | The spreadsheet retired |
-| 4 | Exercise media, and the log rework | `04-exercise-media.md` | Start it and it is in the log, tune showing; done when done |
+| 4 | Exercise media, and the log rework | `../archive/2026-08-17-1951-pending-04-exercise-media.md` (done) | Start it and it is in the log, tune showing; done when done |
 | 5 | Playback | `05-playback.md` | The tune plays in the page: waveform, playhead, speed, pitch — then 3–8 stems from one transport, with a mixer |
 | 6 | Markers | `06-markers.md` | Markers placed, edited, guessed, exported — no Transcribe! |
 | 7 | Segments | `07-segments.md` | `loop.py`'s output built by pointing, no YAML in sight |
