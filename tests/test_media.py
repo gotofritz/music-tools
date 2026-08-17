@@ -542,3 +542,72 @@ def test_detaching_one_member_leaves_the_set_behind(db, le_freak, audio_file):
     card = media.exercise_media(db, exercise_id=le_freak.id)[0]
     assert [track.id for track in card.sources] == [bass.id]
     assert not card.is_set
+
+
+# --- reading a YouTube link -------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "url,embed",
+    [
+        ("https://www.youtube.com/watch?v=Kt2GdFbdVxo", "Kt2GdFbdVxo"),
+        ("https://youtube.com/watch?v=Kt2GdFbdVxo&t=90s", "Kt2GdFbdVxo"),
+        ("https://youtu.be/Kt2GdFbdVxo", "Kt2GdFbdVxo"),
+        ("https://www.youtube.com/shorts/Kt2GdFbdVxo", "Kt2GdFbdVxo"),
+        ("https://www.youtube.com/embed/Kt2GdFbdVxo", "Kt2GdFbdVxo"),
+    ],
+)
+def test_the_shapes_youtube_hands_out_all_resolve_to_an_embed(url, embed):
+    assert media.youtube_embed(url) == f"https://www.youtube.com/embed/{embed}"
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        None,
+        "",
+        "https://example.com/not-a-video",
+        "https://www.youtube.com/",
+        "https://www.youtube.com/watch?list=PL123",
+    ],
+)
+def test_anything_else_is_left_as_a_plain_link(url):
+    assert media.youtube_embed(url) is None
+
+
+def test_the_default_roots_are_the_scores_and_the_app_data_directory(monkeypatch):
+    monkeypatch.delenv("MUSIC_TOOLS_MEDIA_ROOTS", raising=False)
+
+    roots = media.media_roots()
+
+    assert any(root.name == "TUNES" for root in roots)
+    assert any(root.name == "music-tools" for root in roots)
+
+
+def test_a_kind_that_carries_no_group_cannot_be_given_one(db, le_freak):
+    with pytest.raises(media.BadMedia):
+        media.attach(
+            db,
+            exercise_id=le_freak.id,
+            kind="text",
+            body="notes",
+            group_id=1,
+            now=NOW,
+        )
+
+
+def test_describing_nothing_leaves_the_track_as_it_was(db, le_freak, audio_file):
+    track = media.attach(
+        db,
+        exercise_id=le_freak.id,
+        kind="file",
+        path=str(audio_file("bass.wav")),
+        now=NOW,
+    )
+
+    assert media.describe(db, source_id=track.id) == track
+
+
+def test_a_set_that_is_not_there_cannot_be_labelled(db):
+    with pytest.raises(media.UnknownMedia):
+        media.label_set(db, group_id=404, label="stems")
