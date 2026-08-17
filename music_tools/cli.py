@@ -42,15 +42,20 @@ from music_tools.domain.catalogue import (
 from music_tools.domain.models import Exercise, Module, PracticeEntry
 from music_tools.domain.scheduling import Algorithm
 from music_tools.domain.session import (
+    EntryClosed,
+    UnknownEntry,
+    current_entry,
     day_summary,
+    discard_entry,
     entry_duration,
+    finish_entry,
     format_due,
     format_duration,
     format_when,
-    mark_done,
     practice_day_for,
-    restart_clock,
+    start_ad_hoc,
     start_day,
+    start_exercise,
 )
 from music_tools.domain.tempo import format_tempo, parse_tempo
 
@@ -405,8 +410,56 @@ def next_up(ctx: click.Context, module_name: str | None, limit: int) -> None:
             click.echo(_row_line(exercise, today))
 
 
+@practice.command("start")
+@click.argument("exercise", required=False)
+@click.option("--ad-hoc", "ad_hoc", help="Start something not in the catalogue.")
+@click.option("--log-group", help="Which bucket ad-hoc practice subtotals into.")
+@click.option("--speed", help="The speed ad-hoc practice was played at.")
+@click.pass_context
+def start(
+    ctx: click.Context,
+    exercise: str | None,
+    ad_hoc: str | None,
+    log_group: str | None,
+    speed: str | None,
+) -> None:
+    """Playing this now: put it in the day log, and leave it running.
+
+    Nothing is scheduled by starting — `done` is what moves the schedule on.
+    Whatever was running is closed at this moment, because one entry runs at a
+    time.
+    """
+    if bool(exercise) == bool(ad_hoc):
+        raise click.ClickException("name an exercise, or pass --ad-hoc TEXT")
+    conn = _connect(ctx)
+    now = _now(ctx)
+    if ad_hoc:
+        result = start_ad_hoc(
+            conn, description=ad_hoc, log_group=log_group, speed=speed, now=now
+        )
+    else:
+        found = _resolve(conn, exercise or "")
+        result = start_exercise(conn, exercise_id=found.id, now=now)
+    click.echo(f"{result.entry.description} started at {now:%H:%M}")
+    if result.closed is not None:
+        click.echo(
+            f"closed {result.closed.description}"
+            f" at {now:%H:%M} — `done` was never said for it"
+        )
+
+
+@practice.command("discard")
+@click.pass_context
+def discard_running(ctx: click.Context) -> None:
+    """Drop what is running: a false start, logged as nothing."""
+    conn = _connect(ctx)
+    running = _running(conn, now=_now(ctx))
+    discard_entry(conn, entry_id=running.id)
+    click.echo(f"{running.description or 'that line'} discarded — no time logged")
+
+
 @practice.command("done")
-@click.argument("exercise")
+@click.argument("exercise", required=False)
 @click.option(
     "--short", "algorithm", flag_value=Algorithm.SHORT, help="Half the table."
 )
@@ -425,52 +478,51 @@ def next_up(ctx: click.Context, module_name: str | None, limit: int) -> None:
 @click.option("--notes", help="A note for the log line.")
 @click.pass_context
 def done(
-    ctx: click.Context, exercise: str, algorithm: str | None, notes: str | None
+    ctx: click.Context,
+    exercise: str | None,
+    algorithm: str | None,
+    notes: str | None,
 ) -> None:
-    """Mark an exercise practised: move the schedule and log the time."""
-    conn = _connect(ctx)
-    found = _resolve(conn, exercise)
-    now = _now(ctx)
-    result = mark_done(
-        conn,
-        exercise_id=found.id,
-        algorithm=Algorithm(algorithm) if algorithm else Algorithm.NORMAL,
-        now=now,
-        rng=random.Random(),
-        notes=notes,
-    )
+    """Finished with it: close the line and move the schedule on.
 
-    updated = result.exercise
-    today = practice_day_for(now)
-    click.echo(
-        f"{updated.name} done — practised {updated.practiced_count} times,"
-        f" next due {format_due(updated.next_due)}"
-        f" ({format_when(updated.next_due, today)})"
-    )
-    entry = result.closed
-    click.echo(
-        f"logged {entry.started_at:%H:%M}-{now:%H:%M}"
-        f"  {format_duration(int((now - entry.started_at).total_seconds()))}"
-        f"  {entry.log_group or '-'}  {_tempo(updated)}"
-    )
-
-
-@practice.command("start")
-@click.pass_context
-def start(ctx: click.Context) -> None:
-    """Start the clock now, after a break.
-
-    Entries normally follow on from each other. Use this when they should not:
-    the gap since the last one is thrown away rather than logged against
-    whatever you play next.
+    With no EXERCISE this finishes whatever is running. Naming one that was
+    never started still schedules it — practising away from the terminal is
+    normal — and logs no time for it, because nobody said when it began.
     """
     conn = _connect(ctx)
     now = _now(ctx)
-    result = restart_clock(conn, now=now)
-    dropped = ""
-    if result.dropped_seconds:
-        dropped = f" — {format_duration(result.dropped_seconds)} of break not logged"
-    click.echo(f"clock running from {now:%H:%M}{dropped}")
+    how = Algorithm(algorithm) if algorithm else Algorithm.NORMAL
+    entry_id = _entry_to_finish(conn, exercise, now=now)
+    try:
+        result = finish_entry(
+            conn,
+            entry_id=entry_id,
+            algorithm=how,
+            now=now,
+            rng=random.Random(),
+            notes=notes,
+        )
+    except (UnknownEntry, EntryClosed):  # pragma: no cover - just looked it up
+        raise click.ClickException("nothing to finish") from None
+
+    entry = result.closed
+    today = practice_day_for(now)
+    if result.exercise is not None:
+        updated = result.exercise
+        click.echo(
+            f"{updated.name} done — practised {updated.practiced_count} times,"
+            f" next due {format_due(updated.next_due)}"
+            f" ({format_when(updated.next_due, today)})"
+        )
+        tempo = f"  {_tempo(updated)}"
+    else:
+        click.echo(f"{entry.description} done")
+        tempo = ""
+    click.echo(
+        f"logged {entry.started_at:%H:%M}-{now:%H:%M}"
+        f"  {format_duration(entry_duration(entry))}"
+        f"  {entry.log_group or '-'}{tempo}"
+    )
 
 
 @practice.command("serve")
@@ -499,11 +551,10 @@ def day() -> None:
 @day.command("new")
 @click.pass_context
 def day_new(ctx: click.Context) -> None:
-    """Start a day and set the clock running."""
+    """Open today's block. Starting an exercise does this anyway."""
     conn = _connect(ctx)
-    now = _now(ctx)
-    started = start_day(conn, now=now)
-    click.echo(f"{started.day.isoformat()} started, clock running from {now:%H:%M}")
+    started = start_day(conn, now=_now(ctx))
+    click.echo(f"{started.day.isoformat()} started")
 
 
 @practice.group("db")
@@ -564,6 +615,40 @@ def show_log(ctx: click.Context, which: str) -> None:
 
 
 # --- plumbing ---------------------------------------------------------------
+
+
+def _running(conn: sqlite3.Connection, *, now: datetime) -> PracticeEntry:
+    """Whatever is being practised, or a message saying nothing is."""
+    running = current_entry(conn, now=now)
+    if running is None:
+        raise click.ClickException(
+            "nothing is running — `practice start EXERCISE` first"
+        )
+    return running
+
+
+def _entry_to_finish(
+    conn: sqlite3.Connection, exercise: str | None, *, now: datetime
+) -> int:
+    """The line `done` closes.
+
+    With no name it is the one running. With a name it is the one running for
+    that exercise; something else running is refused rather than guessed at.
+    With a name and nothing running at all, the exercise is started and closed
+    in the same breath: practising away from the terminal is normal, and this
+    moves the schedule while inventing no time for it.
+    """
+    if exercise is None:
+        return _running(conn, now=now).id
+    found = _resolve(conn, exercise)
+    running = current_entry(conn, now=now)
+    if running is None:
+        return start_exercise(conn, exercise_id=found.id, now=now).entry.id
+    if running.exercise_id != found.id:
+        raise click.ClickException(
+            f"{running.description} is running — finish or discard that one first"
+        )
+    return running.id
 
 
 def _now(ctx: click.Context) -> datetime:

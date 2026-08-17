@@ -113,26 +113,25 @@ class PracticeEntry(BaseModel):
     notes: str | None = None
 
 
+class StartResult(BaseModel):
+    """What starting something did: a line in the log, and maybe one closed.
+
+    `closed` is whatever was running when this started — one entry runs at a
+    time — and is `None` when nothing was.
+    """
+
+    entry: PracticeEntry
+    closed: PracticeEntry | None = None
+
+
 class DoneResult(BaseModel):
-    """What `mark_done` did: the schedule moved, and the clock ticked over."""
+    """What `done` did: a line closed, and the schedule moved if there was one.
 
-    exercise: Exercise
+    `exercise` is `None` for an ad-hoc entry: there is nothing to schedule.
+    """
+
+    exercise: Exercise | None = None
     closed: PracticeEntry
-    opened: PracticeEntry
-
-
-class LogResult(BaseModel):
-    """What logging an ad-hoc entry did: one line closed, the next opened."""
-
-    closed: PracticeEntry
-    opened: PracticeEntry
-
-
-class RestartResult(BaseModel):
-    """What `restart_clock` did: a fresh entry, and the gap it threw away."""
-
-    opened: PracticeEntry
-    dropped_seconds: int
 
 
 class GroupTotal(BaseModel):

@@ -25,9 +25,11 @@ load-bearing.
 """
 
 import os
+import re
 import sqlite3
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 from pydantic import BaseModel
 
@@ -95,6 +97,31 @@ class MediaCard(BaseModel):
     def position(self) -> int:
         """Where this card sits in the exercise, whichever row carries it."""
         return self.group.position if self.group else self.sources[0].position
+
+
+def youtube_embed(url: str | None) -> str | None:
+    """The embed URL for a YouTube link, or `None` if it is not one.
+
+    Downloading is another app's job, so a YouTube attachment is a URL
+    rendered as the embedded player. Anything this cannot read is shown as a
+    plain link instead — which is also what the page falls back to with the
+    network off.
+    """
+    if not url:
+        return None
+    parts = urlsplit(url)
+    host = parts.netloc.lower().removeprefix("www.")
+    video = ""
+    if host in ("youtube.com", "m.youtube.com", "youtube-nocookie.com"):
+        if parts.path == "/watch":
+            video = parse_qs(parts.query).get("v", [""])[0]
+        elif parts.path.startswith(("/embed/", "/shorts/", "/live/")):
+            video = parts.path.split("/")[2]
+    elif host == "youtu.be":
+        video = parts.path.lstrip("/")
+    if not re.fullmatch(r"[\w-]{6,20}", video):
+        return None
+    return f"https://www.youtube.com/embed/{video}"
 
 
 def media_roots() -> tuple[Path, ...]:

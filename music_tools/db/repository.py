@@ -69,7 +69,7 @@ MEDIA_SOURCE_COLUMNS = (
 ENTRY_COLUMNS = (
     "day_id",
     "exercise_id",
-    "started_at",  # restamped by restart_clock when a break is not practice
+    "started_at",  # stamped by start; the gaps between entries are gaps
     "ended_at",
     "speed",
     "bpm",

@@ -1,0 +1,40 @@
+{# What is being practised right now: the line the log already has, the
+   material to play it from, and the two ways out of it.
+
+   `done` moves the schedule on; `discard` takes a false start out again and
+   logs nothing for it. There is no clock to stop — the entry is the clock, and
+   these two are what move it. #}
+<div id="now-playing" class="now-playing">
+  {% if running %}
+  <h3>{{ running.description or "something" }}
+    <span class="muted">since {{ running.started_at.strftime("%H:%M") }}
+      ({{ duration_text(running, live or now) }})</span></h3>
+  {% if running_media %}
+  {% with cards = running_media %}
+  {% include "_media.html" %}
+  {% endwith %}
+  {% elif running_exercise %}
+  <p class="muted">Nothing attached to this one yet.</p>
+  {% endif %}
+  <form class="finish" action="/entries/{{ running.id }}/done" method="post"
+        hx-post="/entries/{{ running.id }}/done" hx-target="#day-log"
+        hx-swap="outerHTML">
+    <select name="algorithm" aria-label="how it comes back">
+      <option value="normal">normal</option>
+      <option value="short">short</option>
+      <option value="long">long</option>
+      <option value="rotate">rotate</option>
+      <option value="hold">hold</option>
+    </select>
+    <button type="submit">done</button>
+  </form>
+  <form action="/entries/{{ running.id }}/discard" method="post"
+        hx-post="/entries/{{ running.id }}/discard" hx-target="#day-log"
+        hx-swap="outerHTML"
+        hx-confirm="Discard this line? No time is logged for it.">
+    <button type="submit" class="remove">discard</button>
+  </form>
+  {% else %}
+  <p class="muted">Nothing running. Start something from a module page.</p>
+  {% endif %}
+</div>

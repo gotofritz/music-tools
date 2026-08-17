@@ -3,13 +3,6 @@
 {% block main %}
 <h1><time datetime="{{ day.isoformat() }}">{{ day.strftime("%A %d %B %Y") }}</time></h1>
 
-{% if not day_started %}
-<form class="start-day" action="/days" method="post"
-      hx-post="/days" hx-target="#day-log">
-  <button type="submit">start a day</button>
-</form>
-{% endif %}
-
 {% include "_day_log.html" %}
 {% include "_day_totals.html" %}
 

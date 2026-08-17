@@ -3,8 +3,9 @@
    has been opened for correction.
 
    Read-only until asked: a log is for reading, and a page of boxes reads
-   like a form. The running line has no boxes even then — that one is the
-   clock, and `done` and `stop` are what move it. #}
+   like a form. The running line has no boxes even then — that one is what is
+   being practised, and the card above the log is where `done` and `discard`
+   live. #}
 <tr id="entry-{{ entry.id }}"{% if not entry.ended_at %} class="running"{% endif %}>
   {% if editing and entry.ended_at %}
   <td>
@@ -53,14 +54,8 @@
   <td>{{ entry.started_at.strftime("%H:%M") }}</td>
   <td>—</td>
   <td>{{ duration_text(entry, live) }}</td>
-  <td><em>running</em></td>
+  <td>{{ entry.description }} <em>(running)</em></td>
   <td>{{ entry.speed or "" }}</td>
-  <td>
-    <form action="/entries/{{ entry.id }}/stop" method="post"
-          hx-post="/entries/{{ entry.id }}/stop" hx-target="#day-log"
-          hx-swap="outerHTML">
-      <button type="submit">stop</button>
-    </form>
-  </td>
+  <td>{{ entry.log_group or "" }}</td>
   {% endif %}
 </tr>

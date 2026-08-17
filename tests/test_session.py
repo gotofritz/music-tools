@@ -1,8 +1,10 @@
-"""The repository, marking an exercise done, and the day totals.
+"""The repository, starting and finishing an exercise, and the day totals.
 
-Steps 4 to 6 of docs/plans/02-domain.md. The first half is storage — SQL in,
-pydantic out. The second half is `doneExercise_`, which did five things at
-once and here does them in one transaction.
+Steps 4 to 6 of docs/plans/02-domain.md, reworked by step 2 of
+docs/plans/04-exercise-media.md. The first half is storage — SQL in, pydantic
+out. The second half used to be `doneExercise_`, which tiled the session end to
+end; now **start** opens an entry and **done** closes it, and the gaps between
+them are gaps.
 """
 
 from datetime import date, datetime, timedelta
@@ -13,18 +15,22 @@ from music_tools.db import repository as repo
 from music_tools.db.connection import transaction
 from music_tools.domain.scheduling import Algorithm
 from music_tools.domain.session import (
+    EntryClosed,
     EntryRunning,
     UnknownEntry,
     amend_entry,
+    current_entry,
     day_summary,
     delete_entry,
+    discard_entry,
     entry_duration,
+    finish_entry,
     format_duration,
-    mark_done,
     practice_day_for,
     recent_days,
-    restart_clock,
+    start_ad_hoc,
     start_day,
+    start_exercise,
 )
 
 NOW = datetime(2026, 7, 5, 22, 27)
@@ -162,120 +168,245 @@ def test_an_exercise_name_is_unique_within_its_module(db, songs, slap):
     assert repo.create_exercise(db, module_id=slap.id, name="le freak").id is not None
 
 
-# --- Step 5: marking an exercise done ---------------------------------------
+# --- Step 5: start, and done ------------------------------------------------
 
 
-def test_done_moves_the_schedule(db, stomp, steady_rng):
-    result = mark_done(
+def done(db, entry_id, rng, *, algorithm=Algorithm.NORMAL, now=None, notes=None):
+    """`finish_entry` with the arguments every test would repeat."""
+    return finish_entry(
         db,
-        exercise_id=stomp.id,
-        algorithm=Algorithm.NORMAL,
-        now=NOW,
-        rng=steady_rng,
+        entry_id=entry_id,
+        algorithm=algorithm,
+        now=now if now is not None else NOW,
+        rng=rng,
+        notes=notes,
     )
 
-    assert result.exercise.practiced_count == 9
-    assert result.exercise.last_practiced == date(2026, 7, 5)
-    # count 9 reads INTERVALS[9] = 55, scaled by the 80% ratio: 44 days
-    assert result.exercise.next_due == date(2026, 7, 5) + timedelta(days=44)
+
+def test_starting_an_exercise_logs_it_straight_away(db, stomp, slap):
+    result = start_exercise(db, exercise_id=stomp.id, now=NOW)
+
+    assert result.entry.exercise_id == stomp.id
+    assert result.entry.started_at == NOW
+    assert result.entry.ended_at is None
+    assert result.closed is None
+    # snapshotted at the start, because that is when the line becomes visible
+    assert result.entry.description == "Stomp!"
+    assert result.entry.speed == "80%"
+    assert result.entry.bpm == pytest.approx(106.4)  # 80% of 133
+    assert result.entry.log_group == "TECHNIQUE"
 
 
-def test_done_closes_the_running_entry_and_opens_the_next(db, stomp, steady_rng):
-    start_day(db, now=datetime(2026, 7, 5, 22, 20))
-
-    result = mark_done(
-        db, exercise_id=stomp.id, algorithm=Algorithm.NORMAL, now=NOW, rng=steady_rng
-    )
-
-    assert result.closed.started_at == datetime(2026, 7, 5, 22, 20)
-    assert result.closed.ended_at == NOW
-    assert result.opened.started_at == NOW
-    assert result.opened.ended_at is None
-
-
-def test_the_closed_entry_is_a_snapshot(db, stomp, slap, steady_rng):
-    result = mark_done(
-        db, exercise_id=stomp.id, algorithm=Algorithm.NORMAL, now=NOW, rng=steady_rng
-    )
-    repo.update_exercise(db, stomp.id, name="Stomp! (renamed)", speed="100%")
-
-    entry = loaded(repo.get_entry(db, result.closed.id))
-    assert entry.description == "Stomp!"
-    assert entry.speed == "80%"
-    assert entry.bpm == pytest.approx(106.4)  # 80% of 133
-    assert entry.log_group == "TECHNIQUE"
-    assert entry.exercise_id == stomp.id
-
-
-def test_done_with_no_day_open_starts_one_from_that_moment(db, stomp, steady_rng):
-    result = mark_done(
-        db, exercise_id=stomp.id, algorithm=Algorithm.NORMAL, now=NOW, rng=steady_rng
-    )
+def test_starting_an_exercise_opens_the_day_it_falls_in(db, stomp):
+    start_exercise(db, exercise_id=stomp.id, now=NOW)
 
     assert repo.get_day(db, date(2026, 7, 5)) is not None
-    assert result.closed.started_at == NOW
+
+
+def test_starting_does_not_move_the_schedule(db, stomp):
+    start_exercise(db, exercise_id=stomp.id, now=NOW)
+
+    still = loaded(repo.get_exercise(db, stomp.id))
+    assert still.practiced_count == 8
+    assert still.next_due == date(2026, 7, 1)
+
+
+def test_the_snapshot_does_not_follow_a_rename(db, stomp, slap):
+    result = start_exercise(db, exercise_id=stomp.id, now=NOW)
+
+    repo.update_exercise(db, stomp.id, name="Stomp! (renamed)", speed="100%")
+
+    assert loaded(repo.get_entry(db, result.entry.id)).description == "Stomp!"
+
+
+def test_starting_the_next_exercise_closes_the_one_that_was_running(db, slap, stomp):
+    other = repo.create_exercise(db, module_id=slap.id, name="Skips")
+    start_exercise(db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 20))
+
+    result = start_exercise(db, exercise_id=other.id, now=NOW)
+
+    # attributed when it was started, so closing it at that instant is honest
+    assert loaded(result.closed).description == "Stomp!"
+    assert loaded(result.closed).ended_at == NOW
+    assert current_entry(db, now=NOW) == result.entry
+
+
+def test_closing_the_previous_entry_does_not_move_its_schedule(db, slap, stomp):
+    other = repo.create_exercise(db, module_id=slap.id, name="Skips")
+    start_exercise(db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 20))
+
+    start_exercise(db, exercise_id=other.id, now=NOW)
+
+    assert loaded(repo.get_exercise(db, stomp.id)).practiced_count == 8
+
+
+def test_starting_an_exercise_that_is_not_there_writes_nothing(db):
+    with pytest.raises(Exception):
+        start_exercise(db, exercise_id=404, now=NOW)
+
+    assert repo.list_days(db) == []
+
+
+def test_something_ad_hoc_is_started_against_no_exercise(db):
+    result = start_ad_hoc(db, description="warm-up", log_group="TECHNIQUE", now=NOW)
+
+    assert result.entry.exercise_id is None
+    assert result.entry.description == "warm-up"
+    assert result.entry.log_group == "TECHNIQUE"
+    assert result.entry.ended_at is None
+
+
+def test_done_closes_the_entry_and_moves_the_schedule(db, stomp, steady_rng):
+    started = start_exercise(db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 20))
+
+    result = done(db, started.entry.id, steady_rng)
+
+    assert loaded(result.exercise).practiced_count == 9
+    assert loaded(result.exercise).last_practiced == date(2026, 7, 5)
+    # count 9 reads INTERVALS[9] = 55, scaled by the 80% ratio: 44 days
+    assert loaded(result.exercise).next_due == date(2026, 7, 5) + timedelta(days=44)
+    assert result.closed.started_at == datetime(2026, 7, 5, 22, 20)
+    assert result.closed.ended_at == NOW
+    assert current_entry(db, now=NOW) is None  # nothing follows it
+
+
+def test_done_keeps_the_snapshot_the_start_took(db, stomp, slap, steady_rng):
+    started = start_exercise(db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 20))
+    repo.update_exercise(db, stomp.id, name="Stomp! (renamed)", speed="100%")
+
+    result = done(db, started.entry.id, steady_rng)
+
+    assert result.closed.description == "Stomp!"
+    assert result.closed.speed == "80%"
+    assert result.closed.log_group == "TECHNIQUE"
+    assert result.closed.exercise_id == stomp.id
+
+
+def test_done_writes_a_note_when_one_is_given(db, stomp, steady_rng):
+    started = start_exercise(db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 20))
+
+    result = done(db, started.entry.id, steady_rng, notes="left hand only")
+
+    assert result.closed.notes == "left hand only"
+
+
+def test_done_on_an_ad_hoc_entry_closes_it_and_schedules_nothing(db, steady_rng):
+    started = start_ad_hoc(db, description="jam", now=datetime(2026, 7, 5, 22, 20))
+
+    result = done(db, started.entry.id, steady_rng)
+
+    assert result.exercise is None
     assert result.closed.ended_at == NOW
 
 
-def test_a_running_entry_left_over_from_an_earlier_day_is_discarded(
-    db, stomp, steady_rng
-):
-    start_day(db, now=datetime(2026, 7, 4, 21, 0))  # nobody stopped the clock
+def test_done_twice_is_refused(db, stomp, steady_rng):
+    started = start_exercise(db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 20))
+    done(db, started.entry.id, steady_rng)
 
-    mark_done(
-        db, exercise_id=stomp.id, algorithm=Algorithm.NORMAL, now=NOW, rng=steady_rng
-    )
+    with pytest.raises(EntryClosed):
+        done(db, started.entry.id, steady_rng)
 
-    yesterday = loaded(repo.get_day(db, date(2026, 7, 4)))
-    assert repo.entries_for_day(db, yesterday.id) == []
+    assert loaded(repo.get_exercise(db, stomp.id)).practiced_count == 9
+
+
+def test_done_on_an_entry_that_is_not_there_is_an_error(db, steady_rng):
+    with pytest.raises(UnknownEntry):
+        done(db, 404, steady_rng)
 
 
 def test_done_is_one_transaction(db, stomp, slap, steady_rng, monkeypatch):
-    day = start_day(db, now=datetime(2026, 7, 5, 22, 20))
-    running = loaded(repo.running_entry(db, day_id=day.id))
+    started = start_exercise(db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 20))
 
     def explode(*args, **kwargs):
         raise RuntimeError("boom")
 
-    # the last write mark_done does: everything before it must roll back
-    monkeypatch.setattr(repo, "create_entry", explode)
+    # the last write done does: the close before it must roll back
+    monkeypatch.setattr(repo, "update_exercise", explode)
 
     with pytest.raises(RuntimeError):
-        mark_done(
-            db,
-            exercise_id=stomp.id,
-            algorithm=Algorithm.NORMAL,
-            now=NOW,
-            rng=steady_rng,
-        )
+        done(db, started.entry.id, steady_rng)
 
     assert loaded(repo.get_exercise(db, stomp.id)).practiced_count == 8
-    assert loaded(repo.get_entry(db, running.id)).ended_at is None
+    assert loaded(repo.get_entry(db, started.entry.id)).ended_at is None
 
 
 def test_hold_scans_the_module_without_the_exercise_itself(db, slap, stomp, steady_rng):
     repo.create_exercise(
         db, module_id=slap.id, name="Skips", next_due=date(2026, 6, 15)
     )
+    started = start_exercise(db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 20))
 
     # stomp is due 2026-07-01; the day in front of the *other* row is sooner
-    result = mark_done(
-        db, exercise_id=stomp.id, algorithm=Algorithm.HOLD, now=NOW, rng=steady_rng
-    )
+    result = done(db, started.entry.id, steady_rng, algorithm=Algorithm.HOLD)
 
-    assert result.exercise.next_due == date(2026, 6, 14)
+    assert loaded(result.exercise).next_due == date(2026, 6, 14)
 
 
 def test_rotate_scans_the_module_including_the_exercise_itself(db, slap, steady_rng):
     back = repo.create_exercise(
         db, module_id=slap.id, name="Skips", next_due=date(2027, 1, 5)
     )
+    started = start_exercise(db, exercise_id=back.id, now=datetime(2026, 7, 5, 22, 20))
 
-    result = mark_done(
-        db, exercise_id=back.id, algorithm=Algorithm.ROTATE, now=NOW, rng=steady_rng
-    )
+    result = done(db, started.entry.id, steady_rng, algorithm=Algorithm.ROTATE)
 
-    assert result.exercise.next_due == date(2027, 1, 5)
+    assert loaded(result.exercise).next_due == date(2027, 1, 5)
+
+
+# --- a false start, and the day boundary ------------------------------------
+
+
+def test_a_false_start_is_discarded_rather_than_logged(db, stomp):
+    started = start_exercise(db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 20))
+
+    discard_entry(db, entry_id=started.entry.id)
+
+    assert repo.get_entry(db, started.entry.id) is None
+    assert day_summary(db, day=date(2026, 7, 5), now=NOW).total_seconds == 0
+
+
+def test_a_finished_line_is_not_discarded(db, stomp, steady_rng):
+    started = start_exercise(db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 20))
+    done(db, started.entry.id, steady_rng)
+
+    with pytest.raises(EntryClosed):
+        discard_entry(db, entry_id=started.entry.id)
+
+
+def test_discarding_something_that_is_not_there_is_an_error(db):
+    with pytest.raises(UnknownEntry):
+        discard_entry(db, entry_id=404)
+
+
+def test_an_entry_left_running_from_an_earlier_day_is_discarded(db, stomp):
+    start_exercise(db, exercise_id=stomp.id, now=datetime(2026, 7, 4, 21, 0))
+
+    start_exercise(db, exercise_id=stomp.id, now=NOW)
+
+    yesterday = loaded(repo.get_day(db, date(2026, 7, 4)))
+    assert repo.entries_for_day(db, yesterday.id) == []
+
+
+def test_nothing_is_running_before_anything_is_started(db, stomp):
+    assert current_entry(db, now=NOW) is None
+
+    start_day(db, now=NOW)
+
+    # a day on its own is not a clock: an entry exists once one is started
+    assert current_entry(db, now=NOW) is None
+
+
+def test_the_gap_between_two_entries_is_not_practice_time(db, slap, stomp, steady_rng):
+    other = repo.create_exercise(db, module_id=slap.id, name="Skips")
+    first = start_exercise(db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 0))
+    done(db, first.entry.id, steady_rng, now=datetime(2026, 7, 5, 22, 10))
+
+    # twenty minutes of coffee, then something else for ten
+    second = start_exercise(db, exercise_id=other.id, now=datetime(2026, 7, 5, 22, 30))
+    done(db, second.entry.id, steady_rng, now=datetime(2026, 7, 5, 22, 40))
+
+    summary = day_summary(db, day=date(2026, 7, 5), now=datetime(2026, 7, 5, 22, 45))
+    assert format_duration(summary.total_seconds) == "00:20"
 
 
 # --- Step 6: days, totals and the 4am boundary ------------------------------
@@ -296,14 +427,14 @@ def test_practice_past_midnight_belongs_to_the_evening_it_started(now, day):
 
 def test_an_entry_across_midnight_counts_forwards(db, songs):
     day = start_day(db, now=datetime(2026, 7, 5, 23, 50))
-    entry = loaded(repo.running_entry(db, day_id=day.id))
-    repo.close_entry(
+    entry = repo.create_entry(
         db,
-        entry.id,
-        ended_at=datetime(2026, 7, 6, 0, 20),
+        day_id=day.id,
+        started_at=datetime(2026, 7, 5, 23, 50),
         description="le freak",
         log_group="REPERTOIRE",
     )
+    repo.close_entry(db, entry.id, ended_at=datetime(2026, 7, 6, 0, 20))
 
     summary = day_summary(db, day=date(2026, 7, 5))
 
@@ -343,92 +474,22 @@ def test_log_groups_need_not_be_contiguous(db, sample_day):
     assert format_duration(summary.total_seconds) == "01:03"
 
 
-def test_a_running_entry_counts_up_to_now(db, songs):
-    day = start_day(db, now=datetime(2026, 7, 5, 22, 0))
-    entry = loaded(repo.running_entry(db, day_id=day.id))
-    repo.close_entry(
-        db,
-        entry.id,
-        ended_at=datetime(2026, 7, 5, 22, 10),
-        description="le freak",
-        log_group="REPERTOIRE",
-    )
-    repo.create_entry(
-        db,
-        day_id=day.id,
-        started_at=datetime(2026, 7, 5, 22, 10),
-        log_group="REPERTOIRE",
-    )
+def test_a_running_entry_counts_up_to_now(db, songs, stomp, steady_rng):
+    first = start_exercise(db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 0))
+    done(db, first.entry.id, steady_rng, now=datetime(2026, 7, 5, 22, 10))
+    start_exercise(db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 10))
 
     summary = day_summary(db, day=date(2026, 7, 5), now=datetime(2026, 7, 5, 22, 25))
 
     assert format_duration(summary.total_seconds) == "00:25"
 
 
-def test_a_stale_running_entry_adds_nothing_to_an_earlier_day(db, songs):
-    start_day(db, now=datetime(2026, 7, 4, 21, 0))
+def test_a_stale_running_entry_adds_nothing_to_an_earlier_day(db, songs, stomp):
+    start_exercise(db, exercise_id=stomp.id, now=datetime(2026, 7, 4, 21, 0))
 
     summary = day_summary(db, day=date(2026, 7, 4), now=datetime(2026, 7, 5, 22, 25))
 
     assert summary.total_seconds == 0
-
-
-# --- Starting again after a break -------------------------------------------
-
-
-def test_start_discards_the_gap_and_runs_from_now(db, songs, steady_rng):
-    day = start_day(db, now=datetime(2026, 7, 5, 22, 20))
-
-    result = restart_clock(db, now=datetime(2026, 7, 5, 23, 40))
-
-    assert result.opened.started_at == datetime(2026, 7, 5, 23, 40)
-    assert result.opened.ended_at is None
-    assert result.dropped_seconds == 80 * 60
-    # one entry, running from the restart: the 80 minutes are simply not there
-    entries = repo.entries_for_day(db, day.id)
-    assert [entry.started_at for entry in entries] == [datetime(2026, 7, 5, 23, 40)]
-
-
-def test_start_leaves_what_was_already_logged_alone(db, stomp, steady_rng):
-    mark_done(
-        db, exercise_id=stomp.id, algorithm=Algorithm.NORMAL, now=NOW, rng=steady_rng
-    )
-
-    restart_clock(db, now=datetime(2026, 7, 5, 23, 40))
-
-    day = loaded(repo.get_day(db, date(2026, 7, 5)))
-    entries = repo.entries_for_day(db, day.id)
-    assert [entry.description for entry in entries] == ["Stomp!", ""]
-    assert loaded(entries[0].ended_at) == NOW
-
-
-def test_the_gap_is_never_practice_time(db, stomp, steady_rng):
-    mark_done(
-        db, exercise_id=stomp.id, algorithm=Algorithm.NORMAL, now=NOW, rng=steady_rng
-    )
-    restart_clock(db, now=datetime(2026, 7, 5, 23, 40))
-
-    summary = day_summary(db, day=date(2026, 7, 5), now=datetime(2026, 7, 5, 23, 50))
-
-    # the 10 minutes since the restart, and none of the 73 before it
-    assert format_duration(summary.total_seconds) == "00:10"
-
-
-def test_start_with_no_day_open_starts_one(db):
-    result = restart_clock(db, now=datetime(2026, 7, 5, 22, 20))
-
-    assert repo.get_day(db, date(2026, 7, 5)) is not None
-    assert result.opened.started_at == datetime(2026, 7, 5, 22, 20)
-    assert result.dropped_seconds == 0
-
-
-def test_start_discards_a_clock_left_running_on_an_earlier_day(db):
-    start_day(db, now=datetime(2026, 7, 4, 21, 0))
-
-    restart_clock(db, now=datetime(2026, 7, 5, 22, 20))
-
-    yesterday = loaded(repo.get_day(db, date(2026, 7, 4)))
-    assert repo.entries_for_day(db, yesterday.id) == []
 
 
 # --- the days before today --------------------------------------------------

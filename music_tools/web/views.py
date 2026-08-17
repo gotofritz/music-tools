@@ -10,8 +10,14 @@ from datetime import date, datetime
 from typing import Any
 
 from music_tools.db import repository as repo
+from music_tools.domain import media
 from music_tools.domain.models import Module, PracticeEntry
-from music_tools.domain.session import day_summary, practice_day_for, recent_days
+from music_tools.domain.session import (
+    current_entry,
+    day_summary,
+    practice_day_for,
+    recent_days,
+)
 
 #: How many finished days a page of history holds. Small on purpose: the
 #: button is there for the rare look backwards, not for scrolling a year.
@@ -19,34 +25,47 @@ PAGE_OF_DAYS = 5
 
 
 def running_entry(conn: sqlite3.Connection, *, now: datetime) -> PracticeEntry | None:
-    """The clock, if it is running today.
+    """What is being practised right now, if anything.
 
-    An entry left running from an earlier day is not the clock: it is time
-    nobody attributed, and `start_day` drops it rather than closing it at an
+    An entry left running from an earlier day is not it: that is time nobody
+    attributed, and the next start drops it rather than closing it at an
     invented moment.
     """
-    day = repo.get_day(conn, practice_day_for(now))
-    return repo.running_entry(conn, day_id=day.id) if day else None
+    return current_entry(conn, now=now)
 
 
 def chrome(conn: sqlite3.Connection, *, now: datetime) -> dict[str, Any]:
-    """What every page carries: the module nav, and the running clock."""
+    """What every page carries: the module nav, and what is being played.
+
+    The material comes with it, because the card the running entry draws is
+    what makes the exercise's media visible at the moment it is wanted.
+    """
+    running = running_entry(conn, now=now)
+    exercise = (
+        repo.get_exercise(conn, running.exercise_id)
+        if running is not None and running.exercise_id is not None
+        else None
+    )
     return {
         "now": now,
         "today": practice_day_for(now),
         "modules": repo.list_modules(conn),
-        "running": running_entry(conn, now=now),
+        "running": running,
+        "running_exercise": exercise,
+        "running_media": (
+            media.exercise_media(conn, exercise_id=exercise.id)
+            if exercise is not None
+            else []
+        ),
     }
 
 
 def today_context(conn: sqlite3.Connection, *, now: datetime) -> dict[str, Any]:
     """Today's block and totals, and the days behind it — the whole of `GET /`."""
     today = practice_day_for(now)
-    day = repo.get_day(conn, today)
     return {
         **chrome(conn, now=now),
         "day": today,
-        "day_started": day is not None,
         "summary": day_summary(conn, day=today, now=now),
         "live": now,
         "editing": False,

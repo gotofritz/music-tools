@@ -78,10 +78,55 @@ tr.running {
   background: #fff6d8;
 }
 
-.clock {
+/* What is being practised right now, and the material to play it from. */
+.now-playing {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.6rem 0.8rem;
+  margin-bottom: 1rem;
+  background: #fff6d8;
+}
+
+.now-playing h3 {
+  margin: 0 0 0.4rem;
+}
+
+.media {
+  margin: 0.4rem 0;
+}
+
+.media h4 {
+  margin: 0 0 0.2rem;
+  font-size: 0.9rem;
+}
+
+.track {
   display: flex;
   gap: 0.5rem;
-  align-items: baseline;
+  align-items: center;
+}
+
+.track-name {
+  color: var(--muted);
+  font-size: 0.8rem;
+  min-width: 8rem;
+}
+
+.media audio {
+  width: 100%;
+  max-width: 32rem;
+}
+
+iframe.youtube {
+  width: 100%;
+  max-width: 32rem;
+  aspect-ratio: 16 / 9;
+  border: 0;
+}
+
+.media-text {
+  white-space: pre-wrap;
+  margin: 0;
 }
 
 .no-target {

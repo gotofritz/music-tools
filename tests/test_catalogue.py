@@ -28,7 +28,7 @@ from music_tools.domain.catalogue import (
     update_module,
 )
 from music_tools.domain.scheduling import Algorithm
-from music_tools.domain.session import mark_done
+from music_tools.domain.session import finish_entry, start_exercise
 
 NOW = datetime(2026, 7, 5, 22, 27)
 TODAY = date(2026, 7, 5)
@@ -37,6 +37,18 @@ TODAY = date(2026, 7, 5)
 def loaded[T](value: T | None) -> T:
     assert value is not None
     return value
+
+
+def practised(db, exercise_id, rng):
+    """Start an exercise and finish it: one line in the log, and a schedule."""
+    started = start_exercise(db, exercise_id=exercise_id, now=NOW)
+    return finish_entry(
+        db,
+        entry_id=started.entry.id,
+        algorithm=Algorithm.NORMAL,
+        now=NOW,
+        rng=rng,
+    )
 
 
 @pytest.fixture
@@ -150,13 +162,7 @@ def test_a_module_can_be_retagged_and_reordered(db, slap):
 
 def test_editing_a_row_leaves_the_log_alone(db, slap, steady_rng):
     exercise = repo.create_exercise(db, module_id=slap.id, name="Stomp!", speed="80%")
-    result = mark_done(
-        db,
-        exercise_id=exercise.id,
-        algorithm=Algorithm.NORMAL,
-        now=NOW,
-        rng=steady_rng,
-    )
+    result = practised(db, exercise.id, steady_rng)
 
     update_exercise(db, exercise.id, name="Stomp! (Godsmack)", speed="90%")
 
@@ -219,13 +225,7 @@ def test_a_module_with_rows_can_be_deleted_on_purpose(db, slap):
 
 def test_a_module_whose_rows_are_in_the_log_is_never_hard_deleted(db, slap, steady_rng):
     exercise = repo.create_exercise(db, module_id=slap.id, name="Stomp!")
-    mark_done(
-        db,
-        exercise_id=exercise.id,
-        algorithm=Algorithm.NORMAL,
-        now=NOW,
-        rng=steady_rng,
-    )
+    practised(db, exercise.id, steady_rng)
 
     with pytest.raises(InUse):
         delete_module(db, slap.id, force=True)
@@ -243,13 +243,7 @@ def test_a_row_with_no_history_can_be_deleted(db, slap):
 
 def test_a_row_in_the_day_log_is_archived_rather_than_deleted(db, slap, steady_rng):
     exercise = repo.create_exercise(db, module_id=slap.id, name="Stomp!")
-    mark_done(
-        db,
-        exercise_id=exercise.id,
-        algorithm=Algorithm.NORMAL,
-        now=NOW,
-        rng=steady_rng,
-    )
+    practised(db, exercise.id, steady_rng)
 
     with pytest.raises(InUse) as raised:
         delete_exercise(db, exercise.id)

@@ -144,7 +144,7 @@ def test_speed_retunes_an_exercise(stocked, run):
     assert "113 BPM (85%)" in result.output  # 85% of 133, to one decimal
 
 
-def test_day_new_starts_the_clock(run):
+def test_day_new_opens_todays_block(run):
     result = run("day", "new")
 
     assert result.exit_code == 0
@@ -176,20 +176,76 @@ def test_db_dump_writes_a_backup_that_can_live_in_git(stocked, run, tmp_path):
     assert "le freak" in dumped
 
 
-def test_start_runs_the_clock_from_now(run):
-    result = run("start")
+def test_start_puts_an_exercise_in_the_log_and_leaves_it_running(stocked, run):
+    result = run("start", "le freak")
 
     assert result.exit_code == 0
-    assert "clock running from" in result.output
-
-
-def test_start_opens_the_day_when_there_is_not_one(run):
-    run("start")
+    assert "le freak started at 22:27" in result.output
 
     log = run("log")
-
     assert TODAY.isoformat() in log.output
     assert "(running)" in log.output
+
+
+def test_start_needs_an_exercise_or_some_words(run):
+    result = run("start")
+
+    assert result.exit_code != 0
+    assert "--ad-hoc" in result.output
+
+
+def test_start_takes_something_the_catalogue_does_not_know_about(run):
+    result = run("start", "--ad-hoc", "warm-up", "--log-group", "TECHNIQUE")
+
+    assert result.exit_code == 0
+    assert "warm-up" in run("log").output
+
+
+def test_starting_the_next_one_closes_the_one_before_it(stocked, run):
+    run("start", "le freak")
+
+    result = run("start", "espresso")
+
+    assert "closed le freak" in result.output
+    log = run("log").output
+    assert log.count("(running)") == 1
+
+
+def test_done_finishes_whatever_is_running(stocked, run):
+    run("start", "le freak")
+
+    result = run("done")
+
+    assert result.exit_code == 0
+    assert "le freak done" in result.output
+    assert "(running)" not in run("log").output
+
+
+def test_done_with_nothing_running_says_so(run):
+    result = run("done")
+
+    assert result.exit_code != 0
+    assert "nothing is running" in result.output
+
+
+def test_done_refuses_to_finish_a_different_exercise(stocked, run):
+    run("start", "le freak")
+
+    result = run("done", "espresso")
+
+    assert result.exit_code != 0
+    assert "le freak is running" in result.output
+
+
+def test_a_false_start_is_discarded(stocked, run):
+    run("start", "le freak")
+
+    result = run("discard")
+
+    assert result.exit_code == 0
+    assert "no time logged" in result.output
+    # the line is gone rather than closed: nobody attributed that time
+    assert "nothing logged" in run("log").output.lower()
 
 
 # --- the module is the unit --------------------------------------------------
@@ -326,4 +382,4 @@ def test_subcommands_take_the_short_help_too(run):
     result = run("done", "-h")
 
     assert result.exit_code == 0
-    assert "Mark an exercise practised" in result.output
+    assert "close the line" in result.output
