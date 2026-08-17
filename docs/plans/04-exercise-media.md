@@ -37,16 +37,18 @@ showing, done completes it, and `restart_clock` / `stop_clock` are gone.
   path in from the browser is confined to configured roots (the scores
   directory, the app data directory), the guard the parked loop-editor plan
   specified, and the server stays on `127.0.0.1`.
-- **YouTube means download.** The app works with the network off, so the
-  YouTube kind is provenance plus a fetch: download the audio once (`yt-dlp`
-  is the obvious tool, and a new dependency to weigh), store the file under
-  the app's media directory, and from then on it is a local file like any
-  other. No embeds — an iframe that needs the network is the thing being left
-  behind.
+- **YouTube means embed.** Another app already handles downloading from
+  YouTube, so downloading is out of scope here — the two may merge one day,
+  and until then the YouTube kind is a URL rendered as an embedded player.
+  The accepted cost: that one card needs the network, in an app that
+  otherwise works without it. A tune wanted offline is downloaded with the
+  other app and attached as a local file, with the URL kept beside it as
+  provenance.
 - **Display per kind, minimal first.** An audio or video file gets the player
-  (Phase 5 makes it a waveform; until then a bare `<audio>`). MuseScore gets a
-  link that opens the file locally, text gets shown as text. Rendering a score
-  to an image through the MuseScore CLI is possible and deferred.
+  (Phase 5 makes it a waveform; until then a bare `<audio>`), a YouTube URL
+  the embedded player, a MuseScore file a link that opens it locally, and
+  text is shown as text. Rendering a score to an image through the MuseScore
+  CLI is possible and deferred.
 - **Start replaces the tiling, and the old rules get simpler.** An entry's
   time is its own `started_at → ended_at`, stamped by **start** and **done**.
   Gaps between entries are gaps; nothing re-tiles, nothing is invented. One
@@ -68,9 +70,8 @@ CREATE TABLE media_source (
   id INTEGER PRIMARY KEY,
   exercise_id INTEGER NOT NULL REFERENCES exercise(id) ON DELETE CASCADE,
   kind TEXT NOT NULL,          -- 'file' | 'youtube' | 'musescore' | 'text'
-  path TEXT,                   -- absolute; 'file' and 'musescore', and the
-                               -- downloaded audio of a 'youtube'
-  url TEXT,                    -- 'youtube': where the file came from
+  path TEXT,                   -- absolute; 'file' and 'musescore'
+  url TEXT,                    -- 'youtube': the embed target
   body TEXT,                   -- 'text'
   label TEXT,
   position INTEGER NOT NULL,
@@ -96,8 +97,8 @@ Direction, not yet red/green:
    and **discard** live on the card.
 4. **Attaching media from the page** — add, remove and reorder sources on an
    exercise, with path picking confined to the roots.
-5. **The YouTube fetch** — download into the media directory, progress
-   visible, failure readable. Tentative until `yt-dlp` is weighed.
+5. **The YouTube embed** — the URL rendered as the embedded player on the
+   card, degrading to a plain link when the network is off.
 6. **CLI parity** — `start`, `done`, `log` against the new shape.
 
 ## Out of scope
@@ -105,4 +106,6 @@ Direction, not yet red/green:
 - Waveforms, speed, pitch — Phase 5.
 - Markers on any of it — Phase 6.
 - Rendering MuseScore files to images.
+- Downloading from YouTube — another app owns that; merging the two is a
+  possible future, not this phase.
 - More than one entry running at once.
