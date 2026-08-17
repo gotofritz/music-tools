@@ -1,0 +1,44 @@
+{# The material attached to an exercise, one card per thing, in `cards`.
+
+   Minimal on purpose: an audio or video file gets a bare `<audio>` — Phase 5
+   makes it a waveform with speed and pitch — a YouTube URL the embedded
+   player, a MuseScore file a link that opens it locally, and text is text.
+
+   A track set renders as stacked players, which is honest about being
+   unsynchronised rather than pretending otherwise; Phase 5b is the one
+   transport with a mixer strip. #}
+{% for card in cards %}
+<article class="media media-{{ card.kind }}" id="media-card-{{ card.sources[0].id }}">
+  {% if card.label %}<h4>{{ card.label }}</h4>{% endif %}
+  {% if card.kind == "file" %}
+  {% if card.is_set %}
+  <p class="muted">A track set of {{ card.sources | length }}: stacked players
+    until they play as one (Phase 5b).</p>
+  {% endif %}
+  {% for track in card.sources %}
+  <div class="track">
+    <span class="track-name">{{ track.label or file_name(track.path) }}</span>
+    <audio controls preload="none" src="/media/{{ track.id }}/file"></audio>
+  </div>
+  {% endfor %}
+  {% elif card.kind == "youtube" %}
+  {% set source = card.sources[0] %}
+  {% set embed = youtube_embed(source.url) %}
+  {% if embed %}
+  {# The one card that needs the network, in an app that otherwise does not:
+     a tune wanted offline is downloaded elsewhere and attached as a file. #}
+  <iframe class="youtube" src="{{ embed }}" title="{{ source.label or source.url }}"
+          allow="accelerometer; clipboard-write; encrypted-media; picture-in-picture"
+          referrerpolicy="strict-origin-when-cross-origin" loading="lazy"
+          allowfullscreen></iframe>
+  {% endif %}
+  <p><a href="{{ source.url }}" rel="noreferrer">{{ source.url }}</a></p>
+  {% elif card.kind == "musescore" %}
+  {% set source = card.sources[0] %}
+  <p><a href="/media/{{ source.id }}/file">{{ source.label or file_name(source.path) }}</a>
+    <span class="muted">{{ source.path }}</span></p>
+  {% else %}
+  <pre class="media-text">{{ card.sources[0].body }}</pre>
+  {% endif %}
+</article>
+{% endfor %}

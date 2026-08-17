@@ -49,6 +49,43 @@ class Exercise(BaseModel):
         return json.loads(value) if isinstance(value, str) else value
 
 
+class MediaGroup(BaseModel):
+    """One player over several files: a track set.
+
+    A single attached file gets a group of its own, so a set of one and a set
+    of eight are the same shape to everything downstream.
+    """
+
+    id: int
+    exercise_id: int
+    label: str | None = None  # "stems", "with click"
+    position: int = 0
+    added_at: datetime
+
+
+class MediaSource(BaseModel):
+    """One attachment: a file, a YouTube URL, a score, or a line of text.
+
+    `kind` says which of `path`, `url` and `body` is the one that means
+    anything. `gain`, `pan` and `muted` are the mix state of a track within its
+    set; Phase 5b is what reads them.
+    """
+
+    id: int
+    exercise_id: int
+    group_id: int | None = None  # 'file' only: the set it plays in
+    kind: str  # 'file' | 'youtube' | 'musescore' | 'text'
+    path: str | None = None  # absolute; 'file' and 'musescore'
+    url: str | None = None  # 'youtube'
+    body: str | None = None  # 'text'
+    label: str | None = None  # also the track name in a set: "bass", "drums"
+    position: int = 0  # order in the exercise, or in the set
+    gain: float = 1.0
+    pan: float = 0.0  # -1 left … +1 right
+    muted: bool = False
+    added_at: datetime
+
+
 class PracticeDay(BaseModel):
     """A day of practice, bounded at 4am rather than midnight."""
 
@@ -76,26 +113,25 @@ class PracticeEntry(BaseModel):
     notes: str | None = None
 
 
+class StartResult(BaseModel):
+    """What starting something did: a line in the log, and maybe one closed.
+
+    `closed` is whatever was running when this started — one entry runs at a
+    time — and is `None` when nothing was.
+    """
+
+    entry: PracticeEntry
+    closed: PracticeEntry | None = None
+
+
 class DoneResult(BaseModel):
-    """What `mark_done` did: the schedule moved, and the clock ticked over."""
+    """What `done` did: a line closed, and the schedule moved if there was one.
 
-    exercise: Exercise
+    `exercise` is `None` for an ad-hoc entry: there is nothing to schedule.
+    """
+
+    exercise: Exercise | None = None
     closed: PracticeEntry
-    opened: PracticeEntry
-
-
-class LogResult(BaseModel):
-    """What logging an ad-hoc entry did: one line closed, the next opened."""
-
-    closed: PracticeEntry
-    opened: PracticeEntry
-
-
-class RestartResult(BaseModel):
-    """What `restart_clock` did: a fresh entry, and the gap it threw away."""
-
-    opened: PracticeEntry
-    dropped_seconds: int
 
 
 class GroupTotal(BaseModel):

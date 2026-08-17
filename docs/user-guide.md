@@ -34,6 +34,9 @@ you ask one module at a time what to play.
   per **log group** (`TECHNIQUE`, `REPERTOIRE`) and a total for the day. The log
   group is a property of the module, which is how a day's practice adds up
   across several of them.
+- A row can also carry its **material**: the audio you play along to, a YouTube
+  link, a score, a note to yourself. Attach it once and it is in front of you
+  every time that row comes up.
 
 Everything lives in one file: `~/.local/share/music-tools/practice.db`. Set
 `MUSIC_TOOLS_DB` to keep it somewhere else, or pass `--db` to any command.
@@ -41,9 +44,9 @@ Everything lives in one file: `~/.local/share/music-tools/practice.db`. Set
 ## A practice session
 
 ```bash
-uv run practice start                # start the clock, or restart it
 uv run practice next SONGS           # what that module wants, most overdue first
-uv run practice done "le freak"      # played it — schedule it and log the time
+uv run practice start "le freak"     # playing it now — it goes into the log
+uv run practice done                 # finished — schedule it and close the line
 uv run practice log                  # today's block, with subtotals
 ```
 
@@ -62,21 +65,45 @@ playing it at, and how many times you have practised it.
 Bare `next` does the same for every module, one block each, because that is what
 modules are: separate lists that happen to live in the same file.
 
-`done` is the one that matters. It bumps the count, stamps today, works out
-when the exercise comes back, closes the entry that was running and starts the
-next one, all at once:
+**`start` and `done` are a pair.** `start` puts the exercise in the day log
+straight away, running from this moment; `done` closes that line and moves the
+schedule on:
+
+```
+le freak started at 22:46
+```
 
 ```
 le freak done — practised 13 times, next due 2027-01-15 (in 153 days)
 logged 22:46-23:03  00:17  REPERTOIRE  87.8 BPM (66%)
 ```
 
-You never type a start time. The clock runs from the last thing you finished,
-so entries tile the session end to end. A day ends at 4am, not midnight —
-practice past midnight belongs to the evening it started in.
+You never type a time. One thing runs at a time, so starting the next exercise
+closes the one before it — it was attributed when you started it, so closing it
+there is honest — but only `done` moves a schedule. **The gaps are gaps**: the
+coffee, the phone call and the walk round the block are simply not in the log,
+and there is no clock to stop when you are finished for the evening.
 
-If a name exists in two modules, say which: `uv run practice done SONGS/"le
+`uv run practice discard` drops what is running, for the false start — the tune
+you put on and abandoned. No time is logged for it and nothing is scheduled.
+
+`done` on its own finishes whatever is running. Naming a row that was never
+started (`uv run practice done "le freak"`) still schedules it and logs no time
+for it, which is what you want when you practised away from the Terminal.
+
+A day ends at 4am, not midnight — practice past midnight belongs to the evening
+it started in. An exercise left running from an earlier day is dropped rather
+than closed at a time nobody chose.
+
+If a name exists in two modules, say which: `uv run practice start SONGS/"le
 freak"`. If you mistype it, the message lists the near misses.
+
+Practising something that is not in the catalogue — a warm-up, a jam, a lesson
+— starts the same way with words instead of a row:
+
+```bash
+uv run practice start --ad-hoc "warm-up" --log-group TECHNIQUE
+```
 
 ## Practising from a browser page
 
@@ -96,6 +123,10 @@ starts it without opening a window.
 
 **The first page is today.**
 
+- **The card at the top of the log** is what you are practising right now: what
+  it is, how long you have been on it, the material attached to it — the audio,
+  the video, the YouTube player, the score, your own notes — and the two
+  buttons that end it, **done** and **discard**.
 - **Log** is today, line by line, with the entry that is running now counting
   up. **Totals** underneath is the subtotal per log group and the total for the
   day — the same numbers as `practice log`.
@@ -115,24 +146,21 @@ starts it without opening a window.
   the bar at the top, because a queue belongs to the module it is scheduled
   in.
 - The line that is **running** gets no boxes even in edit mode: that one is
-  the clock, and **done** and **stop the clock** are what move it. It becomes
-  editable once it is closed, like every other line.
-- The clock in the top corner says whether time is being counted, and
-  **stop the clock** ends the session. The stretch since the last thing you
-  marked done is not logged: nobody said what it was, so it is not practice
-  time. It is the same rule as `practice start`, from the other end.
-
-If there is no day open yet, the page offers a **start a day** button instead
-of a log.
+  what you are playing, and **done** and **discard** on the card are what move
+  it. It becomes editable once it is closed, like every other line.
+- There is no clock to start and none to stop. Nothing is running until you
+  start something, and when you are finished for the evening you close the
+  window.
 
 **Each module has its own page**, reached from the links at the top: the whole
-queue, most overdue first, and every field editable in place. **done** is the
-button at the end of each row — the same thing as `practice done`. The
-drop-down beside it is the choice the flags give you on the command line:
-`normal`, `short` (this one is not sticking), `long` (this one is solid),
-`rotate` (to the back of the module's queue), `hold` (to the front). Click it
-and the row, today's log and the totals all update where they are; the page
-does not reload.
+queue, most overdue first, and every field editable in place. **start** is the
+button at the end of each row — the same thing as `practice start`. Once a row
+is running, its own buttons become **done** and **discard**, so you can finish
+from the module page as well as from the card. The drop-down beside **done** is
+the choice the flags give you on the command line: `normal`, `short` (this one
+is not sticking), `long` (this one is solid), `rotate` (to the back of the
+module's queue), `hold` (to the front). Click it and the row, today's log and
+the totals all update where they are; the page does not reload.
 
 Change the name, the speed, the target or the notes and press **save** — the row re-reads itself
 with the speed worked out, so typing `85%` shows you `113 BPM (85%)` as you go.
@@ -162,26 +190,47 @@ The page and the commands are two doors into one file, so you can use both in
 the same session: mark something done in the browser and `practice log` in the
 Terminal shows it.
 
-## Coming back after a break
+## Attaching the tune to the row
 
-Following on from the last thing is right most of the time and wrong after a
-break: the coffee, the phone call and the walk round the block would all be
-logged against whatever you play next. So when you sit down again:
+**media**, beside a row on its module page, opens everything that row is
+practised from — and the forms that add more. Four kinds:
 
-```bash
-uv run practice start
-```
+- **audio or video**, by path. It is played on the card while you practise. A
+  video is there for its sound; nothing shows a picture.
+- **a YouTube URL**, shown as the embedded player with the plain link under it.
+  This is the one thing in the app that needs the network — downloading is
+  another program's job. A tune you want offline is downloaded with that and
+  attached as a file, with the URL kept beside it so you know where it came
+  from.
+- **a score** (a MuseScore file), as a link that opens it.
+- **text**: a fingering, a chord chart, a reminder about the bridge.
 
-```
-clock running from 23:40 — 00:37 of break not logged
-```
+Files are **referenced where they are and never copied**, so a path has to be
+absolute and has to point inside the folders the app is allowed to read —
+normally `~/Documents/MuseScore4/Scores/TUNES` and the app's own data
+directory. The media page lists them; set `MUSIC_TOOLS_MEDIA_ROOTS` (a
+`:`-separated list, like `PATH`) to change them. Anything outside is refused
+with a message rather than quietly read.
 
-The clock now runs from this moment, and the gap is gone — it was not practice,
-so it is not in the log and not in the day's total. Nothing that was already
-logged is touched.
+**up**, **down** and **remove** order the list and take things off it. Removing
+an attachment never touches the file on disk.
 
-`start` also opens the day if there is not one yet, so on an ordinary evening
-it does the same job as `day new` and you can use either.
+### Stems, and other files that are one tune
+
+A tune often arrives as several files: bass, drums and keys split out of a
+recording, or a backing track beside a click. Attach the first as audio, then
+use **add a track to this set** under that card for each of the others: they
+become one **track set** rather than a row of separate cards, and each member
+can be named (`bass`, `drums`) and given its place in the mix.
+
+Two things are checked as you add: every member has to be the same length,
+within a quarter of a second, and there are eight at most. A file that
+disagrees is refused by name — a set plays as one thing, so a member from a
+different take is a mistake worth catching early.
+
+For now the members are stacked players, which are not in sync with each other;
+one transport with a mixer strip is the next phase of the work. Everything you
+set here — the names, the gains, the mutes — is what that will read.
 
 ## How fast you are playing it
 
@@ -219,11 +268,13 @@ is wrong:
 
 | Command | What it does |
 | --- | --- |
-| `practice done X` | the normal interval |
-| `practice done X --short` | half of it — this one is not sticking |
-| `practice done X --long` | half again as long — this one is solid |
-| `practice done X --rotate` | to the back of this module's queue |
-| `practice done X --hold` | to the front: practised, but not learned |
+| `practice done` | the normal interval |
+| `practice done --short` | half of it — this one is not sticking |
+| `practice done --long` | half again as long — this one is solid |
+| `practice done --rotate` | to the back of this module's queue |
+| `practice done --hold` | to the front: practised, but not learned |
+
+The same five are the drop-down beside **done** on the page.
 
 ## Looking after the modules
 

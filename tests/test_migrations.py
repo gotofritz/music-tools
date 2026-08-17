@@ -10,8 +10,22 @@ import pytest
 from music_tools.db.connection import open_db, transaction
 from music_tools.db.migrate import MigrationError, latest_version, migrate
 
-TABLES = {"module", "exercise", "practice_day", "practice_entry"}
-INDEXES = {"exercise_due", "exercise_name", "entry_day"}
+TABLES = {
+    "module",
+    "exercise",
+    "practice_day",
+    "practice_entry",
+    "media_group",
+    "media_source",
+}
+INDEXES = {
+    "exercise_due",
+    "exercise_name",
+    "entry_day",
+    "media_source_group",
+    "media_source_exercise",
+    "media_group_exercise",
+}
 
 
 def names(conn, kind):
@@ -76,6 +90,30 @@ def test_deleting_a_module_with_exercises_fails_on_the_foreign_key(db):
 
     with pytest.raises(sqlite3.IntegrityError):
         db.execute("DELETE FROM module WHERE id = 1")
+
+
+def test_media_goes_when_the_exercise_it_hangs_off_goes(db):
+    # ON DELETE CASCADE, which needs the foreign_keys pragma open_db sets:
+    # media is part of an exercise rather than a record of its own.
+    db.execute(
+        "INSERT INTO module (name, slug, log_group, position) VALUES (?,?,?,?)",
+        ("SONGS", "songs", "REPERTOIRE", 1),
+    )
+    db.execute("INSERT INTO exercise (module_id, name) VALUES (1, 'le freak')")
+    db.execute(
+        "INSERT INTO media_group (exercise_id, position, added_at)"
+        " VALUES (1, 0, '2026-08-17T21:05:00')"
+    )
+    db.execute(
+        "INSERT INTO media_source"
+        " (exercise_id, group_id, kind, path, position, added_at)"
+        " VALUES (1, 1, 'file', '/tunes/loop.wav', 0, '2026-08-17T21:05:00')"
+    )
+
+    db.execute("DELETE FROM exercise WHERE id = 1")
+
+    assert db.execute("SELECT count(*) FROM media_source").fetchone()[0] == 0
+    assert db.execute("SELECT count(*) FROM media_group").fetchone()[0] == 0
 
 
 def test_a_transaction_rolls_back_on_an_exception(db):

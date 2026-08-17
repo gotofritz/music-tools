@@ -4,7 +4,7 @@ Architecture, boundaries and constraints. Read this before changing anything;
 update it in the same PR as any change to the architecture, the boundaries or
 the core patterns (`AGENTS.md`).
 
-Describing the repo as it stands at the end of Phase 3 of
+Describing the repo as it stands at the end of Phase 4 of
 `docs/plans/00-practice-app.md`, not as that plan leaves it.
 
 ## What this repo is
@@ -28,9 +28,11 @@ thing:
   eventually and is explicitly out of scope for the current plan.
 
 The point of the plan is that the exercise being practised *is* the tune the
-loop is built from: due → start → play → done. Phase 4 attaches the tune's
-media to exercises; today they are two commands over one database's worth of
-vocabulary.
+loop is built from: due → start → play → done. Phase 4 attached the tune's
+media to the exercise and made **start** the thing that opens a log entry, so
+the material is in front of the player at the moment it is wanted. What is
+still two tools is the audio work: `loop` builds its output from a marker file
+and a YAML config, not from what the browser has open.
 
 ## Layout
 
@@ -47,12 +49,14 @@ music_tools/
         tempo.py         the speed grammar
         scheduling.py    the five algorithms, pure
         catalogue.py     modules and their rows: CRUD, and what may be deleted
-        session.py       start a day, mark done, day totals
+        media.py         attachments: kinds, the roots guard, track sets
+        session.py       start an exercise, finish it, discard it, day totals
     web/
         app.py           create_app(db_path), and the `practice serve` launcher
         deps.py          per-request connection, clock, rng, and the templates
         views.py         what each page reads, gathered off the routes
-        routes/          practice.py (the day), modules.py (the catalogue)
+        routes/          practice.py (the day), modules.py (the catalogue),
+                         media.py (attachments, and serving a file)
         templates/       base, today, module, and one fragment per swappable thing
         static/          htmx.min.js (vendored via pnpm, 2.0.4) and app.css
     loop.py              the loop tool: model, parsing, rendering, CLI
@@ -65,7 +69,7 @@ tests/
     conftest.py          marker fixtures, the db fixture, the seeded rngs
     fixtures/*.txt       hand-written marker exports
     test_migrations.py test_tempo.py test_scheduling.py
-    test_catalogue.py  test_session.py  test_cli.py
+    test_catalogue.py  test_session.py  test_cli.py  test_media.py
     test_score.py      test_patterns.py test_drills.py  test_web.py
 docs/
     initial-context.md   this file
@@ -96,6 +100,11 @@ The sheet used one word for three things, so, once and for all:
   `RNB`, `DANCE`. No code reads it; it is a label.
 - An **exercise** is a row of a module. An **entry** is a line of the day log.
 - A **practice day** runs to 4am, not midnight (`END_OF_DAY_HOUR`).
+- A **media source** is one thing an exercise is practised from: a file, a
+  YouTube URL, a MuseScore file, or text. A **media group** is several audio
+  files that are one thing to play — a **track set**: stems, or a backing track
+  beside a click. A **card** is how one of those reads on the page, and a set of
+  one is still a card.
 
 ## How `practice` is put together
 
@@ -111,11 +120,13 @@ Three rules hold the shape:
 
 - **`domain/tempo.py` and `domain/scheduling.py` are pure.** No I/O, no clock,
   no global `random`. They take what they need and return a value.
-- **`domain/session.py` and `domain/catalogue.py` are where writes are
-  composed.** They open one transaction per operation and call the repository
-  inside it. `session.py` is a practice session — the clock, `mark_done`, the
-  totals. `catalogue.py` is the shape of the catalogue itself — modules, their
-  rows, and what may be renamed, archived or deleted.
+- **`domain/session.py`, `domain/catalogue.py` and `domain/media.py` are where
+  writes are composed.** They open one transaction per operation and call the
+  repository inside it. `session.py` is a practice session — start, done,
+  discard, the totals. `catalogue.py` is the shape of the catalogue itself —
+  modules, their rows, and what may be renamed, archived or deleted.
+  `media.py` is the material hanging off a row — which kind carries which
+  column, where a path may point, and what makes several files one set.
 - **`db/repository.py` never opens a transaction** and never makes a decision.
   SQL in, models out. Refusing to delete a row with history is a decision, which
   is why that lives in `catalogue.py` and not next to the `DELETE`.
@@ -179,25 +190,36 @@ Two things are deliberately not the sheet, and both are pinned by tests:
 
 ### The day log
 
-`mark_done` is `doneExercise_`, in one transaction: count +1, `last_practiced`,
-`next_due`, close the running entry, open the next one at the same instant, so
-entries tile the session end to end. An entry left running from an earlier day
-is **discarded** rather than closed at an invented time — it is the dangling
-`FROM` the sheet left behind, and it was never attributed.
+The log used to be a clock. `mark_done` was `doneExercise_` — count +1,
+`last_practiced`, `next_due`, close the running entry and open the next one at
+the same instant — so entries tiled the session end to end, and `restart_clock`
+and `stop_clock` existed to keep that tiling honest across a break. Phase 4
+replaced all of it with three operations:
 
-Tiling is the default and not the rule. `restart_clock` (the `start` command)
-restamps the running entry's `started_at` to now, so the gap since the last
-`done` — a break — is not logged against whatever is played next. `stop_clock`
-(the page's "stop the clock") ends a session the same way: an entry that
-already says what was played is closed at `now`, and the running one, which
-never does, is deleted. The rule underneath all three cases is the same:
-**time nobody attributed is not practice time**, and the app will not invent an
-attribution for it.
+- **`start_exercise`** opens an entry, snapshotting `description`, `speed`,
+  `bpm` and `log_group` *at the start* rather than at the close, because that is
+  when the line becomes visible. It opens the day if there is not one, and
+  schedules nothing.
+- **`finish_entry`** stamps `ended_at` and moves the schedule: count +1,
+  `last_practiced`, `next_due`, in one transaction. The snapshot the start took
+  is left alone; only a note may be written now.
+- **`discard_entry`** deletes a running entry — the false start.
 
-`log_entry` is `mark_done` without the schedule half, for practice the
-catalogue does not know about — a warm-up, a jam, a lesson. It snapshots a
-description into the running entry, closes it, and opens the next one at the
-same instant, so an ad-hoc block still tiles.
+`start_ad_hoc` is `start_exercise` with a typed description instead of an
+exercise to snapshot, for practice the catalogue does not know about; there is
+nothing to schedule when it finishes.
+
+Two rules hold the shape. **One entry runs at a time**: `_close_running` closes
+whatever was running as the next thing starts, at that instant, because it was
+attributed when it was started — but only `finish_entry` touches a schedule.
+And **time nobody attributed is not practice time**: the gaps between entries
+are gaps, nothing re-tiles, a discarded entry leaves nothing behind, and an
+entry left running from an earlier day is **discarded** rather than closed at an
+invented time — it is the dangling `FROM` the sheet left behind.
+
+`start_day` survives as "open today's block", with no entry and no clock:
+starting an exercise opens the day anyway, so it is only for a day that wants
+notes on it before anything is played.
 
 ### Archiving and deleting
 
@@ -221,9 +243,10 @@ and a wrong correction costs a wrong number about a tune:
   change two days' totals from one edit, which is more surprise than the edit
   is worth. Only the time of day is editable, so an entry that crossed
   midnight keeps both its dates.
-- **The running entry is refused** (`EntryRunning`). That one is the clock;
-  `mark_done` and `stop_clock` write it, and a hand-edit would put the two out
-  of step.
+- **The running entry is refused** (`EntryRunning`). That one is what is being
+  practised; `finish_entry` and `discard_entry` write it, and a hand-edit would
+  put the two out of step. A finished line refuses the opposite way
+  (`EntryClosed`): there is nothing left to close or discard.
 - **Nothing re-tiles.** Shortening an entry leaves a gap, and a gap is time
   that is not in the total — the same rule as everywhere else here.
 - **A line can be removed** (`delete_entry`), for the block that should never
@@ -246,6 +269,40 @@ which is what `updateSummaryFormulas` and `compressRowsToRanges_` were doing by
 hand, and what a `GROUP BY` does. Time not yet attributed to a log group (the
 entry running right now) counts towards the day total but has no subtotal.
 
+### Media on an exercise
+
+`media_group` and `media_source` (migration `002_media.sql`), and
+`domain/media.py` over them. Four decisions are load-bearing:
+
+- **Media is rows; files stay on disk.** A `media_source` per attachment,
+  `kind` (`file` | `youtube` | `musescore` | `text`) saying which of `path`,
+  `url` and `body` means anything. Nothing is copied.
+- **Every path in is confined to configured roots.** `MUSIC_TOOLS_MEDIA_ROOTS`
+  (`:`-separated), defaulting to `~/Documents/MuseScore4/Scores/TUNES` plus the
+  app data directory. A path is resolved before it is compared, so `..` and a
+  symlink out of a root are refused rather than followed, and a relative path is
+  refused outright. The check runs again when a file is *served*, because the
+  roots can be narrowed after a row was written and a stored path is not a
+  promise.
+- **Every audio file is in a group, and most groups have one member.** A single
+  attached file gets a group made for it, so a set of one and a set of stems are
+  one shape downstream: Phase 5b plays a set, Phase 6 hangs markers off the
+  group. Adding a file to an existing group is the only way to make a track set.
+  Only `kind = 'file'` may carry a `group_id` — an embed cannot be sample-locked
+  to anything, and text has no timeline.
+- **Members of a set must agree, and there are at most eight**
+  (`DURATION_TOLERANCE`, `MAX_TRACKS`). Both are checked on attach, where the
+  message can name the file that disagrees, rather than in the browser where it
+  is a stall or a crash. The length comes from pydub, so a file it cannot decode
+  cannot join a set; a lone attachment is never probed, and an `.mp4` therefore
+  attaches without ffmpeg being asked anything.
+
+The mix state (`gain`, `pan`, `muted`) lives on the member because that is what
+Phase 5b reads. Solo is not stored: it is a view over the mute state, and which
+track is soloed does not deserve to outlive the page. Ordering is two sequences
+in one namespace — a card's place in the exercise is its group's `position`, or
+its own when it has no group, and a member's `position` is its place in the set.
+
 ### Storage
 
 `~/.local/share/music-tools/practice.db`, overridable with `MUSIC_TOOLS_DB` or
@@ -260,7 +317,9 @@ database stamped newer than the code is refused rather than touched.
 run on a thread pool, and a connection opened and closed inside one request is
 not shared with anything, which is what the check exists to catch.
 
-Four tables — `module`, `exercise`, `practice_day`, `practice_entry`. The
+Six tables — `module`, `exercise`, `practice_day`, `practice_entry`, and
+`media_group` / `media_source`, the last two cascading on the exercise they
+hang off, which is what the `foreign_keys` pragma is there for. The
 schema sketch in `00-practice-app.md` also gave `module` an `instrument`
 column, against a second instrument turning up one day; it is not here. One
 player, one instrument, and nothing would ever have read it. Two natural keys
@@ -281,15 +340,15 @@ Jinja2 + HTMX, server-rendered, with no Node and no JavaScript framework
 (assumption A1 of `00-practice-app.md`).
 
 ```
-browser ──form/hx-post──▶ routes/ ──▶ domain/session, domain/catalogue ──▶ SQLite
+browser ──form/hx-post──▶ routes/ ──▶ domain/session, catalogue, media ──▶ SQLite
                              │                    ▲
                           views.py ───────────────┘   (what a page reads)
                              ▼
-                       Jinja2 fragments ── hx-swap-oob ──▶ log, totals, clock
+                       Jinja2 fragments ── hx-swap-oob ──▶ log, totals, the card
 ```
 
 - **`app.py` is a factory.** `create_app(db_path)` takes a path, migrates it
-  once, mounts `static/` and includes the two routers. Tests get their own
+  once, mounts `static/` and includes the three routers. Tests get their own
   database without touching `MUSIC_TOOLS_DB`, and two apps in one process
   cannot share one. `serve` binds `127.0.0.1` and opens a browser.
 - **`deps.py` is the wiring**: a connection per request, `get_now`, `get_rng`,
@@ -301,14 +360,19 @@ browser ──form/hx-post──▶ routes/ ──▶ domain/session, domain/cat
   it is swapped into cannot disagree.
 - **`routes/` is thin.** Every handler is a domain call and a render. Domain
   refusals map to status codes there and only there: `UnknownExercise` and
-  `NotFound` are 404, `InUse` is 409.
+  `NotFound` are 404, `InUse`, `EntryClosed`, `SetTooBig` and `MembersDisagree`
+  are 409, and a path that is outside the roots, missing or malformed is 400 —
+  it is something the player typed and can retype. Serving a file whose stored
+  path now falls outside the roots is 403.
 
 Three rules hold this shape, and the tests in `tests/test_web.py` enforce them:
 
-- **Fragments, not JSON.** `POST /exercises/{id}/done` changes three things at
-  once, so it answers with the exercise row and swaps the day log, the totals
-  and the clock out of band (`hx-swap-oob`). The same id must not appear twice
-  in one response, or the swaps fight.
+- **Fragments, not JSON.** `POST /exercises/{id}/start` and
+  `POST /entries/{id}/done` change two or three things at once, so whichever
+  piece was clicked answers and the rest ride along out of band
+  (`hx-swap-oob`). Which one that is comes off the referer: a click on a module
+  page is targeting the exercise row, a click on the today page is targeting the
+  log. The same id must not appear twice in one response, or the swaps fight.
 - **Every action is a real form.** HTML forms send only GET and POST, so the
   inline edit is registered for both `PATCH` and `POST`, and a request without
   the `HX-Request` header gets a 303 back to the page it came from instead of a
@@ -331,6 +395,17 @@ undated rows, so an undated one would never reach the list it was typed into),
 and a speed typed into the row resolves live through
 `GET /exercises/{id}/tempo`, which answers a quiet `?` rather than an error
 because it is reading a keystroke, not a submission.
+
+**The running entry is a card**, at the top of the day log: what is being
+practised, since when, its media, and the two buttons that end it. `chrome`
+reads the running entry, its exercise and that exercise's cards, so every page
+can draw it; a module row carries the same **done** and **discard** while it is
+the one running, and **start** otherwise. Display is minimal by design — a bare
+`<audio>` per file served from `GET /media/{id}/file`, the YouTube embed with the
+plain link behind it (the one thing in the app that reaches the network, and
+what it degrades to with the network off), a link for a score, text as text. A
+track set renders as stacked players, which is honest about being
+unsynchronised; Phase 5b is the one transport with a mixer.
 
 ## How `loop` is put together
 
@@ -412,10 +487,14 @@ layer can catch them without depending on click.
   `uvicorn` and `python-multipart`; dev dependencies are `pytest`, `httpx`
   (which `TestClient` needs), `ruff` and `ty`.
 - **`ffmpeg` must be on `PATH`** for anything that is not a `.wav`; pydub shells
-  out to it. CI installs it. Nothing in the practice half needs it.
+  out to it. CI installs it. The practice half needs it in one place only:
+  reading a file's length when it joins a track set. A lone attachment is never
+  probed, so everything else works without it.
 - **One machine, one user, local files.** No auth, no accounts, no sessions:
   `practice serve` binds `127.0.0.1` and that is the whole of the security
-  model. Anything multi-user would need one from scratch.
+  model. Anything multi-user would need one from scratch. The roots guard on
+  media paths is not a security model either — it is there so that a typo, or a
+  URL somebody pasted, cannot make the app read or serve an arbitrary file.
 - **No Node, and no JavaScript framework.** Recorded in the plan as assumption
   A1 and worth keeping until something forces it. The only JavaScript in the
   repo is the vendored `htmx.min.js` (2.0.4), fetched with `pnpm` in a throwaway
@@ -440,7 +519,10 @@ green.
 
 Fixtures are hand-written text, small enough to read in a diff: marker exports
 in `tests/fixtures/`. There are no binary fixtures anywhere: audio in tests
-comes from `AudioSegment.silent(duration=…)`. The `sample_day` fixture is a day
+comes from `AudioSegment.silent(duration=…)`, exported to `.wav` under a
+`tmp_path` root when a test needs a real file to attach — `.wav` because that
+path through pydub needs no ffmpeg. `MUSIC_TOOLS_MEDIA_ROOTS` is pointed at that
+directory, so no test reads anything of the developer's own. The `sample_day` fixture is a day
 block copied out of the spreadsheet by hand, kept because the subtotals its own
 formulas produced — 00:19, 00:34, 00:53 — are what the port reproduces.
 
@@ -451,8 +533,9 @@ statistical ones.
 ## Where this is going
 
 `docs/plans/00-practice-app.md` is the map. Phases 1 (test suite, CI, an
-importable `loop.py`), 2 (the domain, the database and the CLI) and 3 (the
-browser app, and the cutover) are done: the history is imported and the
+importable `loop.py`), 2 (the domain, the database and the CLI), 3 (the
+browser app, and the cutover) and 4 (media on an exercise, and the log rework)
+are done: the history is imported and the
 spreadsheet is no longer used, so this repo is now the only record of what was
 practised and when. The importer, and the sheet exports it was tested against,
 have been deleted now that the backfill is complete — a one-off job that had
@@ -462,12 +545,13 @@ from being the only record. `task db:dump` and a committed
 to give away. And `target_bpm` is still missing on the rows the import could not
 fill; the module view flags them, and they get filled in by use.
 
-Phases 4 to 7 attach the tune's media to the exercise that is due, play it in
-the browser — waveform, slow-down, pitch, and then 3–8 stems from one
-transport with a mixer — mark it up there, and rebuild the loop output from
-the markers by pointing at the page, replacing Transcribe! piece by piece. The
-YAML loop editor is parked at the back of the queue
-(`docs/plans/08-loop-editor.md`).
+Phase 4 is done: an exercise carries its material, and the log stops being a
+clock — start opens the entry, done closes it, discard drops a false start.
+Phases 5 to 7 play that material in the browser — waveform, slow-down, pitch,
+and then 3–8 stems from one transport with a mixer — mark it up there, and
+rebuild the loop output from the markers by pointing at the page, replacing
+Transcribe! piece by piece. The YAML loop editor is parked at the back of the
+queue (`docs/plans/08-loop-editor.md`).
 
 Out of scope throughout: `rearrange` and its step DSL, the standalone
 `triads.py` / `intervals.py` / `generate_exercise.py` generators, merging

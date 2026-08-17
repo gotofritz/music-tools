@@ -1,9 +1,21 @@
-"""Practising: starting a day, marking an exercise done, and the day totals.
+"""Practising: starting an exercise, finishing it, and the day totals.
 
-`mark_done` is the knot the whole app pulls on. `doneExercise_` in bass.gs did
-five things at once — bump the count, stamp today, compute the next due date,
-write the log line, re-sort — and the port keeps the first four in one
-transaction. The re-sort was `ORDER BY next_due` and lives in the repository.
+The log used to be a clock. `doneExercise_` in bass.gs closed one entry and
+opened the next, so a session tiled end to end and `start` / "stop the clock"
+existed to keep the tiling honest across a break. Phase 4 of
+`docs/plans/00-practice-app.md` drops all of that:
+
+- **start** opens an entry, immediately visible in the day log with the
+  exercise's material on it. Nothing is scheduled by starting.
+- **done** closes that entry and moves the schedule on.
+- **discard** takes a false start out again.
+
+Two rules survive the change. **One entry runs at a time**: starting the next
+closes the one before it at that instant — it was attributed when it was
+started, so closing it is honest — but only `done` touches the schedule. And
+**time nobody attributed is not practice time**: the gaps between entries are
+gaps, nothing re-tiles, and an entry left running from an earlier day is
+discarded rather than closed at an invented moment.
 
 The clock is always an argument. Nothing in this module calls
 `datetime.now()`; the CLI is the only place that does.
@@ -19,10 +31,9 @@ from music_tools.domain.models import (
     DaySummary,
     DoneResult,
     GroupTotal,
-    LogResult,
     PracticeDay,
     PracticeEntry,
-    RestartResult,
+    StartResult,
 )
 from music_tools.domain.scheduling import Algorithm, next_due
 from music_tools.domain.tempo import parse_tempo
@@ -41,7 +52,11 @@ class UnknownEntry(LookupError):
 
 
 class EntryRunning(RuntimeError):
-    """The entry is the clock, and the clock is not edited by hand."""
+    """The entry is the one being practised; `done` and `discard` move it."""
+
+
+class EntryClosed(RuntimeError):
+    """The entry is already finished, so there is nothing to close or drop."""
 
 
 def practice_day_for(now: datetime) -> date:
@@ -52,54 +67,122 @@ def practice_day_for(now: datetime) -> date:
 def start_day(
     conn: sqlite3.Connection, *, now: datetime, notes: str | None = None
 ) -> PracticeDay:
-    """`New Day`: open the day `now` falls in, and start the clock running."""
+    """`New Day`: open the day `now` falls in. No entry, and no clock.
+
+    Starting an exercise opens the day it falls in anyway, so this is only for
+    a day that wants notes on it before anything is played.
+    """
     with transaction(conn):
         return _start_day(conn, now=now, notes=notes)
 
 
-def restart_clock(conn: sqlite3.Connection, *, now: datetime) -> RestartResult:
-    """Start again from now, after a break.
+def current_entry(conn: sqlite3.Connection, *, now: datetime) -> PracticeEntry | None:
+    """What is being practised right now, if anything.
 
-    Entries normally follow on from each other — the clock runs from the last
-    thing you finished, which is what makes a session tile end to end. It is
-    wrong after a break: the coffee, the phone call and the walk round the
-    block would all be logged against whatever you played next. `restart_clock`
-    moves the running entry's start to `now` — the `FROM` stamp, restamped — so
-    the gap is never attributed to anything, the same way an entry left running
-    from an earlier day is never attributed.
+    An entry left running from an earlier day is not it: that is time nobody
+    attributed, and the next start discards it.
     """
-    with transaction(conn):
-        day = _start_day(conn, now=now)
-        dropped = 0
-        running = repo.running_entry(conn, day_id=day.id)
-        if running is None:  # pragma: no cover - _start_day just opened one
-            opened = repo.create_entry(conn, day_id=day.id, started_at=now)
-        else:
-            dropped = max(0, int((now - running.started_at).total_seconds()))
-            opened = repo.update_entry(conn, running.id, started_at=now)
-        return RestartResult(opened=opened, dropped_seconds=dropped)
+    day = repo.get_day(conn, practice_day_for(now))
+    return repo.running_entry(conn, day_id=day.id) if day else None
 
 
-def mark_done(
-    conn: sqlite3.Connection,
-    *,
-    exercise_id: int,
-    algorithm: Algorithm,
-    now: datetime,
-    rng: random.Random,
-    notes: str | None = None,
-) -> DoneResult:
-    """Practised it: move the schedule and tick the day log over."""
+def start_exercise(
+    conn: sqlite3.Connection, *, exercise_id: int, now: datetime
+) -> StartResult:
+    """Playing this now: open an entry for it, and show it in the day log.
+
+    The line is snapshotted here rather than when it closes, because this is
+    when it becomes visible: what it says is what the exercise was called when
+    you sat down to it, whatever happens to the row afterwards. The schedule is
+    not touched — `finish_entry` is what moves that.
+    """
     with transaction(conn):
         exercise = repo.get_exercise(conn, exercise_id)
         if exercise is None:
             raise UnknownExercise(exercise_id)
         module = repo.get_module(conn, exercise.module_id)
+        tempo = parse_tempo(exercise.speed or "", target_bpm=exercise.target_bpm)
 
         day = _start_day(conn, now=now)
-        running = repo.running_entry(conn, day_id=day.id)
-        if running is None:  # pragma: no cover - _start_day just opened one
-            running = repo.create_entry(conn, day_id=day.id, started_at=now)
+        closed = _close_running(conn, day_id=day.id, now=now)
+        entry = repo.create_entry(
+            conn,
+            day_id=day.id,
+            started_at=now,
+            exercise_id=exercise.id,
+            description=exercise.name,
+            speed=exercise.speed,
+            bpm=tempo.bpm,
+            log_group=module.log_group if module else None,
+            notes=exercise.notes,
+        )
+        return StartResult(entry=entry, closed=closed)
+
+
+def start_ad_hoc(
+    conn: sqlite3.Connection,
+    *,
+    description: str,
+    now: datetime,
+    log_group: str | None = None,
+    speed: str | None = None,
+    notes: str | None = None,
+) -> StartResult:
+    """Start something the catalogue does not know about: a warm-up, a jam.
+
+    `start_exercise` with a description typed in instead of an exercise to
+    snapshot, so there is nothing to schedule when it finishes.
+    """
+    with transaction(conn):
+        day = _start_day(conn, now=now)
+        closed = _close_running(conn, day_id=day.id, now=now)
+        entry = repo.create_entry(
+            conn,
+            day_id=day.id,
+            started_at=now,
+            description=description,
+            log_group=log_group,
+            speed=speed,
+            notes=notes,
+        )
+        return StartResult(entry=entry, closed=closed)
+
+
+def finish_entry(
+    conn: sqlite3.Connection,
+    *,
+    entry_id: int,
+    algorithm: Algorithm,
+    now: datetime,
+    rng: random.Random,
+    notes: str | None = None,
+) -> DoneResult:
+    """Done with it: close the entry, and move the schedule it belongs to.
+
+    The snapshot the start took is left as it was; only the end — and a note,
+    if one is given — is written now. An ad-hoc entry has no exercise, so
+    there is nothing to schedule and the line is simply closed.
+    """
+    with transaction(conn):
+        entry = repo.get_entry(conn, entry_id)
+        if entry is None:
+            raise UnknownEntry(entry_id)
+        if entry.ended_at is not None:
+            raise EntryClosed(entry_id)
+
+        exercise = (
+            repo.get_exercise(conn, entry.exercise_id)
+            if entry.exercise_id is not None
+            else None
+        )
+        closed = repo.close_entry(
+            conn,
+            entry.id,
+            ended_at=now,
+            **({"notes": notes} if notes is not None else {}),
+        )
+        if exercise is None:
+            return DoneResult(exercise=None, closed=closed)
 
         tempo = parse_tempo(exercise.speed or "", target_bpm=exercise.target_bpm)
         count = exercise.practiced_count + 1
@@ -108,7 +191,7 @@ def mark_done(
         dues = repo.module_dues(
             conn,
             module_id=exercise.module_id,
-            excluding=exercise_id if algorithm is Algorithm.HOLD else None,
+            excluding=exercise.id if algorithm is Algorithm.HOLD else None,
         )
         due = next_due(
             algorithm=algorithm,
@@ -119,83 +202,30 @@ def mark_done(
             rng=rng,
             current_due=exercise.next_due,
         )
-
         updated = repo.update_exercise(
             conn,
-            exercise_id,
+            exercise.id,
             practiced_count=count,
             last_practiced=now.date(),
             next_due=due,
         )
-        closed = repo.close_entry(
-            conn,
-            running.id,
-            ended_at=now,
-            exercise_id=exercise.id,
-            description=exercise.name,
-            speed=exercise.speed,
-            bpm=tempo.bpm,
-            log_group=module.log_group if module else None,
-            notes=notes if notes is not None else exercise.notes,
-        )
-        opened = repo.create_entry(conn, day_id=day.id, started_at=now)
-        return DoneResult(exercise=updated, closed=closed, opened=opened)
+        return DoneResult(exercise=updated, closed=closed)
 
 
-def log_entry(
-    conn: sqlite3.Connection,
-    *,
-    description: str,
-    now: datetime,
-    log_group: str | None = None,
-    speed: str | None = None,
-    notes: str | None = None,
-) -> LogResult:
-    """Log something that is not in the catalogue: a warm-up, a jam, a lesson.
+def discard_entry(conn: sqlite3.Connection, *, entry_id: int) -> None:
+    """A false start: the entry goes, and no time is logged against it.
 
-    `mark_done` without the schedule half — the running entry is closed with
-    what was played written into it, and the next one opens at the same
-    instant, so the session still tiles end to end.
-    """
-    with transaction(conn):
-        day = _start_day(conn, now=now)
-        running = repo.running_entry(conn, day_id=day.id)
-        if running is None:  # pragma: no cover - _start_day just opened one
-            running = repo.create_entry(conn, day_id=day.id, started_at=now)
-        closed = repo.close_entry(
-            conn,
-            running.id,
-            ended_at=now,
-            description=description,
-            log_group=log_group,
-            speed=speed,
-            notes=notes,
-        )
-        opened = repo.create_entry(conn, day_id=day.id, started_at=now)
-        return LogResult(closed=closed, opened=opened)
-
-
-def stop_clock(
-    conn: sqlite3.Connection, *, entry_id: int, now: datetime
-) -> PracticeEntry | None:
-    """Stop the clock: the session is over, and nothing follows this entry.
-
-    An entry that already says what was played is closed at `now`. The running
-    one never does — `mark_done` writes the description as it closes a line,
-    not as it opens the next — so stopping discards it. That is the same rule
-    `restart_clock` follows: time nobody attributed is not practice time, and
-    the app will not invent an attribution for it.
+    The same rule as the entry left running from an earlier day — time nobody
+    attributed is not practice time. A finished line is refused: correcting or
+    removing one of those is `amend_entry` and `delete_entry`.
     """
     with transaction(conn):
         entry = repo.get_entry(conn, entry_id)
         if entry is None:
             raise UnknownEntry(entry_id)
         if entry.ended_at is not None:
-            return entry
-        if entry.description:
-            return repo.close_entry(conn, entry.id, ended_at=now)
+            raise EntryClosed(entry_id)
         repo.delete_entry(conn, entry.id)
-        return None
 
 
 def entry_duration(entry: PracticeEntry, *, now: datetime | None = None) -> int:
@@ -265,11 +295,11 @@ def amend_entry(
     """Correct a line of the log. Only what is passed is rewritten.
 
     The log is a record, and the app writes it as practice happens — but the
-    record can be wrong: a clock left running through supper, a name typed in
+    record can be wrong: a line left running through supper, a name typed in
     a hurry. Correcting it is a deliberate act, and narrow by design. An entry
-    keeps the day it happened on, nothing is deleted, and the running entry is
-    refused: that one is the clock, written by `mark_done` and `stop_clock`,
-    and hand-editing it would make the two disagree.
+    keeps the day it happened on, nothing is deleted, and the entry being
+    practised is refused: `finish_entry` and `discard_entry` are what move that
+    one, and hand-editing it would put the two out of step.
 
     Times are passed whole, so an entry that crossed midnight keeps its dates.
     Nothing re-tiles: closing a gap in the middle of a session is the caller's
@@ -299,8 +329,8 @@ def delete_entry(conn: sqlite3.Connection, *, entry_id: int) -> None:
     For the block that should never have been written down — a session logged
     twice, or against the wrong thing entirely. Correcting the line is the
     usual move (`amend_entry`); this is for when there is nothing to correct.
-    The running entry is refused for the same reason it cannot be amended:
-    that one is the clock, and `stop_clock` is what drops it.
+    The entry being practised is refused for the same reason it cannot be
+    amended: `discard_entry` is what drops that one.
     """
     with transaction(conn):
         entry = repo.get_entry(conn, entry_id)
@@ -358,6 +388,18 @@ def _start_day(
         # The dangling FROM the sheet left behind: time that was never
         # attributed, and cannot be closed at an invented moment.
         repo.delete_entry(conn, stale.id)
-    if repo.running_entry(conn, day_id=day.id) is None:
-        repo.create_entry(conn, day_id=day.id, started_at=now)
     return day
+
+
+def _close_running(
+    conn: sqlite3.Connection, *, day_id: int, now: datetime
+) -> PracticeEntry | None:
+    """One entry at a time: starting the next closes whatever was running.
+
+    It was attributed when it was started, so closing it at this instant is
+    honest. Its schedule is another matter, and only `finish_entry` moves that.
+    """
+    running = repo.running_entry(conn, day_id=day_id)
+    if running is None:
+        return None
+    return repo.close_entry(conn, running.id, ended_at=now)

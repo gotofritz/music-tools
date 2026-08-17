@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 from music_tools.db import repository as repo
 from music_tools.db.connection import open_db
 from music_tools.db.migrate import migrate
+from music_tools.domain import media
 from music_tools.web.app import create_app
 from music_tools.web.deps import get_now, get_rng
 from tests.conftest import SteadyRandom
@@ -58,6 +59,17 @@ def client(app):
 def hx(**headers: str) -> dict[str, str]:
     """The headers HTMX sends; without them a form POST redirects instead."""
     return {"HX-Request": "true", **headers}
+
+
+def start(client, exercise_id: int, **headers: str):
+    """Playing it now: the click a module row's start button sends."""
+    return client.post(f"/exercises/{exercise_id}/start", headers=hx(**headers))
+
+
+def running(conn):
+    """The entry being practised, straight out of the database."""
+    day = repo.get_day(conn, TODAY)
+    return repo.running_entry(conn, day_id=day.id) if day else None
 
 
 @pytest.fixture
@@ -144,37 +156,68 @@ def test_two_apps_do_not_share_a_database(tmp_path, le_freak, db_path):
 # --- Step 2: today ----------------------------------------------------------
 
 
-def test_with_no_day_started_the_page_offers_to_start_one(client):
+def test_with_nothing_running_the_page_says_so(client):
     page = client.get("/").text
-    assert 'action="/days"' in page
-    assert "start a day" in page.lower()
+    assert "Nothing running" in page
     assert 'id="entry-' not in page
+    assert "stop the clock" not in page  # there is no clock to stop any more
 
 
-def test_starting_a_day_opens_a_running_entry(client, conn):
-    response = client.post("/days", headers=hx())
+def test_starting_an_exercise_logs_it_straight_away(client, conn, le_freak):
+    response = start(client, le_freak.id, referer="http://localhost/modules/songs")
 
     assert response.status_code == 200
-    assert "22:47" in response.text
-    assert "running" in response.text.lower()
+    entry = running(conn)
+    assert entry is not None
+    assert entry.description == "le freak"
+    assert entry.started_at == NOW
+    # started, not scheduled: the count only moves when it is done
+    after = repo.get_exercise(conn, le_freak.id)
+    assert after is not None
+    assert after.practiced_count == 8
+
+
+def test_the_running_entry_is_a_card_on_the_today_page(client, conn, le_freak):
+    start(client, le_freak.id)
+
+    page = client.get("/").text
+
+    assert 'id="now-playing"' in page
+    assert "le freak" in page
+    assert "since 22:47" in page
+    assert f'action="/entries/{running(conn).id}/done"' in page
+    assert f'action="/entries/{running(conn).id}/discard"' in page
+
+
+def test_starting_the_next_one_closes_the_one_before_it(
+    client, conn, le_freak, espresso
+):
+    start(client, le_freak.id)
+
+    start(client, espresso.id)
+
     day = repo.get_day(conn, TODAY)
     assert day is not None
-    assert repo.running_entry(conn, day_id=day.id) is not None
+    entries = repo.entries_for_day(conn, day.id)
+    assert [(entry.description, entry.ended_at is None) for entry in entries] == [
+        ("le freak", False),
+        ("espresso", True),
+    ]
 
 
-def test_starting_a_day_twice_does_not_open_a_second_one(client, conn):
-    client.post("/days", headers=hx())
-    client.post("/days", headers=hx())
-
-    assert [day.day for day in repo.list_days(conn)] == [TODAY]
-
-
-def test_a_form_post_without_htmx_redirects_back_to_the_page(client):
+def test_a_form_post_without_htmx_redirects_back_to_the_page(client, le_freak):
     """No JavaScript: a real form, a real redirect, a working app."""
-    response = client.post("/days", follow_redirects=False)
+    response = client.post(f"/exercises/{le_freak.id}/start", follow_redirects=False)
 
     assert response.status_code == 303
     assert response.headers["location"] == "/"
+
+
+def test_starting_an_exercise_that_is_not_there_is_404(client, conn):
+    response = client.post("/exercises/404/start", headers=hx())
+
+    assert response.status_code == 404
+    assert repo.list_days(conn) == []
 
 
 def test_the_log_renders_in_start_order_with_the_sheets_subtotals(client, sample_block):
@@ -253,12 +296,12 @@ def test_an_archived_row_is_not_in_the_queue(client, conn, songs, le_freak):
 
 
 def test_done_moves_the_schedule_and_logs_the_time(client, conn, le_freak):
-    client.post("/days", headers=hx())
+    start(client, le_freak.id)
 
-    response = client.post(f"/exercises/{le_freak.id}/done", headers=hx())
+    response = client.post(f"/entries/{running(conn).id}/done", headers=hx())
 
     assert response.status_code == 200
-    assert "2026-08-10" in response.text  # 55 days, scaled by the 66% ratio
+    assert "le freak" in response.text  # the line it closed, in today's log
     after = repo.get_exercise(conn, le_freak.id)
     assert after is not None
     assert after.practiced_count == 9
@@ -270,33 +313,40 @@ def test_done_moves_the_schedule_and_logs_the_time(client, conn, le_freak):
     assert logged[0].bpm == pytest.approx(87.78)
 
 
-def test_done_swaps_the_log_and_the_totals_out_of_band(client, le_freak):
+def test_done_answers_with_the_log_and_swaps_the_totals_out_of_band(
+    client, conn, le_freak
+):
+    start(client, le_freak.id)
+
     response = client.post(
-        f"/exercises/{le_freak.id}/done", headers=hx(referer="http://localhost/")
+        f"/entries/{running(conn).id}/done", headers=hx(referer="http://localhost/")
+    )
+
+    assert '<section id="day-log"' in response.text
+    assert '<section id="day-totals" hx-swap-oob="true"' in response.text
+    assert 'id="clock"' not in response.text  # the clock is gone, card and all
+
+
+def test_done_from_a_module_page_answers_with_the_row(client, conn, le_freak, songs):
+    start(client, le_freak.id)
+
+    response = client.post(
+        f"/entries/{running(conn).id}/done",
+        headers=hx(referer=f"http://localhost/modules/{songs.slug}"),
     )
 
     assert f'id="exercise-{le_freak.id}"' in response.text
-    assert '<section id="day-log" hx-swap-oob="true"' in response.text
+    assert "start" in response.text  # finished, so the row offers a start again
+    assert '<section id="day-log"' not in response.text
     assert '<section id="day-totals" hx-swap-oob="true"' in response.text
-    assert '<div id="clock" class="clock" hx-swap-oob="true"' in response.text
-
-
-def test_done_from_module_page_excludes_day_log(client, le_freak, songs):
-    response = client.post(
-        f"/exercises/{le_freak.id}/done",
-        headers=hx(referer=f"http://localhost/modules/{songs.id}"),
-    )
-
-    assert f'id="exercise-{le_freak.id}"' in response.text
-    assert '<section id="day-log" hx-swap-oob="true"' not in response.text
-    assert '<section id="day-totals" hx-swap-oob="true"' in response.text
-    assert '<div id="clock" class="clock" hx-swap-oob="true"' in response.text
 
 
 def test_hold_leaves_the_front_of_the_queue_where_it_is(
     client, conn, le_freak, espresso
 ):
-    client.post(f"/exercises/{le_freak.id}/done?algorithm=hold", headers=hx())
+    start(client, le_freak.id)
+
+    client.post(f"/entries/{running(conn).id}/done?algorithm=hold", headers=hx())
 
     after = repo.get_exercise(conn, le_freak.id)
     assert after is not None
@@ -306,23 +356,40 @@ def test_hold_leaves_the_front_of_the_queue_where_it_is(
 def test_rotate_sends_it_past_the_last_date_in_the_module(
     client, conn, le_freak, espresso
 ):
-    client.post(f"/exercises/{le_freak.id}/done?algorithm=rotate", headers=hx())
+    start(client, le_freak.id)
+
+    client.post(f"/entries/{running(conn).id}/done?algorithm=rotate", headers=hx())
 
     after = repo.get_exercise(conn, le_freak.id)
     assert after is not None
     assert after.next_due == espresso.next_due  # the back of the queue, jitter aside
 
 
-def test_done_on_an_unknown_exercise_is_404_and_writes_nothing(client, conn):
-    response = client.post("/exercises/404/done", headers=hx())
+def test_done_on_an_unknown_entry_is_404_and_writes_nothing(client, conn):
+    response = client.post("/entries/404/done", headers=hx())
 
     assert response.status_code == 404
     assert repo.list_days(conn) == []
 
 
+def test_done_on_a_finished_line_is_409(client, conn, le_freak):
+    start(client, le_freak.id)
+    entry_id = running(conn).id
+    client.post(f"/entries/{entry_id}/done", headers=hx())
+
+    response = client.post(f"/entries/{entry_id}/done", headers=hx())
+
+    assert response.status_code == 409
+    after = repo.get_exercise(conn, le_freak.id)
+    assert after is not None
+    assert after.practiced_count == 9  # counted once, not twice
+
+
 def test_done_twice_counts_twice(client, conn, le_freak):
-    client.post(f"/exercises/{le_freak.id}/done", headers=hx())
-    client.post(f"/exercises/{le_freak.id}/done", headers=hx())
+    start(client, le_freak.id)
+    client.post(f"/entries/{running(conn).id}/done", headers=hx())
+    start(client, le_freak.id)
+    client.post(f"/entries/{running(conn).id}/done", headers=hx())
 
     after = repo.get_exercise(conn, le_freak.id)
     assert after is not None
@@ -331,9 +398,7 @@ def test_done_twice_counts_twice(client, conn, le_freak):
     assert after.practiced_count == 10
 
 
-def test_an_ad_hoc_entry_logs_time_against_no_exercise(client, conn):
-    client.post("/days", headers=hx())
-
+def test_an_ad_hoc_entry_starts_against_no_exercise(client, conn):
     response = client.post(
         "/entries",
         data={"description": "warm-up", "log_group": "TECHNIQUE"},
@@ -341,50 +406,39 @@ def test_an_ad_hoc_entry_logs_time_against_no_exercise(client, conn):
     )
 
     assert response.status_code == 200
-    day = repo.get_day(conn, TODAY)
-    assert day is not None
-    closed = [entry for entry in repo.entries_for_day(conn, day.id) if entry.ended_at]
-    assert [(entry.description, entry.exercise_id) for entry in closed] == [
-        ("warm-up", None)
-    ]
+    entry = running(conn)
+    assert entry is not None
+    assert (entry.description, entry.exercise_id) == ("warm-up", None)
 
 
-def test_stopping_the_clock_ends_the_session(client, conn):
-    client.post("/days", headers=hx())
-    day = repo.get_day(conn, TODAY)
-    assert day is not None
-    running = repo.running_entry(conn, day_id=day.id)
-    assert running is not None
+def test_a_false_start_is_discarded_and_logs_nothing(client, conn, le_freak):
+    start(client, le_freak.id)
+    entry_id = running(conn).id
 
-    response = client.post(f"/entries/{running.id}/stop", headers=hx())
+    response = client.post(f"/entries/{entry_id}/discard", headers=hx())
 
     assert response.status_code == 200
-    assert repo.running_entry(conn, day_id=day.id) is None
-    # The tail of a session is time nobody attributed, and the app does not
-    # invent an attribution for it — the same rule `restart_clock` follows.
+    day = repo.get_day(conn, TODAY)
+    assert day is not None
     assert repo.entries_for_day(conn, day.id) == []
+    after = repo.get_exercise(conn, le_freak.id)
+    assert after is not None
+    assert after.practiced_count == 8  # nothing was practised, so nothing moved
 
 
-def test_stopping_an_unknown_entry_is_404(client):
-    assert client.post("/entries/404/stop", headers=hx()).status_code == 404
+def test_discarding_a_finished_line_is_409(client, conn, le_freak):
+    start(client, le_freak.id)
+    entry_id = running(conn).id
+    client.post(f"/entries/{entry_id}/done", headers=hx())
+
+    response = client.post(f"/entries/{entry_id}/discard", headers=hx())
+
+    assert response.status_code == 409
+    assert repo.get_entry(conn, entry_id) is not None
 
 
-def test_restarting_the_clock_after_stopping(client, conn):
-    client.post("/days", headers=hx())
-    day = repo.get_day(conn, TODAY)
-    assert day is not None
-    running = repo.running_entry(conn, day_id=day.id)
-    assert running is not None
-
-    client.post(f"/entries/{running.id}/stop", headers=hx())
-    assert repo.running_entry(conn, day_id=day.id) is None
-
-    response = client.post("/entries/restart", headers=hx())
-
-    assert response.status_code == 200
-    restarted = repo.running_entry(conn, day_id=day.id)
-    assert restarted is not None
-    assert restarted.started_at == NOW
+def test_discarding_an_unknown_entry_is_404(client):
+    assert client.post("/entries/404/discard", headers=hx()).status_code == 404
 
 
 # --- Step 5: editing in place -----------------------------------------------
@@ -430,7 +484,8 @@ def test_setting_a_target_re_resolves_every_percentage_on_the_row(
 
 
 def test_renaming_a_row_does_not_rewrite_the_log(client, conn, le_freak):
-    client.post(f"/exercises/{le_freak.id}/done", headers=hx())
+    start(client, le_freak.id)
+    client.post(f"/entries/{running(conn).id}/done", headers=hx())
 
     client.patch(
         f"/exercises/{le_freak.id}", data={"name": "Le Freak (Chic)"}, headers=hx()
@@ -698,19 +753,17 @@ def test_a_plain_form_post_amends_an_entry_too(client, conn, sample_block):
     assert after.notes == "left hand only"
 
 
-def test_the_running_entry_cannot_be_edited_by_hand(client, conn):
-    client.post("/days", headers=hx())
-    day = repo.get_day(conn, TODAY)
-    assert day is not None
-    running = repo.running_entry(conn, day_id=day.id)
-    assert running is not None
+def test_the_running_entry_cannot_be_edited_by_hand(client, conn, le_freak):
+    start(client, le_freak.id)
+    entry = running(conn)
+    assert entry is not None
 
     response = client.patch(
-        f"/entries/{running.id}", data={"description": "guessing"}, headers=hx()
+        f"/entries/{entry.id}", data={"description": "guessing"}, headers=hx()
     )
 
     assert response.status_code == 409
-    assert repo.running_entry(conn, day_id=day.id) is not None
+    assert running(conn) is not None
 
 
 def test_an_unreadable_time_is_refused_rather_than_guessed(client, conn, sample_block):
@@ -785,17 +838,15 @@ def test_a_plain_form_post_removes_a_line_too(client, conn, sample_block):
     assert repo.get_entry(conn, entry.id) is None
 
 
-def test_the_running_line_cannot_be_removed(client, conn):
-    client.post("/days", headers=hx())
-    day = repo.get_day(conn, TODAY)
-    assert day is not None
-    running = repo.running_entry(conn, day_id=day.id)
-    assert running is not None
+def test_the_running_line_cannot_be_removed(client, conn, le_freak):
+    start(client, le_freak.id)
+    entry = running(conn)
+    assert entry is not None
 
-    response = client.delete(f"/entries/{running.id}", headers=hx())
+    response = client.delete(f"/entries/{entry.id}", headers=hx())
 
     assert response.status_code == 409
-    assert repo.get_entry(conn, running.id) is not None
+    assert repo.get_entry(conn, entry.id) is not None
 
 
 def test_removing_a_line_that_is_not_there_is_404(client):
@@ -814,7 +865,8 @@ def test_a_row_can_be_archived_from_its_module(client, conn, songs, le_freak):
 
 
 def test_archiving_a_row_keeps_the_log_it_appears_in(client, conn, le_freak):
-    client.post(f"/exercises/{le_freak.id}/done", headers=hx())
+    start(client, le_freak.id)
+    client.post(f"/entries/{running(conn).id}/done", headers=hx())
 
     client.post(f"/exercises/{le_freak.id}/archive", headers=hx())
 
@@ -848,3 +900,409 @@ def test_archiving_without_htmx_goes_back_to_the_module(client, songs, le_freak)
 
     assert response.status_code == 303
     assert response.headers["location"] == "/modules/songs"
+
+
+# --- the material on the card -----------------------------------------------
+
+
+@pytest.fixture
+def roots(tmp_path, monkeypatch):
+    """A scores directory of our own; every path in is confined to it."""
+    root = tmp_path / "TUNES"
+    root.mkdir()
+    monkeypatch.setenv("MUSIC_TOOLS_MEDIA_ROOTS", str(root))
+    return root
+
+
+@pytest.fixture
+def loop_wav(roots):
+    """Four seconds of silence, exported as a real file. No binary fixtures."""
+    from pydub import AudioSegment
+
+    path = roots / "S" / "le freak" / "loop.wav"
+    path.parent.mkdir(parents=True)
+    AudioSegment.silent(duration=4000).export(path, format="wav")
+    return path
+
+
+def test_the_card_plays_the_file_attached_to_the_exercise(
+    client, conn, le_freak, loop_wav
+):
+    source = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+    start(client, le_freak.id)
+
+    page = client.get("/").text
+
+    assert f'src="/media/{source.id}/file"' in page
+    assert "<audio" in page
+    assert "loop.wav" in page
+
+
+def test_a_youtube_attachment_is_an_embed_with_the_link_behind_it(
+    client, conn, le_freak
+):
+    media.attach(
+        conn,
+        exercise_id=le_freak.id,
+        kind="youtube",
+        url="https://www.youtube.com/watch?v=Kt2GdFbdVxo",
+        now=NOW,
+    )
+    start(client, le_freak.id)
+
+    page = client.get("/").text
+
+    # the one card that needs the network; the link is what is left without it
+    assert 'src="https://www.youtube.com/embed/Kt2GdFbdVxo"' in page
+    assert 'href="https://www.youtube.com/watch?v=Kt2GdFbdVxo"' in page
+
+
+def test_a_url_that_is_not_youtube_is_left_as_a_link(client, conn, le_freak):
+    media.attach(
+        conn,
+        exercise_id=le_freak.id,
+        kind="youtube",
+        url="https://example.com/not-a-video",
+        now=NOW,
+    )
+    start(client, le_freak.id)
+
+    page = client.get("/").text
+
+    assert "<iframe" not in page
+    assert 'href="https://example.com/not-a-video"' in page
+
+
+def test_text_is_shown_as_text(client, conn, le_freak):
+    media.attach(
+        conn,
+        exercise_id=le_freak.id,
+        kind="text",
+        body="Bb minor pentatonic, two octaves",
+        now=NOW,
+    )
+    start(client, le_freak.id)
+
+    assert "Bb minor pentatonic, two octaves" in client.get("/").text
+
+
+def test_an_exercise_with_nothing_attached_says_so(client, le_freak):
+    start(client, le_freak.id)
+
+    assert "Nothing attached to this one yet" in client.get("/").text
+
+
+def test_the_file_route_serves_what_is_on_disk(client, conn, le_freak, loop_wav):
+    source = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+
+    response = client.get(f"/media/{source.id}/file")
+
+    assert response.status_code == 200
+    assert response.content == loop_wav.read_bytes()
+
+
+def test_the_file_route_refuses_a_path_outside_the_roots(
+    client, conn, le_freak, loop_wav, tmp_path, monkeypatch
+):
+    """The roots can be narrowed later, and a stored path is not a promise."""
+    source = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+    elsewhere = tmp_path / "OTHER"
+    elsewhere.mkdir()
+    monkeypatch.setenv("MUSIC_TOOLS_MEDIA_ROOTS", str(elsewhere))
+
+    assert client.get(f"/media/{source.id}/file").status_code == 403
+
+
+def test_the_file_route_is_404_when_the_file_has_gone(client, conn, le_freak, loop_wav):
+    source = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+    loop_wav.unlink()
+
+    assert client.get(f"/media/{source.id}/file").status_code == 404
+
+
+def test_the_file_route_is_404_for_media_that_is_not_there(client):
+    assert client.get("/media/404/file").status_code == 404
+
+
+def test_a_module_row_offers_start_and_then_done(client, conn, songs, le_freak):
+    page = client.get("/modules/songs").text
+    assert f'action="/exercises/{le_freak.id}/start"' in page
+
+    start(client, le_freak.id)
+
+    page = client.get("/modules/songs").text
+    assert f'action="/entries/{running(conn).id}/done"' in page
+    assert f'action="/entries/{running(conn).id}/discard"' in page
+
+
+# --- attaching media from the page ------------------------------------------
+
+
+def test_the_media_page_lists_the_roots_paths_are_confined_to(client, le_freak, roots):
+    page = client.get(f"/exercises/{le_freak.id}/media").text
+
+    assert "le freak" in page
+    assert str(roots) in page  # a path is typed in, so say where it may point
+
+
+def test_a_file_is_attached_from_the_page(client, conn, le_freak, loop_wav):
+    response = client.post(
+        f"/exercises/{le_freak.id}/media",
+        data={"kind": "file", "path": str(loop_wav), "label": "the loop"},
+        headers=hx(),
+    )
+
+    assert response.status_code == 200
+    assert 'id="media-list"' in response.text
+    cards = media.exercise_media(conn, exercise_id=le_freak.id)
+    assert [card.kind for card in cards] == ["file"]
+    assert cards[0].sources[0].label == "the loop"
+
+
+def test_a_youtube_url_is_attached_from_the_page(client, conn, le_freak):
+    client.post(
+        f"/exercises/{le_freak.id}/media",
+        data={"kind": "youtube", "url": "https://youtu.be/Kt2GdFbdVxo"},
+        headers=hx(),
+    )
+
+    cards = media.exercise_media(conn, exercise_id=le_freak.id)
+    assert [card.sources[0].url for card in cards] == ["https://youtu.be/Kt2GdFbdVxo"]
+
+
+def test_text_is_attached_from_the_page(client, conn, le_freak):
+    client.post(
+        f"/exercises/{le_freak.id}/media",
+        data={"kind": "text", "body": "two octaves, thumb on the E"},
+        headers=hx(),
+    )
+
+    cards = media.exercise_media(conn, exercise_id=le_freak.id)
+    assert cards[0].sources[0].body == "two octaves, thumb on the E"
+
+
+def test_a_path_outside_the_roots_is_refused_with_a_message(
+    client, conn, le_freak, roots, tmp_path
+):
+    outside = tmp_path / "elsewhere.wav"
+    outside.write_bytes(b"")
+
+    response = client.post(
+        f"/exercises/{le_freak.id}/media",
+        data={"kind": "file", "path": str(outside)},
+        headers=hx(),
+    )
+
+    assert response.status_code == 400
+    assert "outside the configured roots" in response.text
+    assert media.exercise_media(conn, exercise_id=le_freak.id) == []
+
+
+def test_a_file_that_is_not_there_is_refused_with_a_message(client, le_freak, roots):
+    response = client.post(
+        f"/exercises/{le_freak.id}/media",
+        data={"kind": "file", "path": str(roots / "nothing.wav")},
+        headers=hx(),
+    )
+
+    assert response.status_code == 400
+    assert "nothing.wav" in response.text
+
+
+def test_attaching_to_an_exercise_that_is_not_there_is_404(client, roots):
+    response = client.post(
+        "/exercises/404/media", data={"kind": "text", "body": "x"}, headers=hx()
+    )
+
+    assert response.status_code == 404
+
+
+def test_a_kind_without_what_it_needs_is_refused_by_the_page(client, le_freak, roots):
+    response = client.post(
+        f"/exercises/{le_freak.id}/media", data={"kind": "text"}, headers=hx()
+    )
+
+    assert response.status_code == 400
+
+
+def test_an_attachment_can_be_removed_from_the_page(client, conn, le_freak, loop_wav):
+    source = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+
+    response = client.delete(f"/media/{source.id}", headers=hx())
+
+    assert response.status_code == 200
+    assert media.exercise_media(conn, exercise_id=le_freak.id) == []
+    assert loop_wav.exists()  # referenced, never owned
+
+
+def test_a_plain_form_post_removes_an_attachment_too(client, conn, le_freak, loop_wav):
+    """No JavaScript: HTML forms cannot send DELETE, so POST does it."""
+    source = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+
+    response = client.post(f"/media/{source.id}/delete", headers=hx())
+
+    assert response.status_code == 200
+    assert media.exercise_media(conn, exercise_id=le_freak.id) == []
+
+
+def test_removing_an_attachment_that_is_not_there_is_404(client):
+    assert client.delete("/media/404", headers=hx()).status_code == 404
+
+
+def test_attachments_can_be_reordered_from_the_page(client, conn, le_freak, loop_wav):
+    first = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+    media.attach(conn, exercise_id=le_freak.id, kind="text", body="notes", now=NOW)
+
+    response = client.post(
+        f"/media/{first.id}/move", data={"direction": "down"}, headers=hx()
+    )
+
+    assert response.status_code == 200
+    cards = media.exercise_media(conn, exercise_id=le_freak.id)
+    assert [card.kind for card in cards] == ["text", "file"]
+
+
+def test_a_direction_nobody_knows_is_refused(client, conn, le_freak, loop_wav):
+    source = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+
+    response = client.post(
+        f"/media/{source.id}/move", data={"direction": "sideways"}, headers=hx()
+    )
+
+    assert response.status_code == 400
+
+
+def test_a_second_file_makes_a_track_set_from_the_page(
+    client, conn, le_freak, loop_wav, roots
+):
+    from pydub import AudioSegment
+
+    bass = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+    drums = roots / "S" / "le freak" / "drums.wav"
+    AudioSegment.silent(duration=4000).export(drums, format="wav")
+
+    response = client.post(
+        f"/exercises/{le_freak.id}/media",
+        data={
+            "kind": "file",
+            "path": str(drums),
+            "label": "drums",
+            "group_id": str(bass.group_id),
+        },
+        headers=hx(),
+    )
+
+    assert response.status_code == 200
+    card = media.exercise_media(conn, exercise_id=le_freak.id)[0]
+    assert card.is_set
+    assert [track.label for track in card.sources] == [None, "drums"]
+
+
+def test_a_member_that_disagrees_on_length_is_refused_with_the_file_named(
+    client, conn, le_freak, loop_wav, roots
+):
+    from pydub import AudioSegment
+
+    bass = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+    short = roots / "S" / "le freak" / "half.wav"
+    AudioSegment.silent(duration=2000).export(short, format="wav")
+
+    response = client.post(
+        f"/exercises/{le_freak.id}/media",
+        data={"kind": "file", "path": str(short), "group_id": str(bass.group_id)},
+        headers=hx(),
+    )
+
+    assert response.status_code == 409
+    assert "half.wav" in response.text
+    assert not media.exercise_media(conn, exercise_id=le_freak.id)[0].is_set
+
+
+def test_a_track_is_named_and_mixed_from_the_page(client, conn, le_freak, loop_wav):
+    source = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+
+    response = client.post(
+        f"/media/{source.id}",
+        data={"label": "bass DI", "gain": "0.5", "pan": "-0.4", "muted": "on"},
+        headers=hx(),
+    )
+
+    assert response.status_code == 200
+    after = repo.get_media_source(conn, source.id)
+    assert after is not None
+    assert (after.label, after.gain, after.pan, after.muted) == (
+        "bass DI",
+        0.5,
+        -0.4,
+        True,
+    )
+
+
+def test_a_mix_a_mixer_could_not_mean_is_refused(client, conn, le_freak, loop_wav):
+    source = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+
+    response = client.post(f"/media/{source.id}", data={"pan": "3"}, headers=hx())
+
+    assert response.status_code == 400
+
+
+def test_a_set_is_labelled_as_a_whole_from_the_page(client, conn, le_freak, loop_wav):
+    source = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+
+    response = client.post(
+        f"/groups/{source.group_id}/label", data={"label": "stems"}, headers=hx()
+    )
+
+    assert response.status_code == 200
+    assert media.exercise_media(conn, exercise_id=le_freak.id)[0].label == "stems"
+
+
+def test_the_module_page_links_to_an_exercises_media(client, songs, le_freak):
+    page = client.get("/modules/songs").text
+
+    assert f'href="/exercises/{le_freak.id}/media"' in page
+
+
+def test_attaching_without_htmx_redirects_back_to_the_media_page(
+    client, le_freak, roots
+):
+    """No JavaScript: a real form, a real redirect, a working app."""
+    response = client.post(
+        f"/exercises/{le_freak.id}/media",
+        data={"kind": "text", "body": "two octaves"},
+        headers={"Referer": f"http://testserver/exercises/{le_freak.id}/media"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == f"/exercises/{le_freak.id}/media"
+
+
+def test_the_media_page_is_404_for_an_exercise_that_is_not_there(client):
+    assert client.get("/exercises/404/media").status_code == 404

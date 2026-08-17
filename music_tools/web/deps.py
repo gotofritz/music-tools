@@ -22,6 +22,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from music_tools.db.connection import open_db
+from music_tools.domain.media import youtube_embed
 from music_tools.domain.models import Exercise, PracticeEntry
 from music_tools.domain.session import (
     entry_duration,
@@ -66,6 +67,11 @@ def duration_text(entry: PracticeEntry, now: datetime | None) -> str:
     return format_duration(entry_duration(entry, now=now))
 
 
+def file_name(path: str | None) -> str:
+    """What to call a track when nobody labelled it: the file's own name."""
+    return Path(path).name if path else ""
+
+
 def _environment() -> Environment:
     env = Environment(
         loader=FileSystemLoader(TEMPLATES),
@@ -79,6 +85,8 @@ def _environment() -> Environment:
         "format_when": format_when,
         "tempo_text": tempo_text,
         "duration_text": duration_text,
+        "file_name": file_name,
+        "youtube_embed": youtube_embed,
     }
     env.globals.update(helpers)
     return env

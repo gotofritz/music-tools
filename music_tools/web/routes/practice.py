@@ -1,8 +1,9 @@
-"""The day: the running log, the days behind it, and marking things done.
+"""The day: what is being played, the log, and the days behind it.
 
-Every route here is a call into `domain/session.py` and a render. The one that
-matters is `done`: it changes three things on screen at once, which is the
-whole reason there is HTMX in this app rather than a page reload per exercise.
+Every route here is a call into `domain/session.py` and a render. The two that
+matter are `start` and `done`: each changes two or three things on screen at
+once, which is the whole reason there is HTMX in this app rather than a page
+reload per exercise.
 """
 
 import random
@@ -14,6 +15,7 @@ from fastapi.responses import HTMLResponse, Response
 
 from music_tools.db import repository as repo
 from music_tools.domain import session
+from music_tools.domain.models import Exercise
 from music_tools.domain.scheduling import Algorithm
 from music_tools.domain.session import practice_day_for
 from music_tools.web import views
@@ -85,59 +87,85 @@ def edit_one_day(
     return _day_view(request, conn, day=day, now=now, editing=True)
 
 
-@router.post("/days")
-def start_today(
-    request: Request,
-    conn: sqlite3.Connection = Depends(get_conn),
-    now: datetime = Depends(get_now),
-) -> Response:
-    """Start the day, and set the clock running. Twice in a day is once."""
-    session.start_day(conn, now=now)
-    return fragment_or_redirect(request, _log_fragments(conn, now=now))
-
-
-@router.post("/exercises/{exercise_id}/done")
-async def done(
+@router.post("/exercises/{exercise_id}/start")
+def start(
     request: Request,
     exercise_id: int,
     conn: sqlite3.Connection = Depends(get_conn),
     now: datetime = Depends(get_now),
-    rng: random.Random = Depends(get_rng),
 ) -> Response:
-    """Practised it: the row's due date moves, and the day log ticks over.
+    """Playing this now: the log gets a line for it, with its material on it.
 
-    One click changes the exercise row, the log and the totals, so the row is
-    the response and the other two ride along as out-of-band swaps.
+    Whatever was running is closed at this instant — one entry at a time — and
+    nothing is scheduled: `done` is what moves the schedule.
     """
-    algorithm = _algorithm(request, await _form(request))
     try:
-        result = session.mark_done(
-            conn,
-            exercise_id=exercise_id,
-            algorithm=algorithm,
-            now=now,
-            rng=rng,
-        )
+        result = session.start_exercise(conn, exercise_id=exercise_id, now=now)
     except session.UnknownExercise:
         raise HTTPException(
             status_code=404, detail="no exercise with that id"
         ) from None
+    exercise = repo.get_exercise(conn, result.entry.exercise_id or exercise_id)
+    return fragment_or_redirect(request, _redraw(request, conn, now=now, row=exercise))
 
-    context = views.today_context(conn, now=now)
-    row = render(
-        "_exercise_row.html",
-        exercise=result.exercise,
-        module=context["modules_by_id"][result.exercise.module_id],
-        today=context["today"],
+
+@router.post("/entries/{entry_id}/done")
+async def done(
+    request: Request,
+    entry_id: int,
+    conn: sqlite3.Connection = Depends(get_conn),
+    now: datetime = Depends(get_now),
+    rng: random.Random = Depends(get_rng),
+) -> Response:
+    """Done with it: the line closes and the exercise's due date moves.
+
+    One click changes the log, the totals and — where the click came from a
+    module page — the row itself, so one of them is the response and the rest
+    ride along as out-of-band swaps.
+    """
+    algorithm = _algorithm(request, await _form(request))
+    try:
+        result = session.finish_entry(
+            conn, entry_id=entry_id, algorithm=algorithm, now=now, rng=rng
+        )
+    except session.UnknownEntry:
+        raise HTTPException(status_code=404, detail="no entry with that id") from None
+    except session.EntryClosed:
+        raise HTTPException(
+            status_code=409, detail="that entry is already finished"
+        ) from None
+    return fragment_or_redirect(
+        request, _redraw(request, conn, now=now, row=result.exercise)
     )
-    response = row + _side_fragments(context)
-    if _is_today_page(request):
-        response += render("_day_log.html", oob=True, **context)
-    return fragment_or_redirect(request, response)
+
+
+@router.post("/entries/{entry_id}/discard")
+def discard(
+    request: Request,
+    entry_id: int,
+    conn: sqlite3.Connection = Depends(get_conn),
+    now: datetime = Depends(get_now),
+) -> Response:
+    """A false start: the line goes, and no time is logged against it."""
+    entry = repo.get_entry(conn, entry_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="no entry with that id")
+    try:
+        session.discard_entry(conn, entry_id=entry_id)
+    except session.EntryClosed:
+        raise HTTPException(
+            status_code=409, detail="that entry is already finished"
+        ) from None
+    row = (
+        repo.get_exercise(conn, entry.exercise_id)
+        if entry.exercise_id is not None
+        else None
+    )
+    return fragment_or_redirect(request, _redraw(request, conn, now=now, row=row))
 
 
 @router.post("/entries")
-async def add_entry(
+def add_entry(
     request: Request,
     description: str = Form(...),
     log_group: str | None = Form(None),
@@ -146,8 +174,8 @@ async def add_entry(
     conn: sqlite3.Connection = Depends(get_conn),
     now: datetime = Depends(get_now),
 ) -> Response:
-    """Log something the catalogue does not know about: a warm-up, a jam."""
-    session.log_entry(
+    """Start something the catalogue does not know about: a warm-up, a jam."""
+    session.start_ad_hoc(
         conn,
         description=description,
         log_group=log_group or None,
@@ -155,17 +183,6 @@ async def add_entry(
         notes=notes or None,
         now=now,
     )
-    return fragment_or_redirect(request, _log_fragments(conn, now=now))
-
-
-@router.post("/entries/restart")
-def restart_entry(
-    request: Request,
-    conn: sqlite3.Connection = Depends(get_conn),
-    now: datetime = Depends(get_now),
-) -> Response:
-    """Restart the clock after a break."""
-    session.restart_clock(conn, now=now)
     return fragment_or_redirect(request, _log_fragments(conn, now=now))
 
 
@@ -240,19 +257,32 @@ def remove_entry(
     )
 
 
-@router.post("/entries/{entry_id}/stop")
-def stop_entry(
+def _redraw(
     request: Request,
-    entry_id: int,
-    conn: sqlite3.Connection = Depends(get_conn),
-    now: datetime = Depends(get_now),
-) -> Response:
-    """Stop the clock. The unattributed tail of a session is not logged."""
-    try:
-        session.stop_clock(conn, entry_id=entry_id, now=now)
-    except session.UnknownEntry:
-        raise HTTPException(status_code=404, detail="no entry with that id") from None
-    return fragment_or_redirect(request, _log_fragments(conn, now=now))
+    conn: sqlite3.Connection,
+    *,
+    now: datetime,
+    row: Exercise | None = None,
+) -> str:
+    """The piece that was clicked, and whatever else the write changed.
+
+    A click on a module page is targeting the exercise row; a click on the
+    today page is targeting the log. Whichever it is answers, and the rest are
+    out-of-band swaps — the same id twice in one response is a fight over the
+    swap.
+    """
+    context = views.today_context(conn, now=now)
+    if row is not None and not _is_today_page(request):
+        return render(
+            "_exercise_row.html",
+            exercise=row,
+            module=context["modules_by_id"][row.module_id],
+            today=context["today"],
+            running=context["running"],
+        ) + render("_day_totals.html", oob=True, **context)
+    return render("_day_log.html", **context) + render(
+        "_day_totals.html", oob=True, **context
+    )
 
 
 def _amended_day(conn: sqlite3.Connection, *, day: date, now: datetime) -> str:
@@ -299,19 +329,10 @@ def _at(written: str | None, current: datetime | None) -> datetime | None:
 def _log_fragments(
     conn: sqlite3.Connection, *, now: datetime, editing: bool = False
 ) -> str:
-    """The log itself, with the totals and the clock riding behind it."""
+    """The log itself — card and all — with the totals riding behind it."""
     context = {**views.today_context(conn, now=now), "editing": editing}
-    return render("_day_log.html", **context) + _side_fragments(context)
-
-
-def _side_fragments(context: dict) -> str:
-    """The rest of what a write changes, as out-of-band swaps.
-
-    Not the log: whatever was clicked is already targeting one of these
-    sections, and the same id twice in one response is a fight over the swap.
-    """
-    return render("_day_totals.html", oob=True, **context) + render(
-        "_clock.html", oob=True, **context
+    return render("_day_log.html", **context) + render(
+        "_day_totals.html", oob=True, **context
     )
 
 

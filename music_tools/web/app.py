@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from music_tools.db.connection import open_db
 from music_tools.db.migrate import migrate
 from music_tools.web.deps import STATIC
-from music_tools.web.routes import modules, practice
+from music_tools.web.routes import media, modules, practice
 
 
 def create_app(db_path: str | Path) -> FastAPI:
@@ -30,6 +30,7 @@ def create_app(db_path: str | Path) -> FastAPI:
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
     app.include_router(practice.router)
     app.include_router(modules.router)
+    app.include_router(media.router)
     return app
 
 
