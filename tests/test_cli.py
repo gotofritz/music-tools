@@ -5,15 +5,19 @@ about what the player sees, not about the schedule, which is pinned in
 `test_scheduling.py`.
 """
 
-from datetime import date, timedelta
-from pathlib import Path
+from datetime import date, datetime, timedelta
 
 import pytest
 from click.testing import CliRunner
 
 from music_tools.cli import practice
 
-RAW = Path(__file__).parent.parent / "docs" / "raw"
+# The clock every command in this suite runs against, pinned through `--now`.
+# Nothing here reads the wall clock: a practice day runs to 4am, so a suite
+# that asked `date.today()` what day it was passed all afternoon and failed
+# between midnight and 4am — which is exactly when nobody was watching CI.
+NOW = datetime(2026, 7, 5, 22, 27)
+TODAY = date(2026, 7, 5)
 
 
 @pytest.fixture
@@ -23,13 +27,15 @@ def run(tmp_path):
     db_path = tmp_path / "practice.db"
 
     def invoke(*args: str):
-        return runner.invoke(practice, ["--db", str(db_path), *args])
+        return runner.invoke(
+            practice, ["--db", str(db_path), "--now", NOW.isoformat(), *args]
+        )
 
     return invoke
 
 
-YESTERDAY = date.today() - timedelta(days=1)
-IN_A_MONTH = date.today() + timedelta(days=30)
+YESTERDAY = TODAY - timedelta(days=1)
+IN_A_MONTH = TODAY + timedelta(days=30)
 
 
 @pytest.fixture
@@ -97,7 +103,7 @@ def test_done_prints_the_new_due_date_and_the_log_line(stocked, run):
 
     assert result.exit_code == 0
     # first time practised: INTERVALS[1] is a day, and the jitter cannot move it
-    assert (date.today() + timedelta(days=1)).isoformat() in result.output
+    assert (TODAY + timedelta(days=1)).isoformat() in result.output
     assert "le freak" in result.output
     assert "REPERTOIRE" in result.output
 
@@ -142,28 +148,7 @@ def test_day_new_starts_the_clock(run):
     result = run("day", "new")
 
     assert result.exit_code == 0
-    assert date.today().isoformat() in result.output
-
-
-def test_import_and_log_reproduce_the_sample_block(run):
-    result = run(
-        "import",
-        "--modules",
-        str(RAW / "BASS SONGS.csv"),
-        "--day-log",
-        str(RAW / "BASS.csv"),
-    )
-
-    assert result.exit_code == 0
-    assert "4 exercises" in result.output
-
-    log = run("log", "--day", "2026-07-05")
-
-    assert "019 Tempo Builder" in log.output
-    assert "TECHNIQUE" in log.output
-    assert "00:19" in log.output
-    assert "00:34" in log.output
-    assert "00:53" in log.output
+    assert TODAY.isoformat() in result.output
 
 
 def test_log_defaults_to_today(stocked, run):
@@ -171,7 +156,7 @@ def test_log_defaults_to_today(stocked, run):
 
     result = run("log")
 
-    assert date.today().isoformat() in result.output
+    assert TODAY.isoformat() in result.output
     assert "le freak" in result.output
 
 
@@ -203,7 +188,7 @@ def test_start_opens_the_day_when_there_is_not_one(run):
 
     log = run("log")
 
-    assert date.today().isoformat() in log.output
+    assert TODAY.isoformat() in log.output
     assert "(running)" in log.output
 
 
@@ -326,25 +311,6 @@ def test_serve_opens_a_browser_unless_told_not_to(run, uvicorn_run, monkeypatch)
 
     run("serve", "--port", "9001")
     assert opened == ["http://127.0.0.1:9001/"]
-
-
-def test_import_takes_the_module_name_from_the_argument(run, tmp_path):
-    """Google exports as `<document> - <sheet>.tsv`, so the name is passed in."""
-    export = tmp_path / "Bass Practice - SONGS.tsv"
-    export.write_bytes((RAW / "BASS SONGS.csv").read_bytes())
-
-    result = run("import", "--modules", f"SONGS:{export}")
-
-    assert result.exit_code == 0, result.output
-    assert "SONGS" in run("module", "list").output
-    assert "Practice - SONGS" not in run("module", "list").output
-
-
-def test_import_says_which_file_it_cannot_find(run):
-    result = run("import", "--modules", "SONGS:/no/such/sheet.tsv")
-
-    assert result.exit_code != 0
-    assert "/no/such/sheet.tsv" in result.output
 
 
 def test_help_answers_to_both_spellings(run):

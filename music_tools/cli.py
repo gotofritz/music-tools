@@ -5,7 +5,10 @@ exists to prove the domain before there is any HTML, and it stays useful
 afterwards.
 
 This module is the only place in the codebase that reads the clock or builds a
-`random.Random`; everything below takes both as arguments.
+`random.Random`; everything below takes both as arguments. That one reading is
+`--now`, which defaults to the real clock and is overridable for the same
+reason `--db` is: so a test can assert exact dates instead of whatever the
+wall clock happens to say when it runs.
 """
 
 import difflib
@@ -13,6 +16,7 @@ import random
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 
@@ -51,6 +55,17 @@ from music_tools.domain.session import (
 from music_tools.domain.tempo import format_tempo, parse_tempo
 
 
+@dataclass(frozen=True)
+class Env:
+    """What every command needs before it can do anything: a file and a clock."""
+
+    db_path: Path
+    now: datetime | None = None  # None = read the real clock at each use
+
+    def clock(self) -> datetime:
+        return self.now if self.now is not None else datetime.now()
+
+
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
 @click.option(
     "--db",
@@ -59,10 +74,18 @@ from music_tools.domain.tempo import format_tempo, parse_tempo
     default=None,
     help="Database file. Defaults to $MUSIC_TOOLS_DB, or ~/.local/share.",
 )
+@click.option(
+    "--now",
+    "now",
+    type=click.DateTime(),
+    default=None,
+    hidden=True,
+    help="Pretend it is this instant. For tests, and for logging a session late.",
+)
 @click.pass_context
-def practice(ctx: click.Context, db_path: Path | None) -> None:
+def practice(ctx: click.Context, db_path: Path | None, now: datetime | None) -> None:
     """Track bass practice: what is due, what was done, and when it comes back."""
-    ctx.obj = db_path or default_db_path()
+    ctx.obj = Env(db_path=db_path or default_db_path(), now=now)
 
 
 @practice.group()
@@ -81,7 +104,7 @@ def module_list(ctx: click.Context, archived: bool) -> None:
     """Every module, with the state of its own queue."""
     conn = _connect(ctx)
     overview = module_overview(
-        conn, today=practice_day_for(datetime.now()), include_archived=archived
+        conn, today=practice_day_for(_now(ctx)), include_archived=archived
     )
     if not overview:
         click.echo("Nothing here yet — add a module first.")
@@ -109,7 +132,7 @@ def module_show(ctx: click.Context, module_name: str, archived: bool) -> None:
     if not rows:
         click.echo("  nothing in this module yet")
         return
-    today = practice_day_for(datetime.now())
+    today = practice_day_for(_now(ctx))
     for exercise in rows:
         click.echo(_row_line(exercise, today))
 
@@ -178,7 +201,7 @@ def module_archive(ctx: click.Context, module_name: str) -> None:
     conn = _connect(ctx)
     found = _find_module(conn, module_name)
     with _reporting():
-        archive_module(conn, found.id, now=datetime.now())
+        archive_module(conn, found.id, now=_now(ctx))
     click.echo(f"{found.name} archived — `module restore` puts it back")
 
 
@@ -238,7 +261,7 @@ def add_exercise(
         speed=speed,
         target_bpm=target_bpm,
         style=style,
-        next_due=_parse_day(next_due) if next_due else None,
+        next_due=_parse_day(next_due, now=_now(ctx)) if next_due else None,
         notes=notes,
     )
     click.echo(f"{found.name}/{exercise.name} added, {_tempo(exercise)}")
@@ -273,7 +296,7 @@ def edit_exercise(
         speed=speed,
         target_bpm=target_bpm,
         style=style,
-        next_due=_parse_day(next_due) if next_due else None,
+        next_due=_parse_day(next_due, now=_now(ctx)) if next_due else None,
         practiced_count=practiced_count,
         notes=notes,
     )
@@ -295,7 +318,7 @@ def archive_row(ctx: click.Context, exercise: str) -> None:
     conn = _connect(ctx)
     found = _resolve(conn, exercise)
     with _reporting():
-        archive_exercise(conn, found.id, now=datetime.now())
+        archive_exercise(conn, found.id, now=_now(ctx))
     click.echo(f"{found.name} archived — `restore` puts it back")
 
 
@@ -352,7 +375,7 @@ def next_up(ctx: click.Context, module_name: str | None, limit: int) -> None:
     than one interleaved list.
     """
     conn = _connect(ctx)
-    today = practice_day_for(datetime.now())
+    today = practice_day_for(_now(ctx))
     if module_name:
         modules = [_find_module(conn, module_name)]
     else:
@@ -407,7 +430,7 @@ def done(
     """Mark an exercise practised: move the schedule and log the time."""
     conn = _connect(ctx)
     found = _resolve(conn, exercise)
-    now = datetime.now()
+    now = _now(ctx)
     result = mark_done(
         conn,
         exercise_id=found.id,
@@ -442,7 +465,7 @@ def start(ctx: click.Context) -> None:
     whatever you play next.
     """
     conn = _connect(ctx)
-    now = datetime.now()
+    now = _now(ctx)
     result = restart_clock(conn, now=now)
     dropped = ""
     if result.dropped_seconds:
@@ -465,7 +488,7 @@ def serve_command(ctx: click.Context, host: str, port: int, browser: bool) -> No
     """
     from music_tools.web.app import serve
 
-    serve(ctx.obj, host=host, port=port, open_browser=browser)
+    serve(ctx.obj.db_path, host=host, port=port, open_browser=browser)
 
 
 @practice.group()
@@ -478,7 +501,7 @@ def day() -> None:
 def day_new(ctx: click.Context) -> None:
     """Start a day and set the clock running."""
     conn = _connect(ctx)
-    now = datetime.now()
+    now = _now(ctx)
     started = start_day(conn, now=now)
     click.echo(f"{started.day.isoformat()} started, clock running from {now:%H:%M}")
 
@@ -517,7 +540,7 @@ def db_dump(ctx: click.Context, path: Path) -> None:
 def show_log(ctx: click.Context, which: str) -> None:
     """The day block, with its subtotals."""
     conn = _connect(ctx)
-    now = datetime.now()
+    now = _now(ctx)
     summary = day_summary(conn, day=_parse_day(which, now=now), now=now)
     if not summary.entries:
         click.echo(f"Nothing logged for {summary.day.isoformat()}.")
@@ -543,9 +566,15 @@ def show_log(ctx: click.Context, which: str) -> None:
 # --- plumbing ---------------------------------------------------------------
 
 
+def _now(ctx: click.Context) -> datetime:
+    """The clock, once: the real one, or whatever `--now` pinned it to."""
+    env: Env = ctx.obj
+    return env.clock()
+
+
 def _connect(ctx: click.Context) -> sqlite3.Connection:
     """Open the database named on the command line, and migrate it."""
-    conn = open_db(ctx.obj)
+    conn = open_db(ctx.obj.db_path)
     migrate(conn)
     return conn
 
@@ -632,9 +661,9 @@ def _plural(count: int, singular: str, plural: str | None = None) -> str:
     return f"{count} {singular if count == 1 else plural or singular + 's'}"
 
 
-def _parse_day(which: str, now: datetime | None = None) -> date:
+def _parse_day(which: str, now: datetime) -> date:
     if which == "today":
-        return practice_day_for(now or datetime.now())
+        return practice_day_for(now)
     try:
         return date.fromisoformat(which)
     except ValueError:

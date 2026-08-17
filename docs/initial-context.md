@@ -126,6 +126,19 @@ takes a `random.Random`. Exactly two modules construct either — `cli.py` for
 the terminal and `web/deps.py` for the browser, one front end each — so tests
 assert exact dates without `freezegun` and without monkeypatching `random`.
 
+**Both front ends let a test pin that one construction**, which is what makes
+the suites deterministic rather than merely correct at the hour they run. The
+browser app overrides `get_now` and `get_rng` through
+`app.dependency_overrides`. The CLI takes a hidden `--now`: `ctx.obj` is an
+`Env(db_path, now)`, `_now(ctx)` is the single read, and `Env.clock()` falls
+back to the real clock when the flag is absent — the same trick `--db` plays
+for storage. Without it `test_cli.py` compared the day log against
+`date.today()`, which is not the practice day between midnight and 4am, so the
+suite passed for twenty hours a day and failed for four. CI runs in UTC and
+nothing ever merged in that window, so it went unnoticed. **No test may read
+the wall clock**; the suite is pinned to `NOW = 2026-07-05 22:27` and passes at
+any hour, in any timezone.
+
 ### The tempo grammar
 
 The speed column is a small language, and different tools speak different

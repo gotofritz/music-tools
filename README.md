@@ -81,6 +81,11 @@ The practice database lives at `~/.local/share/music-tools/practice.db`.
 run against a temporary file. Migrations are numbered `.sql` files applied on
 every open, gated by `PRAGMA user_version`.
 
+`--now` is the same idea for the clock: hidden, defaulting to the real one, and
+pinned by `test_cli.py` so the suite asserts exact dates instead of asking the
+wall clock what day it is. A practice day runs to 4am, so a suite that asked
+`date.today()` was wrong between midnight and 4am — no test may read the clock.
+
 `practice serve --port 9000 --no-browser` moves the port and leaves the browser
 alone. It is FastAPI + Jinja2 + HTMX, server-rendered: routes return HTML
 fragments, `htmx.min.js` is vendored in `music_tools/web/static/` rather than
