@@ -47,6 +47,10 @@ that first depends on it is named.
   hundred lines of hand-written JS holding real logic, and no Node means no
   way to test it. Still no framework — a framework would not have made it
   testable either — but it is the first place the rule costs something.
+  WebGL, Tauri and a native Rust rewrite were all weighed against it and all
+  declined; `05-playback.md` keeps that reasoning, along with the one hedge
+  that survived it — an audio sidecar owning playback, with the page as its
+  remote control, if browser playback disappoints.
 - **A2 — parked with the loop editor.** Loop configs in SQLite, exported to
   `*.loop.yml` on every save, belonged to the YAML editor now at the back of
   the queue (`08-loop-editor.md`). Hand-written YAML and the CLI stay the loop

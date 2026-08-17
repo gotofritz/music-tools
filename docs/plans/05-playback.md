@@ -106,6 +106,75 @@ transport with no audible drift between them over the length of a tune (5b).
   and verify by the checklist below. Recorded as a known gap rather than
   solved.
 
+## The stack, reconsidered
+
+A multitrack player is the first thing this app has wanted that a browser is
+not obviously the right place for, so the question got asked properly:
+WebGL, Tauri, a native Rust app. The answer is that the stack stays — FastAPI
++ Jinja2 + HTMX + hand-written JS, A1 unchanged — and the reasoning is worth
+keeping so it does not get re-asked every time 5b is annoying.
+
+- **WebGL is the wrong layer.** It is a rendering API, not a stack, and
+  drawing is not the problem: peaks are bucketed server-side, so eight lanes
+  is a few thousand Canvas2D segments and the cost does not grow with the
+  length of the tune. If continuous zoom to sample level ever stutters, the
+  fix is pyramided peaks at several zoom levels, still on Canvas2D. Reach for
+  WebGL when a profiler asks for it.
+- **Tauri changes the shell, not the problem.** The front end would still be
+  HTML and JS over Web Audio, so every hard part of 5b survives intact: the
+  decode budget, the missing `preservesPitch`, the untestable scheduling. It
+  would arrive slightly worse, since a system WebView makes WebKit's audio
+  quirks mandatory rather than one browser's problem. What it buys — native
+  file picking, one binary, no localhost — A5 already says is not wanted.
+- **A native Rust app would genuinely solve it, and is still the wrong
+  trade.** A real audio callback makes sample-lock free, streams instead of
+  decoding into memory, does pitch-preserving stretch in real time, and is
+  unit-testable — every complaint in this document at once. But playback is
+  perhaps a fifth of this app. The scheduling, the tempo dialect, the log, the
+  database and `loop.py`'s pattern grammar are written, tested and Python.
+  Rewriting the working four fifths to fix the fifth is backwards.
+
+**The escape hatch, if 5b disappoints: an audio sidecar.** The likeliest
+disappointment is named above — slow-down becoming a render instead of a
+slider, when slow-down is the most-used control in the app. If it is bad
+enough to matter, the answer is not a rewrite. A small local process owns
+playback — decoding, mixing, real-time stretch, one output device — and takes
+orders over HTTP or a WebSocket on `127.0.0.1`: load these paths as a set,
+play from here, seek, set gain on track 3, set speed to 0.8. The page keeps
+the waveforms, the markers and every other thing it draws, and becomes a
+remote control for the transport rather than the transport itself.
+
+What that costs and buys, recorded now so the decision is a measurement
+rather than an argument:
+
+- **Buys**: sample-lock without scheduling code, no decode budget at all
+  (stream from disk), an instant pitch-preserving speed control via
+  `rubberband` or `signalsmith-stretch`, and a mixer that can be unit-tested
+  in its own language — which closes this phase's one known gap.
+- **Costs**: a second process to start, supervise and stop with the app; a
+  protocol; audio device selection that the browser handled invisibly; and
+  the sidecar's language on the contributor's machine. Rust (`cpal`,
+  `symphonia`, `rubato`) is the strong version; Python with `sounddevice`
+  and numpy is the version that adds no new toolchain, mixes eight tracks in
+  a callback comfortably, and gives up real-time stretch.
+- **Does not touch**: the schema, the domain, the routes, the templates, the
+  markers, Phase 7. Phase 4's `media_group` is the right shape either way —
+  a set is a set whoever plays it. The reversible unit is `transport.js`, not
+  the app, which is what makes 5b safe to try first.
+
+The trigger to reach for it: measure one render before building the ladder.
+ffmpeg's stretch runs somewhere around 5–15× realtime, so a four-minute stem
+is tens of seconds and a set of eight across five speeds is dozens of renders
+per tune. Cached forever and done once at attach that is tolerable; if the
+measurement says otherwise, or the ladder keeps missing the speed actually
+wanted, the sidecar is the move.
+
+The other way out, cheaper and riskier: a WSOLA time-stretch in an
+`AudioWorklet` per track, a couple of hundred lines, which restores the
+instant slider without a second process. Quality between 70% and 100% is
+usually fine for playing along. It is DSP in the page, which the decisions
+above rule out — so it is a spike to run before it is a plan to write.
+
 ## Shape
 
 ```
@@ -149,7 +218,9 @@ music_tools/
 8. **Speed as a render** — the ffmpeg tempo path into the same cache, the
    pre-rendered ladder of common speeds, and the slider rewired to swap the
    source instead of setting `playbackRate`. Needs no mixer, and proves the
-   expensive half of 5b against a single file first.
+   expensive half of 5b against a single file first. **Time one render before
+   building the ladder**: that number is what says whether the phase carries
+   on or the sidecar above gets built instead.
 9. **The transport** — `AudioContext`, decode with progress, `start(t0,
    offset)` across N sources, position, seek, loop, and a drift check: play a
    set the length of a tune and confirm the sources still agree with the clock
