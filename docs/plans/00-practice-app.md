@@ -43,6 +43,10 @@ that first depends on it is named.
   wanted, via the standalone binary — never a `package.json`. A practice tracker
   is lists, tables and forms, which is exactly what HTMX is good at, and the loop
   grid stays one small island of hand-written JS. Flippable until Phase 3.
+  Held, with one strain recorded: Phase 5b's multitrack player is several
+  hundred lines of hand-written JS holding real logic, and no Node means no
+  way to test it. Still no framework — a framework would not have made it
+  testable either — but it is the first place the rule costs something.
 - **A2 — parked with the loop editor.** Loop configs in SQLite, exported to
   `*.loop.yml` on every save, belonged to the YAML editor now at the back of
   the queue (`08-loop-editor.md`). Hand-written YAML and the CLI stay the loop
@@ -289,9 +293,12 @@ Durations, subtotals and day totals are computed, never stored. `description`,
 must not change when an exercise is renamed or moved. That is also what the
 spreadsheet did, by accident of being a spreadsheet.
 
-Media tables (`media_source`, then `marker_source` / `marker`, then the
-segment sequences) are added by Phases 4, 6 and 7 and sketched in their
-documents; the loop-editor tables are parked with `08-loop-editor.md`.
+Media tables (`media_group` / `media_source`, then `marker_source` / `marker`,
+then the segment sequences) are added by Phases 4, 6 and 7 and sketched in
+their documents; the loop-editor tables are parked with `08-loop-editor.md`.
+The group is there because a tune is often several files — stems split out of
+one recording — which play as one thing and are marked as one thing; markers
+and sequences hang off the group, never off a member.
 
 ## Phases
 
@@ -310,7 +317,7 @@ steps as its phase starts, and is expected to bend on contact with reality.
 | 2 | Domain, database, importer | `../archive/2026-08-15-1541-647ef39-02-domain.md` (done) | The sheet's brain in Python, plus a CLI and the migrated history |
 | 3 | The app, and the cutover | `../archive/2026-08-16-1213-21118f2-03-web.md` (done) | The spreadsheet retired |
 | 4 | Exercise media, and the log rework | `04-exercise-media.md` | Start it and it is in the log, tune showing; done when done |
-| 5 | Playback | `05-playback.md` | The tune plays in the page: waveform, playhead, speed, pitch |
+| 5 | Playback | `05-playback.md` | The tune plays in the page: waveform, playhead, speed, pitch — then 3–8 stems from one transport, with a mixer |
 | 6 | Markers | `06-markers.md` | Markers placed, edited, guessed, exported — no Transcribe! |
 | 7 | Segments | `07-segments.md` | `loop.py`'s output built by pointing, no YAML in sight |
 | 8 | Loop editor | `08-loop-editor.md` (parked) | The YAML grid editor, if it is ever missed |
@@ -338,7 +345,10 @@ the plan allowed for.
 **Phase 4 — Exercise media, and the log rework.** An exercise carries the
 material it is practised from: a local audio or video file, a YouTube URL, a
 MuseScore file, plain text — or a combination, since a tune can be audio
-downloaded from YouTube plus a score kept in a separate file beside it. And
+downloaded from YouTube plus a score kept in a separate file beside it. Audio
+files also group: 3–8 of them can be one tune's stems, which Phase 5b plays
+as one thing, so the grouping and the per-track mix state are stored here
+where nothing yet depends on them. And
 the log stops being a clock: **start** creates the entry, visible in the day
 log immediately with the exercise's media drawn on it, and **done** closes it
 and moves the schedule on. The tiling FROM/TO machinery — `restart_clock`,
@@ -348,7 +358,13 @@ sense against a spreadsheet, and here it is ceremony.
 **Phase 5 — Playback.** The attached file plays in the page: waveform with a
 moving playhead, plain transport, audio only even when the file is a video.
 Slow-down and speed-up wired to the exercise's tempo dialect, and pitch
-shift — the two Transcribe! habits worth keeping.
+shift — the two Transcribe! habits worth keeping. Then 5b: 3–8 tracks at
+once, one transport, a mixer strip, every track sample-locked. That second
+half is a Web Audio player rather than an `<audio>` element, because separate
+media elements drift against each other, and it moves the speed control from
+`playbackRate` to a server-side render — the two costs the phase document
+argues out. It also settles Phase 4's schema, which is why the grouping lands
+there and not here.
 
 **Phase 6 — Markers.** Place and edit markers on that waveform, let the app
 guess a first draft where the audio cooperates (beats and bars, feasibility

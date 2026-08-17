@@ -463,9 +463,10 @@ to give away. And `target_bpm` is still missing on the rows the import could not
 fill; the module view flags them, and they get filled in by use.
 
 Phases 4 to 7 attach the tune's media to the exercise that is due, play it in
-the browser — waveform, slow-down, pitch — mark it up there, and rebuild the
-loop output from the markers by pointing at the page, replacing Transcribe!
-piece by piece. The YAML loop editor is parked at the back of the queue
+the browser — waveform, slow-down, pitch, and then 3–8 stems from one
+transport with a mixer — mark it up there, and rebuild the loop output from
+the markers by pointing at the page, replacing Transcribe! piece by piece. The
+YAML loop editor is parked at the back of the queue
 (`docs/plans/08-loop-editor.md`).
 
 Out of scope throughout: `rearrange` and its step DSL, the standalone
