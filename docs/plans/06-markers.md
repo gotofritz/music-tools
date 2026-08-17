@@ -1,48 +1,54 @@
-# Phase 6 — Markers without Transcribe!
+# Phase 6 — Markers
 
-**Phase 6 of `docs/plans/00-practice-app.md`.** Depends on Phase 5: audio plays
-in the page and its position is readable.
+**Phase 6 of `docs/plans/00-practice-app.md`.** Depends on Phase 5: the file
+plays in the page, its position is readable, and half speed exists. Wishlist
+stage: direction now, red/green detail when the phase starts.
 
 ## Goal
 
-Mark up a snippet in the app — tap the bars, tap the beats, name the cues —
-instead of exporting a `.txt` from Transcribe! and uploading it. A loop can then
-be built for a tune that has never been through Transcribe! at all.
+Mark up a tune in the app — tap bars and beats against the waveform, drag them
+straight, name the cues — instead of doing it in Transcribe! and exporting a
+`.txt`. Let the app guess a first draft where it can. Export exactly the
+format Transcribe! writes, so nothing is ever locked in.
 
-**Done when** a new tune goes from a bare audio file to a working loop without
-leaving the browser, and an existing tune's imported markers can be corrected in
-place rather than re-exported.
+**Done when** a bare audio file can be marked up entirely in the browser, the
+markers survive a round trip through the Transcribe! `.txt` format, and an
+imported tune's markers can be corrected in place rather than re-exported.
 
 ## Decisions
 
-**Markers become rows; the file becomes an import format.** Up to now
-`parse_markers` reads a file and `Score.build` turns entries into a score.
-Phase 6 adds a second source — the database — feeding the same
-`list[tuple[float, str, str]]` into the same `Score.build`. Nothing downstream
-of `Score.build` changes, which is what makes this phase small: the score is
-already the boundary. One thing inside it does change: `build` anchors the
-score by shifting every timestamp back by the first marker's. Right for a
-Transcribe! file, whose timestamps are the original track's; wrong for taps,
-which are snippet-relative already — a first bar tapped at 0.4 s would drag
-every slice 0.4 s early. `build` gains a `shift` argument defaulting to
-today's behaviour, and `origin='app'` sources pass `0.0`.
+- **Markers hang off the media file, not off a loop config.** The earlier
+  marker plan attached them to the loop editor's configs; that editor is
+  parked, and markers were never really the loop's anyway — they describe the
+  recording. A marker set belongs to a `media_source`, and everything
+  downstream (Phase 7's segments) reads it from there.
+- **Markers become rows; the file becomes an import format.** `parse_markers`
+  reads a `.txt`; the database becomes a second source feeding the same
+  `list[tuple[float, str, str]]` into the same `Score.build`, so nothing
+  downstream of `Score.build` changes. One thing inside it does: `build`
+  anchors the score by shifting every timestamp back by the first marker's —
+  right for a Transcribe! file, whose times are the original track's, wrong
+  for taps, which are file-relative already. `build` grows a `shift` argument
+  defaulting to today's behaviour, and app-origin sources pass `0.0`.
+- **Transcribe! import stays forever, and export is exact.** Every tune
+  already marked lives there. `kind` keeps Transcribe!'s own vocabulary —
+  `section`, `measure`, `beat`, `textblock` — so the `.txt` round trip is a
+  straight mapping, lossless, and pinned by a round-trip test.
+- **Guessing is a draft, not an authority.** Beat and bar estimation writes
+  ordinary marker rows, immediately draggable and deletable — corrected with
+  the same tools tapping uses. It starts as a spike: can an off-the-shelf beat
+  tracker place bars usefully on real tunes? `librosa` is the candidate and a
+  heavy dependency — numpy, scipy, numba — to weigh against `aubio` or a
+  hand-rolled onset picker. Timeboxed; if it cannot, tapping remains the way
+  in and nothing else in the phase has moved.
 
-**Transcribe! import stays forever.** Every tune already marked lives there, and
-the app is not going to be better at tapping along than a tool built for it.
-Export stays too — a `.txt` written back out means the app never becomes a
-place data can only go into.
-
-**Web Audio arrives here, for the waveform only.** Transport stays on
-`<audio>` from Phase 5. Peaks are computed once, server-side, and stored — a
-waveform is a picture of the file, not something to recompute per page load.
-
-## Schema
+## Schema sketch
 
 ```sql
 CREATE TABLE marker_source (
   id INTEGER PRIMARY KEY,
-  loop_config_id INTEGER NOT NULL REFERENCES loop_config(id) ON DELETE CASCADE,
-  origin TEXT NOT NULL,             -- 'transcribe' | 'app'
+  media_source_id INTEGER NOT NULL REFERENCES media_source(id) ON DELETE CASCADE,
+  origin TEXT NOT NULL,             -- 'transcribe' | 'app' | 'guessed'
   imported_from TEXT,               -- the .txt it came from, if any
   offset_seconds REAL NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL
@@ -58,106 +64,38 @@ CREATE TABLE marker (
 CREATE INDEX marker_order ON marker(source_id, at_seconds);
 ```
 
-`kind` uses Transcribe!'s own vocabulary rather than a tidier one, so
-`to_entries()` is a straight mapping and a round trip through the `.txt` format
-is lossless. `offset_seconds` records the shift `Score.build` applies when
-markers come from a file whose timestamps are the original track's; markers
-tapped in the app are already snippet-relative, have an offset of 0, and are
-built with `shift=0.0` so nothing moves.
-
 ## Steps
 
-### Step 1 — Markers from the database
-
-**Red.** `tests/test_marker_source.py`:
-
-- `to_entries(source)` returns what `parse_markers` returns for the same
-  markers, so `Score.build` accepts either — asserted by building a score twice,
-  from `d51.txt` and from rows imported out of it, and comparing bars, beats,
-  text blocks and durations.
-- Import of a `.txt` records `origin='transcribe'` and the file it came from.
-- A source with no bar markers raises the same message as the file path does.
-- An app source whose first marker sits at 0.4 s keeps its bar starts where
-  they were tapped: built with `shift=0.0`, nothing slides. The same rows run
-  through the file path would come out 0.4 s early — the bug being legislated
-  against.
-
-**Green.** Migration `004_markers.sql`, `domain/markers_db.py`. `loop_config`
-gains a nullable `marker_source_id`; `marker_path` stays for configs still
-pointing at a file, and a config may have exactly one of the two.
-
-### Step 2 — Editing markers as data
-
-**Red.** Before any UI, the operations:
-
-- `add_marker(source, at, kind, label)` inserts in time order.
-- `move_marker(id, to)` and `delete_marker(id)`.
-- `relabel(id, label)`; a label that would shadow the reserved `END` is
-  rejected with the reason.
-- `renumber(source)` fills unlabelled bars as `1, 2, 3…`, the same default
-  `Score.build` applies, so the two never disagree.
-- Every one of these leaves a score that still tiles the snippet with no gaps.
-
-**Green.** Repository functions plus a guard that rebuilds the score inside
-the same transaction, so an edit that leaves it unbuildable — no bar markers
-left, say — fails before it lands. An edit that merely breaks *patterns* is
-saved and reported, never refused: step 4 returns re-resolved spans precisely
-so the page can show what broke, and step 5's drag-to-nudge could not exist if
-every marker a pattern names were immovable.
-
-### Step 3 — Waveform peaks
-
-**Red.** `peaks(path, buckets=2000)` returns that many min/max pairs, is stable
-across runs, and is cached beside the render cache from Phase 5, keyed on the
-file's size and mtime. A mono and a stereo file give the same shape of output.
-
-**Green.** `domain/waveform.py` over `pydub`'s raw samples. No new dependency —
-`numpy` would be faster and is not needed for a 2000-bucket reduction of a
-30-second snippet.
-
-### Step 4 — Tapping
-
-**Red.** The routes, tested without a browser:
-
-- `POST /loops/{id}/markers` with `{at, kind, label}` inserts and returns the
-  redrawn marker strip.
-- `PATCH /markers/{id}` moves or relabels; `DELETE /markers/{id}` removes.
-- `POST /loops/{id}/markers/tap` accepts a batch — a whole take of taps arrives
-  as one array, because tapping four bars means four events in two seconds and a
-  request each is silly.
-- Every one of them returns the re-resolved spans for the config's patterns, so
-  the page can show immediately that moving a bar line broke `[JOHN-3.2]`.
-
-**Green.** `web/routes/markers.py`.
-
-### Step 5 — The marking UI
-
-**Green** (verified by hand). Play the snippet; `B` taps a bar, `space` taps a
-beat, `T` drops a text block and asks for a name. Taps land at the audio's
-`currentTime` minus a calibration offset for input latency, which is a setting
-with a sane default. Markers draw on the waveform, drag to nudge, click to
-rename. A "half speed while tapping" toggle, since tapping 16ths at tempo is how
-markers end up crooked.
-
-Then: the same page already edits sections, so a new tune goes audio → taps →
-grid → generate without a second tool.
-
-### Step 6 — Export
-
-**Red.** `export_markers(source)` writes the Transcribe! format exactly —
-`0:00:12.191723 Marker (section): "A"` — and re-importing the written file gives
-back the same markers. That round trip is the test that keeps this phase honest.
-
-**Green.** A formatter, and `GET /loops/{id}/markers.txt`.
+1. **Markers from the database** — `to_entries(source)` returns what
+   `parse_markers` returns, asserted by building one score from `d51.txt` and
+   one from rows imported out of it and comparing bars, beats, text blocks and
+   durations. The `shift` rule pinned by a first tap at 0.4 s that must not
+   slide.
+2. **Editing as data, before any UI** — add, move, delete, relabel (`END`
+   stays reserved), renumber to `Score.build`'s own defaults. Every edit
+   leaves a buildable score or fails inside its transaction; an edit that
+   merely breaks a downstream span re-resolves and reports, never refuses.
+3. **The routes** — insert, move, relabel, delete, and a batch endpoint for
+   taps, because four bars tapped is four events in two seconds and a request
+   each is silly. Every response carries re-resolved spans, so the page can
+   show immediately what a moved bar line broke.
+4. **The tapping UI** — play; `B` taps a bar, `space` a beat, `T` drops a
+   named cue. Taps land at the audio's `currentTime` minus a latency
+   calibration with a sane default. Markers draw on the waveform, drag to
+   nudge, click to rename, half speed while tapping.
+5. **Guessing** — the spike above, then a **guess** button that proposes
+   beats and bars as a `guessed` source to accept, thin out or drag straight.
+6. **Export** — `export_markers(source)` writes Transcribe!'s format exactly
+   (`0:00:12.191723 Marker (section): "A"`), and re-importing the written
+   file gives back the same markers. The round trip keeps the phase honest.
 
 ## Verification
 
-Take a tune with no markers at all, tap in eight bars, build a loop, play it,
-and check the bar lines land where the ear says they do. Then export, open the
-`.txt` in Transcribe!, and confirm it agrees.
+Take a tune with no markers, tap in eight bars, drag the crooked ones
+straight, export, open the `.txt` in Transcribe!, and confirm it agrees. Then
+let the guesser try the same tune and count how many of its bars survive.
 
 ## Out of scope
 
-Beat detection, tempo estimation, alignment to a click, and any attempt to
-guess bars from the audio. Tapping is the feature; automatic marking is a
-different project and a much larger one.
+- Building anything from the markers — Phase 7.
+- Chord detection, key detection, alignment to a click, anything score-aware.

@@ -14,9 +14,10 @@ Three things live here, and the plan in `docs/plans/` is about making them one
 thing:
 
 - **`practice`** — the practice tracker: modules, exercises, spaced repetition
-  and a day log, over SQLite. It replaces a Google Sheets app whose sample and
-  Apps Script are kept in `docs/raw/`, and which the importer reads. It has two
-  front ends over one domain: a click CLI, and a local browser app
+  and a day log, over SQLite. It replaced a Google Sheets app; the history was
+  imported, and the sheet's sample, its Apps Script and the one-off importer
+  that read them have all been removed — this database is the only record now.
+  It has two front ends over one domain: a click CLI, and a local browser app
   (`practice serve`).
 - **`loop`** — the audio half. It takes a snippet of audio, a marker file
   exported from Transcribe!, and a YAML config, and builds a rhythm-training
@@ -27,8 +28,9 @@ thing:
   eventually and is explicitly out of scope for the current plan.
 
 The point of the plan is that the exercise being practised *is* the tune the
-loop is built from: due → loop → play → done. Phase 4 attaches loops to
-exercises; today they are two commands over one database's worth of vocabulary.
+loop is built from: due → start → play → done. Phase 4 attaches the tune's
+media to exercises; today they are two commands over one database's worth of
+vocabulary.
 
 ## Layout
 
@@ -46,8 +48,6 @@ music_tools/
         scheduling.py    the five algorithms, pure
         catalogue.py     modules and their rows: CRUD, and what may be deleted
         session.py       start a day, mark done, day totals
-    importer/
-        sheets.py        the one-off spreadsheet importer
     web/
         app.py           create_app(db_path), and the `practice serve` launcher
         deps.py          per-request connection, clock, rng, and the templates
@@ -65,7 +65,7 @@ tests/
     conftest.py          marker fixtures, the db fixture, the seeded rngs
     fixtures/*.txt       hand-written marker exports
     test_migrations.py test_tempo.py test_scheduling.py
-    test_catalogue.py  test_session.py  test_importer.py test_cli.py
+    test_catalogue.py  test_session.py  test_cli.py
     test_score.py      test_patterns.py test_drills.py  test_web.py
 docs/
     initial-context.md   this file
@@ -90,8 +90,8 @@ The sheet used one word for three things, so, once and for all:
   whole queue out of circulation. Nothing crosses modules except the day log,
   which adds their time up by log group.
 - A **log group** is the coarser bucket the day log subtotals by — `TECHNIQUE`,
-  `REPERTOIRE`. The Apps Script read it from cell `A1` of the module's sheet,
-  and the importer still does.
+  `REPERTOIRE`. The Apps Script read it from cell `A1` of the module's sheet;
+  here it is a column on `module`, set when the module is made.
 - A **style** is the per-row tag in the sheet's own `MODULE` column — `NEOSOUL`,
   `RNB`, `DANCE`. No code reads it; it is a label.
 - An **exercise** is a row of a module. An **entry** is a line of the day log.
@@ -125,6 +125,19 @@ otherwise call `datetime.now()` takes `now` as an argument, and anything random
 takes a `random.Random`. Exactly two modules construct either — `cli.py` for
 the terminal and `web/deps.py` for the browser, one front end each — so tests
 assert exact dates without `freezegun` and without monkeypatching `random`.
+
+**Both front ends let a test pin that one construction**, which is what makes
+the suites deterministic rather than merely correct at the hour they run. The
+browser app overrides `get_now` and `get_rng` through
+`app.dependency_overrides`. The CLI takes a hidden `--now`: `ctx.obj` is an
+`Env(db_path, now)`, `_now(ctx)` is the single read, and `Env.clock()` falls
+back to the real clock when the flag is absent — the same trick `--db` plays
+for storage. Without it `test_cli.py` compared the day log against
+`date.today()`, which is not the practice day between midnight and 4am, so the
+suite passed for twenty hours a day and failed for four. CI runs in UTC and
+nothing ever merged in that window, so it went unnoticed. **No test may read
+the wall clock**; the suite is pinned to `NOW = 2026-07-05 22:27` and passes at
+any hour, in any timezone.
 
 ### The tempo grammar
 
@@ -250,14 +263,11 @@ not shared with anything, which is what the check exists to catch.
 Four tables — `module`, `exercise`, `practice_day`, `practice_entry`. The
 schema sketch in `00-practice-app.md` also gave `module` an `instrument`
 column, against a second instrument turning up one day; it is not here. One
-player, one instrument, and nothing would ever have read it. The
-importer's natural keys are `(module, name)` for exercises, enforced by a
-partial unique index, and `(day, started_at)` for entries, which is a lookup
-rather than a constraint because two exercises marked done in the same second
-share an instant. The module half of that key is **given**, not derived:
-`--modules 'SONGS:<path>'`, because Google names a single-sheet export
-`<document> - <sheet>.tsv` and a name guessed off the file name would import
-the same sheet into a different module on a re-run.
+player, one instrument, and nothing would ever have read it. Two natural keys
+outlive the importer that needed them: `(module, name)` for exercises, enforced
+by a partial unique index, and `(day, started_at)` for entries, which is a
+lookup rather than a constraint because two exercises marked done in the same
+second share an instant.
 
 `practice db dump` (and `task db:dump`) writes `backups/practice.sql` through
 `sqlite3.iterdump`, so no `sqlite3` binary is needed and the practice history
@@ -382,8 +392,8 @@ Everything user-facing raises `click.ClickException`, and every message names
 the token that caused it. On failure `main` calls `diagnose`, which prints the
 section as written and the score as read, because nearly every failure is a
 mismatch between what the markers say and what the pattern assumed. Extracting a
-`PatternError` from `ClickException` belongs to Phase 4, where a web layer needs
-to catch these without depending on click.
+`PatternError` from `ClickException` belongs to Phase 7 (segments), where a web
+layer needs to catch these without depending on click.
 
 The practice half raises `click.ClickException` only from `cli.py`; the domain
 raises plain Python exceptions (`UnknownExercise`, `MigrationError`) so a web
@@ -413,7 +423,7 @@ layer can catch them without depending on click.
   build step in this repository. Upgrading it means repeating that fetch and
   saying so in the commit; the README has the two lines.
 - **One macOS-only line**: `main` ends by launching Transcribe! on the output.
-  Nothing in CI may call `main` until Phase 4 puts that behind a flag.
+  Nothing in CI may call `main` until Phase 7 puts that behind a flag.
 - **`ruff` is pinned to the `E`/`F`/`I` rules** at line length 88, which is what
   the existing code was written against; ruff 0.16's wider defaults flag ~30
   pre-existing things across the repo. `ty` is scoped away from the `rearrange`
@@ -429,10 +439,10 @@ refactors break loudly. Everything from Phase 2 on is red-first
 green.
 
 Fixtures are hand-written text, small enough to read in a diff: marker exports
-in `tests/fixtures/`, and the spreadsheet sample in `docs/raw/`, which
-`test_importer.py` reads directly so the importer is tested against the real
-export rather than a tidied copy. There are no binary fixtures anywhere: audio
-in tests comes from `AudioSegment.silent(duration=…)`.
+in `tests/fixtures/`. There are no binary fixtures anywhere: audio in tests
+comes from `AudioSegment.silent(duration=…)`. The `sample_day` fixture is a day
+block copied out of the spreadsheet by hand, kept because the subtotals its own
+formulas produced — 00:19, 00:34, 00:53 — are what the port reproduces.
 
 The database fixture is in-memory and migrated per test; `steady_rng` dials the
 jitter out for exact assertions and `rng` is a seeded `random.Random` for the
@@ -441,17 +451,22 @@ statistical ones.
 ## Where this is going
 
 `docs/plans/00-practice-app.md` is the map. Phases 1 (test suite, CI, an
-importable `loop.py`), 2 (the domain, the database, the importer and the CLI)
-and 3 (the browser app, and the cutover) are done: the history is imported and
-the spreadsheet is no longer used, so this repo is now the only record of what
-was practised and when. Two things follow from that. `task db:dump` and a
-committed `backups/practice.sql` are the whole of the version history a
-spreadsheet used to give away. And `target_bpm` is still missing on the rows
-the importer could not fill; the module view flags them, and they get filled in
-by use.
+importable `loop.py`), 2 (the domain, the database and the CLI) and 3 (the
+browser app, and the cutover) are done: the history is imported and the
+spreadsheet is no longer used, so this repo is now the only record of what was
+practised and when. The importer, and the sheet exports it was tested against,
+have been deleted now that the backfill is complete — a one-off job that had
+been done, and git history has it if it is ever needed again. Two things follow
+from being the only record. `task db:dump` and a committed
+`backups/practice.sql` are the whole of the version history a spreadsheet used
+to give away. And `target_bpm` is still missing on the rows the import could not
+fill; the module view flags them, and they get filled in by use.
 
-Phases 4 to 6 attach loops to the exercise that is due, play them in the
-browser, and finally replace Transcribe! for marking up new tunes.
+Phases 4 to 7 attach the tune's media to the exercise that is due, play it in
+the browser — waveform, slow-down, pitch — mark it up there, and rebuild the
+loop output from the markers by pointing at the page, replacing Transcribe!
+piece by piece. The YAML loop editor is parked at the back of the queue
+(`docs/plans/08-loop-editor.md`).
 
 Out of scope throughout: `rearrange` and its step DSL, the standalone
 `triads.py` / `intervals.py` / `generate_exercise.py` generators, merging

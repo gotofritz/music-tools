@@ -8,3 +8,8 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Coverage: written by `task test`, uploaded by CI, never committed
+.coverage
+coverage.svg
+htmlcov/

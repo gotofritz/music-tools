@@ -4,7 +4,8 @@
 
 Two things exist today and want to be one thing.
 
-**A Google Sheets app** (`docs/raw/`) tracks bass practice. One sheet per
+**A Google Sheets app** (retired, and its sample removed once the history was
+imported — `git log` has it) tracked bass practice. One sheet per
 practice area — `BASS SONGS`, `BASS SLAP`, `BASS TECHNIQUE` — each row an
 exercise carrying a speed, a practice count, a last-practiced date and a due
 date. A menu command marks an exercise done: it bumps the count, stamps today,
@@ -22,13 +23,16 @@ They belong together. The exercise being practiced *is* the tune the loop is
 built from. The scenario that drives this plan:
 
 > Practising. The SLAP module says the next thing due is **Stomp!** — 8 times
-> practised, currently at 80% speed. Click **loop**, get a form, build a loop of
-> a section of the tune, play it, and when done click **done** so the schedule
-> and the day log both move on.
+> practised, currently at 80% speed. Click **start**: the exercise lands in the
+> day log there and then, with the tune it carries drawn underneath — a
+> waveform, ready to play, slow down, and loop a marked section of. Practise
+> against it. Click **done**, and the schedule and the day log both move on.
 
-This plan replaces the spreadsheet with a local Python app, then grows the loop
-tooling into it. `docs/plans/04-loop-editor.md` covers the loop half in detail
-and is a phase of this plan, not a separate effort.
+This plan replaces the spreadsheet with a local Python app, then grows the
+audio tooling into it. The audio phases (04–07) rebuild what Transcribe! is
+actually used for — playback, slowdown, markers, loops — inside the app; the
+YAML loop editor that used to be Phase 4 is parked at the back of the queue
+(`08-loop-editor.md`), because the CLI already covers that workflow.
 
 ## Assumptions
 
@@ -39,18 +43,19 @@ that first depends on it is named.
   wanted, via the standalone binary — never a `package.json`. A practice tracker
   is lists, tables and forms, which is exactly what HTMX is good at, and the loop
   grid stays one small island of hand-written JS. Flippable until Phase 3.
-- **A2 — Loop configs live in SQLite, keyed to an exercise**, and are *exported*
-  to `*.loop.yml` beside the audio on every save. That keeps
-  `uv run loop practice.loop.yml` working untouched, and keeps a human-readable
-  copy next to the tune. Import in the other direction exists too, for the
-  configs already written by hand. Phase 4.
-- **A3 — History is migrated**, by a one-off importer that eats the sheet
+- **A2 — parked with the loop editor.** Loop configs in SQLite, exported to
+  `*.loop.yml` on every save, belonged to the YAML editor now at the back of
+  the queue (`08-loop-editor.md`). Hand-written YAML and the CLI stay the loop
+  workflow; Phase 7 rebuilds the output in the browser without the format.
+- **A3 — History is migrated** (done, and the importer deleted with the sheet
+  exports afterwards), by a one-off importer that ate the sheet
   exports. The practice counts and due dates are the whole value of the
   spreadsheet; starting fresh throws away the schedule. Phase 2.
 - **A4 — All module sheets share the `BASS SONGS` column shape**, with an
   `extra` JSON column absorbing the odd per-module extras rather than a
   per-module field definition. Phase 2; if some sheet turns out to be wildly
-  different, only the importer and one migration change.
+  different, only the importer and one migration change. (Held; the import is
+  done and the importer is gone.)
 - **A5 — Single user, one machine, localhost only.** No auth, no accounts, bind
   `127.0.0.1`.
 
@@ -197,14 +202,12 @@ music_tools/
         models.py            # Module, Exercise, PracticeDay, PracticeEntry, …
         scheduling.py        # the five algorithms, pure, injected clock + rng
         session.py           # start day, mark done, close entry, totals
-    importer/
-        sheets.py            # the one-off TSV importer
     web/
         app.py               # FastAPI + uvicorn launcher
         routes/…             # practice.py, modules.py, loops.py, media.py
         templates/…          # Jinja2, HTMX fragments
         static/…             # vendored htmx.min.js, css, loop grid js
-    cli.py                   # click group: practice, db, import, serve
+    cli.py                   # click group: practice, db, serve
 tests/
 docs/initial-context.md      # written in Phase 2 — AGENTS.md points at it and
                              # it does not exist yet
@@ -258,7 +261,7 @@ CREATE TABLE exercise (
 );
 CREATE INDEX exercise_due ON exercise(module_id, next_due);
 CREATE UNIQUE INDEX exercise_name ON exercise(module_id, name)
-  WHERE archived_at IS NULL;      -- the importer's natural key
+  WHERE archived_at IS NULL;      -- was the importer's natural key
 
 CREATE TABLE practice_day (
   id INTEGER PRIMARY KEY,
@@ -286,24 +289,31 @@ Durations, subtotals and day totals are computed, never stored. `description`,
 must not change when an exercise is renamed or moved. That is also what the
 spreadsheet did, by accident of being a spreadsheet.
 
-Loop tables (`loop_config`, `loop_section`, and later `marker_file` /
-`marker`) are added in Phase 4 and specified in `04-loop-editor.md`.
+Media tables (`media_source`, then `marker_source` / `marker`, then the
+segment sequences) are added by Phases 4, 6 and 7 and sketched in their
+documents; the loop-editor tables are parked with `08-loop-editor.md`.
 
 ## Phases
 
 Each phase leaves a working app and is worth stopping at. TDD throughout
 (`.claude/skills/tdd.md`): failing test, watch it fail, minimal green, refactor.
-Each has its own document with the steps, the test lists and the signatures;
-this is the map, not the territory.
+Each has its own document with the steps; this is the map, not the territory.
+
+Phases 1–3 are done. Phases 4–7 are a direction rather than a promise — a
+wishlist with an ordering: the documents say what is wanted and in what
+sequence, not what is certain to be feasible. Each is firmed up into red/green
+steps as its phase starts, and is expected to bend on contact with reality.
 
 | | Phase | Document | Leaves you with |
 | --- | --- | --- | --- |
 | 1 | Foundations | `../archive/2026-08-15-1222-af747ab-01-foundations.md` (done) | A test suite, CI, and an importable `loop.py` |
 | 2 | Domain, database, importer | `../archive/2026-08-15-1541-647ef39-02-domain.md` (done) | The sheet's brain in Python, plus a CLI and the migrated history |
 | 3 | The app, and the cutover | `../archive/2026-08-16-1213-21118f2-03-web.md` (done) | The spreadsheet retired |
-| 4 | Loops, attached to exercises | `04-loop-editor.md` | Loops built and generated from the tune that is due |
-| 5 | Play it in the app | `05-playback.md` | The scenario closed: due → loop → play → done |
-| 6 | Markers without Transcribe! | `06-markers.md` | New tunes marked up in the browser |
+| 4 | Exercise media, and the log rework | `04-exercise-media.md` | Start it and it is in the log, tune showing; done when done |
+| 5 | Playback | `05-playback.md` | The tune plays in the page: waveform, playhead, speed, pitch |
+| 6 | Markers | `06-markers.md` | Markers placed, edited, guessed, exported — no Transcribe! |
+| 7 | Segments | `07-segments.md` | `loop.py`'s output built by pointing, no YAML in sight |
+| 8 | Loop editor | `08-loop-editor.md` (parked) | The YAML grid editor, if it is ever missed |
 
 **Phase 1 — Foundations.** `loop.py` is a PEP 723 single-file script, so nothing
 can import `Score` or `parse_markers` from it, and there is no suite at all.
@@ -325,21 +335,35 @@ one click to mark done. Then the cutover — the history imported for real and
 the sheet retired, in one move rather than the fortnight of parallel running
 the plan allowed for.
 
-**Phase 4 — Loops, attached to exercises.** An exercise gets a **loop** button;
-a loop belongs to the exercise; creating one asks for the audio snippet and a
-Transcribe! marker file and drops into the section editor — a grid labelled from
-the score, live pattern validation, drill expansion, generate. Saving writes both
-the database rows and a `*.loop.yml` beside the audio, so the CLI keeps working
-on the same configs.
+**Phase 4 — Exercise media, and the log rework.** An exercise carries the
+material it is practised from: a local audio or video file, a YouTube URL, a
+MuseScore file, plain text — or a combination, since a tune can be audio
+downloaded from YouTube plus a score kept in a separate file beside it. And
+the log stops being a clock: **start** creates the entry, visible in the day
+log immediately with the exercise's media drawn on it, and **done** closes it
+and moves the schedule on. The tiling FROM/TO machinery — `restart_clock`,
+`stop_clock`, entries opening on the previous one's close — goes; it made
+sense against a spreadsheet, and here it is ceremony.
 
-**Phase 5 — Play it in the app.** A cached render served over a range-capable
-endpoint, an `<audio>` element, and a rate slider wired to the exercise's tempo
-ratio — so the speed you play at is the speed the schedule reads, typed once.
+**Phase 5 — Playback.** The attached file plays in the page: waveform with a
+moving playhead, plain transport, audio only even when the file is a video.
+Slow-down and speed-up wired to the exercise's tempo dialect, and pitch
+shift — the two Transcribe! habits worth keeping.
 
-**Phase 6 — Markers without Transcribe!** Tap bars and beats against the
-waveform and store markers as rows. `Score` already is the boundary, so the
-database becomes a second source feeding the same builder. Import and export of
-the `.txt` format both stay.
+**Phase 6 — Markers.** Place and edit markers on that waveform, let the app
+guess a first draft where the audio cooperates (beats and bars, feasibility
+permitting), and export exactly Transcribe!'s `.txt` so nothing is locked in.
+Import stays forever, for the tunes already marked.
+
+**Phase 7 — Segments.** What `loop.py` does, done by pointing: pick marked
+spans, sequence them with repeats and silences, render server-side through
+the same engine the CLI uses, and export the file. The YAML stays a CLI
+format; the browser never shows it.
+
+**Phase 8 — the loop editor, parked.** The grid-and-YAML editor that used to
+be this plan's Phase 4. The CLI covers hand-written configs and Phase 7
+rebuilds the useful output in the page, so the editor waits at the back of
+the queue until it is missed — which it may never be.
 
 ## Out of scope
 

@@ -129,10 +129,11 @@ def jittery_rng():
 
 @pytest.fixture
 def sample_day(db):
-    """The 2026-07-05 block of `docs/raw/BASS.csv`, as entries.
+    """A day block copied out of the spreadsheet, as entries.
 
     The subtotals the spreadsheet's own formulas produced for it are 00:19,
-    00:34 and 00:53, which is what the port has to reproduce.
+    00:34 and 00:53, which is what the port reproduces. The sheet itself is
+    gone; these four rows are the record of what it did.
     """
     day = repository.create_day(db, day=date(2026, 7, 5))
     block = [

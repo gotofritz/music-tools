@@ -1,6 +1,16 @@
 # The loop editor, inside the practice app
 
-**Phase 4 of `docs/plans/00-practice-app.md`.** Read that first: it sets the
+> **Parked — pushed to the back of the queue (2026-08-16).** The CLI already
+> covers the YAML workflow, and the plan now rebuilds the useful part — loop
+> output built from markers, in the page — as Phase 7 (`07-segments.md`), with
+> no YAML round trip in the middle. Steps 1–3 below (`root:` defaulting, the
+> `build_output` split, `PatternError`) moved to Phase 7, where they are still
+> wanted. The rest waits here, renumbered from Phase 4 to Phase 8, until
+> hand-editing `*.loop.yml` becomes a bottleneck again — which it may never
+> be. Phase references in the body below are the old numbering, left as
+> written.
+
+**Phase 8 of `docs/plans/00-practice-app.md`, parked.** Read that first: it sets the
 stack (FastAPI + Jinja2 + HTMX, no Node), the storage (SQLite at
 `~/.local/share/music-tools/practice.db`, hand-written SQL, numbered
 migrations), and the domain (module → exercise → practice entry). This document

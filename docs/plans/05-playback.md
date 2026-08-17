@@ -1,118 +1,90 @@
-# Phase 5 — Play it in the app
+# Phase 5 — Playback
 
-**Phase 5 of `docs/plans/00-practice-app.md`.** Depends on Phase 4: there is a
-loop, it generates a file, and the browser has been asked to open it in Finder
-ever since.
+**Phase 5 of `docs/plans/00-practice-app.md`.** Depends on Phase 4: an
+exercise carries a local audio or video file, and starting it puts a card in
+the day log for the player to live on. Wishlist stage: direction now,
+red/green detail when the phase starts.
 
 ## Goal
 
-Close the scenario. Due → loop → **play** → done, without leaving the page and
-without Transcribe! in the middle.
+The attached file plays in the page the way Transcribe! plays it: a waveform
+with the playhead moving along it, click to seek, slow it down without losing
+pitch, shift the pitch without losing speed.
 
-**Done when** a generated loop plays in the browser, the practice clock keeps
-running while it does, and the speed slider is the same field the schedule reads.
+**Done when** a started exercise's tune plays from its log card — waveform,
+playhead, speed and pitch controls — and the speed the slider shows is the
+speed the schedule reads.
 
 ## Decisions
 
-**`<audio>` with a plain URL, not the Web Audio API.** The browser already
-streams, seeks, loops and reports position. Web Audio buys sample-accurate
-scheduling that nothing here needs; it costs decoding the whole file into memory
-and reimplementing transport controls. Phase 6 needs Web Audio for waveform
-drawing and will add it there, for that.
-
-**Generated audio is a cache, not a document.** The output of a loop is a pure
-function of (config, snippet). Key it by a hash of both, keep the file under the
-app data directory, and let it be deleted at any time — regenerating is seconds.
-That is what makes `output:` in the YAML a CLI concern rather than something the
-app has to manage.
-
-**`playbackRate` is `ratio`.** The exercise plays at the speed it is recorded as
-being practised at, and moving the slider is what edits `speed`. Nothing is
-typed into two places. `preservesPitch = true`, since the point is to play along.
+- **`<audio>` with a plain URL for transport, not the Web Audio API.** The
+  browser already streams, seeks, loops and reports position; Web Audio buys
+  sample-accurate scheduling nothing here needs, at the cost of decoding whole
+  files into memory and rebuilding transport by hand. The waveform is drawn
+  from server-computed peaks, so it does not need Web Audio either.
+- **Audio only, even when the file is a video.** An `.mp4` attachment plays
+  through the same audio player: ffmpeg extracts the audio once into the
+  render cache, and the page never shows a video element. The picture is not
+  the practice material; the sound is.
+- **A render cache, keyed by content.** Extractions — and later the
+  pitch-shifted renders, and Phase 7's outputs — are pure functions of
+  (file, parameters). Key them by a hash of both, keep the files under the app
+  data directory, and let them be deleted at any time; regenerating is
+  seconds. This is the cache the earlier playback plan designed for loop
+  outputs, arriving one phase earlier, for extraction.
+- **Range requests are not optional.** Safari will not play audio it cannot
+  range-request: `Accept-Ranges: bytes`, 206 with a correct `Content-Range`,
+  416 past the end. Only files under the cache directory and the configured
+  roots are served — the same guard as every other path in.
+- **Speed is `playbackRate`, and it is the exercise's speed.**
+  `preservesPitch = true`, since the point is to play along. The slider is
+  bound to the exercise's tempo `ratio`, and moving it edits `speed` in the
+  exercise's own dialect — a percentage stays a percentage, a BPM stays a BPM,
+  `123` is never silently rewritten to `80%`. No `target_bpm` means no ratio:
+  the slider sits at 1.0, disabled, wearing the same flag the module view
+  uses, until the target is filled in.
+- **Pitch shift is a server-side render, not a browser trick.** Browsers give
+  rate-preserving-pitch, not pitch-preserving-rate; doing it in the page means
+  Web Audio plus a DSP library, which is the no-framework rule bending.
+  Instead render a shifted copy through ffmpeg into the cache — `rubberband`
+  where the build has it, the `asetrate`/`atempo` pair where not — and swap
+  the player's source. Semitone steps, like Transcribe!. Feasibility and
+  quality to be proven; this is the most wishlist item of the phase.
 
 ## Shape
 
 ```
 music_tools/
-    web/routes/media.py        # preview, range requests, cache
     domain/render.py           # cache key, render-or-hit, eviction
-    web/static/player.js       # transport + rate slider, the second JS island
+    domain/waveform.py         # peaks: min/max pairs, cached
+    web/routes/media.py        # serving, ranges, the roots guard
+    web/static/player.js       # waveform, playhead, transport, sliders —
+                               # the app's first JS island beyond htmx
 ```
 
 ## Steps
 
-### Step 1 — The render cache
-
-**Red.** `tests/test_render.py`:
-
-- `cache_key(config, snippet)` is stable across processes and changes when any
-  section, repeat, pattern or the snippet's mtime/size changes — parametrised
-  over one mutation each.
-- `render(config)` writes the file and returns its path; a second call does not
-  rewrite it (assert on mtime).
-- With the file deleted under it, `render` regenerates rather than raising.
-- `evict(older_than)` removes cached files and leaves the database untouched.
-
-**Green.** `domain/render.py` over `build_output` from Phase 4.
-
-### Step 2 — Serving audio
-
-**Red.** `tests/test_media.py`:
-
-- `GET /loops/{id}/preview.wav` is 200, `Content-Type: audio/wav`, and the body
-  is the rendered file.
-- `Accept-Ranges: bytes` is advertised, and a `Range: bytes=100-199` request
-  returns **206** with exactly 100 bytes and a correct `Content-Range`. Safari
-  will not play audio it cannot range-request, so this is not optional.
-- An out-of-range request returns 416.
-- A loop whose snippet has gone missing returns 409 with the path in the
-  message, rather than a stack trace.
-- Only files under the cache directory and the configured scan roots can be
-  served: a crafted path is 403. Same guard as `04`'s `/browse`.
-
-**Green.** `web/routes/media.py`.
-
-### Step 3 — The player
-
-**Red.** `GET /loops/{id}` now includes an `<audio>` with the preview URL and a
-rate slider bound to the exercise's `ratio`; `PATCH /exercises/{id}` from a rate
-change stores the new speed in the exercise's own dialect — a percentage stays a
-percentage, a BPM stays a BPM. That last one is a real test: dragging the slider
-on `123` must not silently rewrite it to `80%`. An exercise with no
-`target_bpm` has no ratio: the slider renders at 1.0 and disabled, wearing the
-same flag the module view uses — there is nothing to scale and no dialect to
-write back into. Backfilling the target is what unlocks it.
-
-**Green.** `player.js` plus the template change. Transport is the browser's;
-the file adds the rate slider, a loop toggle, and section markers drawn as a
-strip under the transport from the resolved spans the page already has.
-
-### Step 4 — Practising against it
-
-**Red.** Playing does not touch the schedule — only `done` does. But the running
-practice entry should reflect what is being played: `POST /entries/current`
-with a loop id attaches it to the open entry, so the day log reads
-"Stomp! (verse slap figure)" rather than just the tune. Assert the entry
-snapshots the loop name, and that deleting the loop later leaves the entry
-readable.
-
-**Green.** Migration `003_entry_loop.sql`: a nullable `loop_config_id` on
-`practice_entry`, `ON DELETE SET NULL` so a deleted loop leaves the entry
-readable, plus the snapshot in `description`.
-
-### Step 5 — By hand
-
-Play a real generated loop end to end: seek, loop, half speed, and confirm the
-day log ends up with the time in the right module.
-
-## Verification
-
-`pydub` needs ffmpeg for mp3; wav is the safe output format for the cache. The
-suite renders from `AudioSegment.silent`, so nothing here needs a real recording
-or a working audio device.
+1. **The render cache** — stable keys off content and parameters, render-or-
+   hit, regeneration when the file is deleted underneath, eviction that leaves
+   the database alone.
+2. **Serving audio** — ranges, content types, the roots guard, and a 409
+   naming the path when the source file has gone missing rather than a stack
+   trace.
+3. **Extraction** — video in, cached audio out, through the cache.
+4. **Peaks** — `peaks(path, buckets)` as min/max pairs over pydub's raw
+   samples, cached beside the renders and keyed the same way; mono and stereo
+   give the same shape of output. No numpy for a 2000-bucket reduction of a
+   snippet.
+5. **The player** — waveform drawn from peaks, playhead from `timeupdate`,
+   click to seek, a loop toggle. One `player.js` island; everything around it
+   stays fragments.
+6. **The speed slider** — bound to `ratio`, written back through the dialect
+   rules above. Half speed here is Phase 6's tapping aid.
+7. **Pitch shift** — the cached shifted render, a semitone control, and an
+   honest look at whether the quality is usable.
 
 ## Out of scope
 
-Recording yourself, a metronome track, click-in counts, pitch shifting, and
-anything that needs the Web Audio API — except the waveform, which is Phase 6's
-problem.
+- Markers and tapping — Phase 6.
+- Segment sequencing and export — Phase 7.
+- Showing video, recording yourself, a metronome track.

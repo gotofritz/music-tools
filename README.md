@@ -1,11 +1,14 @@
 # music-tools
 
+[![qa](https://github.com/gotofritz/music-tools/actions/workflows/qa.yml/badge.svg)](https://github.com/gotofritz/music-tools/actions/workflows/qa.yml)
+[![coverage](https://raw.githubusercontent.com/gotofritz/music-tools/badges/coverage.svg)](https://github.com/gotofritz/music-tools/actions/workflows/qa.yml)
+
 Bass practice tooling for one player on one machine.
 
 **`practice`** is the practice tracker: modules of exercises, spaced
-repetition, and a running day log. It replaces a Google Sheets app (a sample of
-it, and its Apps Script, are in `docs/raw/`), reproduces its schedule, and
-imports its history.
+repetition, and a running day log. It replaced a Google Sheets app, reproducing
+its schedule; the history was imported and the sheet, its Apps Script and the
+one-off importer are all gone. This repo is the record now.
 
 ```bash
 uv run practice serve                # practise from a browser page
@@ -68,7 +71,7 @@ source .venv/bin/activate
 ### Running it
 
 ```bash
-uv run practice --help              # the tracker: module, next, done, log, import
+uv run practice --help              # the tracker: module, next, done, log, serve
 uv run practice serve               # the same thing as a page on 127.0.0.1:8765
 uv run loop practice.yml            # build the practice file
 uv run loop --expand practice.yml   # print what a drill stands for, and stop
@@ -80,6 +83,11 @@ The practice database lives at `~/.local/share/music-tools/practice.db`.
 `MUSIC_TOOLS_DB` moves it, and `--db` overrides both — which is how the tests
 run against a temporary file. Migrations are numbered `.sql` files applied on
 every open, gated by `PRAGMA user_version`.
+
+`--now` is the same idea for the clock: hidden, defaulting to the real one, and
+pinned by `test_cli.py` so the suite asserts exact dates instead of asking the
+wall clock what day it is. A practice day runs to 4am, so a suite that asked
+`date.today()` was wrong between midnight and 4am — no test may read the clock.
 
 `practice serve --port 9000 --no-browser` moves the port and leaves the browser
 alone. It is FastAPI + Jinja2 + HTMX, server-rendered: routes return HTML
@@ -107,14 +115,21 @@ works, and saying so in the commit.
 
 ```bash
 task qa       # lint, types, tests — run this before opening a PR
-task test     # uv run pytest
+task test     # pytest, with a coverage report
 task lint     # ruff check + ruff format --check
 task types    # ty check
 task db:dump  # back the practice database up to backups/practice.sql
 ```
 
 CI runs `task qa` on every push to `main` and every pull request
-(`.github/workflows/qa.yml`).
+(`.github/workflows/qa.yml`). A push to `main` also uploads `.coverage` and
+regenerates the coverage badge onto the `badges` branch — generated output,
+kept off `main`. Coverage measures `music_tools/` less the `rearrange`
+modules, which have no suite and are out of scope for the practice app.
+
+The two badges at the top read from that: the first is the workflow's own
+status badge, the second is `coverage.svg` off the `badges` branch. The
+coverage one stays broken until the first push to `main` creates that branch.
 
 ### Layout
 
@@ -122,7 +137,6 @@ CI runs `task qa` on every push to `main` and every pull request
 music_tools/cli.py      practice: the click group, and the only clock and rng
 music_tools/db/         connection, migrations, repository (SQL in, models out)
 music_tools/domain/     tempo, scheduling, session, catalogue, models
-music_tools/importer/   the one-off spreadsheet importer
 music_tools/web/        the browser app: app.py, deps.py, routes/, templates/
 music_tools/loop.py     the loop tool: model, parsing, rendering, CLI
 music_tools/main.py     rearrange, plus config.py, generator.py, markers.py
@@ -131,7 +145,6 @@ docs/initial-context.md architecture, invariants and constraints
 docs/user-guide.md      for the player
 docs/plans/             the active plan, one document per phase
 docs/archive/           completed plans
-docs/raw/               the spreadsheet being replaced, and its Apps Script
 ```
 
 Two boundaries are load-bearing and are described in full in
@@ -154,12 +167,11 @@ is **characterisation**: it pins behaviour that already existed so later
 refactors break loudly.
 
 Marker fixtures are hand-written text in `tests/fixtures/`, small enough to read
-in a diff, and the importer is tested against the real spreadsheet export in
-`docs/raw/` rather than a tidied copy. There are no binary fixtures: audio in
-tests comes from `AudioSegment.silent(duration=…)`.
+in a diff. There are no binary fixtures: audio in tests comes from
+`AudioSegment.silent(duration=…)`.
 
 Nothing macOS-only may run in CI. `main` ends by launching Transcribe! on the
-output, so no test may call it until that is behind a flag (Phase 4).
+output, so no test may call it until that is behind a flag (Phase 7).
 
 ### Conventions
 
@@ -172,12 +184,14 @@ output, so no test may call it until that is behind a flag (Phase 4).
 
 ### Where this is going
 
-`docs/plans/00-practice-app.md` replaces the practice spreadsheet in `docs/raw/`
-with a local app, and grows the loop tooling into it. Phase 1 (a test suite, CI
-and an importable `loop.py`) and Phase 2 (the domain, the database, the importer
-and the `practice` CLI) are done, which makes the spreadsheet technically
-redundant. Phase 3 (`practice serve`: the
-browser app over the same domain functions, and the cutover) is done — the
-history is imported and the spreadsheet is retired. Phases 4 to 6 attach loops
-to the exercise that is due, play them in the browser, and replace Transcribe!
-for marking up new tunes.
+`docs/plans/00-practice-app.md` replaced the practice spreadsheet with a local
+app, and grows the audio tooling into it. Phase 1 (a test suite, CI and an
+importable `loop.py`), Phase 2 (the domain, the database and the `practice`
+CLI) and Phase 3 (`practice serve`: the browser app over the same domain
+functions, and the cutover) are done — the history is imported, the spreadsheet
+is retired, and the importer that carried it over has been removed along with
+it. Phases 4 to 7 attach the
+tune's media to the exercise that is due, play it in the browser — waveform,
+slow-down, pitch — mark it up there, and rebuild the loop output from the
+markers by pointing at the page, replacing Transcribe! piece by piece. The
+YAML loop editor is parked at the back of the queue.
