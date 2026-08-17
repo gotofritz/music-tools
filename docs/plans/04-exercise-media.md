@@ -49,6 +49,20 @@ showing, done completes it, and `restart_clock` / `stop_clock` are gone.
   the embedded player, a MuseScore file a link that opens it locally, and
   text is shown as text. Rendering a score to an image through the MuseScore
   CLI is possible and deferred.
+- **Several files can be one thing to play: a track set.** A tune is often
+  3–8 files rather than one — stems split out of a recording, a backing track
+  beside a click — and they are one player with a mixer strip, not eight
+  cards in a row. So a `media_group` row, `media_source` rows pointing at it,
+  and the mix state (gain, pan, mute) living on the member. Phase 5b builds
+  the player; the grouping lands here because retrofitting it after markers
+  hang off individual files is the expensive order. A file with no group is a
+  set of one, which is what the bare `<audio>` above plays.
+- **Members of a set must agree, and there are at most eight.** Same
+  duration within a tolerance, and eight members maximum — Phase 5b holds
+  every track decoded in memory at once, and eight four-minute stems is
+  already a few hundred megabytes. Both are checked on attach, where the
+  message can name the file that disagrees, rather than in the browser where
+  it is a stall or a crash.
 - **Start replaces the tiling, and the old rules get simpler.** An entry's
   time is its own `started_at → ended_at`, stamped by **start** and **done**.
   Gaps between entries are gaps; nothing re-tiles, nothing is invented. One
@@ -66,18 +80,43 @@ showing, done completes it, and `restart_clock` / `stop_clock` are gone.
 ## Schema sketch
 
 ```sql
+CREATE TABLE media_group (       -- one player over several files; a track set
+  id INTEGER PRIMARY KEY,
+  exercise_id INTEGER NOT NULL REFERENCES exercise(id) ON DELETE CASCADE,
+  label TEXT,                    -- "stems", "with click"
+  position INTEGER NOT NULL,
+  added_at TEXT NOT NULL
+);
+
 CREATE TABLE media_source (
   id INTEGER PRIMARY KEY,
   exercise_id INTEGER NOT NULL REFERENCES exercise(id) ON DELETE CASCADE,
+  group_id INTEGER REFERENCES media_group(id) ON DELETE CASCADE,
+                               -- required for 'file'; null for the rest
   kind TEXT NOT NULL,          -- 'file' | 'youtube' | 'musescore' | 'text'
   path TEXT,                   -- absolute; 'file' and 'musescore'
   url TEXT,                    -- 'youtube': the embed target
   body TEXT,                   -- 'text'
-  label TEXT,
-  position INTEGER NOT NULL,
+  label TEXT,                  -- also the track name in a set: "bass", "drums"
+  position INTEGER NOT NULL,   -- order in the exercise, or in the set
+  gain REAL NOT NULL DEFAULT 1.0,
+  pan REAL NOT NULL DEFAULT 0.0,     -- -1 left … +1 right
+  muted INTEGER NOT NULL DEFAULT 0,
   added_at TEXT NOT NULL
 );
+CREATE INDEX media_source_group ON media_source(group_id, position);
 ```
+
+**Every audio file is in a group, and most groups have one member.** A single
+attached file gets a group made for it, so there is one shape downstream
+instead of two: Phase 5b plays a set of one, and Phase 6 hangs markers off the
+group without caring whether the tune came as stems. Adding a second file to
+an existing group is what makes a track set, and it is the only way to make
+one. Only `kind = 'file'` carries a `group_id` — a YouTube embed cannot be
+sample-locked to anything, and text has no timeline.
+
+Solo is not stored: it is a view over the mute state, and which track is
+soloed does not deserve to outlive the page.
 
 `practice_entry` already has `started_at` / `ended_at`; the change is
 behavioural — who writes them and when — not structural.
@@ -86,8 +125,9 @@ behavioural — who writes them and when — not structural.
 
 Direction, not yet red/green:
 
-1. **The migration and the repository half** — `media_source`, CRUD in
-   `domain/catalogue.py` style, the roots guard on every path in.
+1. **The migration and the repository half** — `media_group` and
+   `media_source`, CRUD in `domain/catalogue.py` style, the roots guard on
+   every path in.
 2. **The log rework in `domain/session.py`** — `start_exercise`, `done`
    closing the running entry, discard, the day-boundary rule, and the removal
    of `restart_clock` / `stop_clock`. The step with teeth: the session tests
@@ -97,13 +137,20 @@ Direction, not yet red/green:
    and **discard** live on the card.
 4. **Attaching media from the page** — add, remove and reorder sources on an
    exercise, with path picking confined to the roots.
-5. **The YouTube embed** — the URL rendered as the embedded player on the
+5. **Track sets** — add a file to an existing group, name the members, order
+   them, and reject a set whose members disagree on length or run past eight.
+   Storage and validation only; the set renders as stacked `<audio>` elements
+   until Phase 5b, which is honest about being unsynchronised rather than
+   pretending otherwise.
+6. **The YouTube embed** — the URL rendered as the embedded player on the
    card, degrading to a plain link when the network is off.
-6. **CLI parity** — `start`, `done`, `log` against the new shape.
+7. **CLI parity** — `start`, `done`, `log` against the new shape.
 
 ## Out of scope
 
 - Waveforms, speed, pitch — Phase 5.
+- Playing a track set in sync, and the mixer that goes with it — Phase 5b.
+  This phase only stores the grouping and the mix state.
 - Markers on any of it — Phase 6.
 - Rendering MuseScore files to images.
 - Downloading from YouTube — another app owns that; merging the two is a

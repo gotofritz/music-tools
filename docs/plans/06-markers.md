@@ -17,11 +17,18 @@ imported tune's markers can be corrected in place rather than re-exported.
 
 ## Decisions
 
-- **Markers hang off the media file, not off a loop config.** The earlier
+- **Markers hang off the recording, not off a loop config.** The earlier
   marker plan attached them to the loop editor's configs; that editor is
   parked, and markers were never really the loop's anyway — they describe the
-  recording. A marker set belongs to a `media_source`, and everything
-  downstream (Phase 7's segments) reads it from there.
+  recording. A marker set belongs to the media, and everything downstream
+  (Phase 7's segments) reads it from there.
+- **For a track set, "the recording" is the group.** Eight stems split out of
+  one tune share one bar line: markers per file would mean marking the same
+  tune eight times, and any two of them disagreeing is a bug with no correct
+  answer. So `marker_source` points at a `media_group` (Phase 4), and a lone
+  file is marked through the group of one it already belongs to. Taps land
+  against the transport's position, which is shared by every member, so
+  nothing in the tapping UI has to know how many tracks are playing.
 - **Markers become rows; the file becomes an import format.** `parse_markers`
   reads a `.txt`; the database becomes a second source feeding the same
   `list[tuple[float, str, str]]` into the same `Score.build`, so nothing
@@ -47,7 +54,7 @@ imported tune's markers can be corrected in place rather than re-exported.
 ```sql
 CREATE TABLE marker_source (
   id INTEGER PRIMARY KEY,
-  media_source_id INTEGER NOT NULL REFERENCES media_source(id) ON DELETE CASCADE,
+  media_group_id INTEGER NOT NULL REFERENCES media_group(id) ON DELETE CASCADE,
   origin TEXT NOT NULL,             -- 'transcribe' | 'app' | 'guessed'
   imported_from TEXT,               -- the .txt it came from, if any
   offset_seconds REAL NOT NULL DEFAULT 0,
@@ -80,9 +87,12 @@ CREATE INDEX marker_order ON marker(source_id, at_seconds);
    each is silly. Every response carries re-resolved spans, so the page can
    show immediately what a moved bar line broke.
 4. **The tapping UI** — play; `B` taps a bar, `space` a beat, `T` drops a
-   named cue. Taps land at the audio's `currentTime` minus a latency
-   calibration with a sane default. Markers draw on the waveform, drag to
-   nudge, click to rename, half speed while tapping.
+   named cue. Taps land at the transport's position minus a latency
+   calibration with a sane default — Phase 5b's clock, so one tap is one
+   marker however many tracks are sounding. Markers draw across every
+   waveform lane at once, drag to nudge, click to rename, half speed while
+   tapping. Tapping against a set is the good case: mute everything but the
+   drums and the bar lines get easier to hear.
 5. **Guessing** — the spike above, then a **guess** button that proposes
    beats and bars as a `guessed` source to accept, thin out or drag straight.
 6. **Export** — `export_markers(source)` writes Transcribe!'s format exactly

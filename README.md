@@ -192,6 +192,7 @@ functions, and the cutover) are done — the history is imported, the spreadshee
 is retired, and the importer that carried it over has been removed along with
 it. Phases 4 to 7 attach the
 tune's media to the exercise that is due, play it in the browser — waveform,
-slow-down, pitch — mark it up there, and rebuild the loop output from the
-markers by pointing at the page, replacing Transcribe! piece by piece. The
+slow-down, pitch, and then a tune's 3–8 stems from one transport with a mixer
+strip — mark it up there, and rebuild the loop output from the markers by
+pointing at the page, replacing Transcribe! piece by piece. The
 YAML loop editor is parked at the back of the queue.

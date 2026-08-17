@@ -36,16 +36,23 @@ the page instead, from the same markers, played in place and downloaded.
   difficulty, and dropping it is what makes this phase small. If a page-built
   sequence is ever wanted as a file, an export can be added; nothing imports.
 - **Rendering goes through Phase 5's cache**, keyed off the sequence and the
-  file, served over the same range-capable route, and downloadable from it.
+  media, served over the same range-capable route, and downloadable from it.
   Drills — the CLI's expansion of one line into eighteen sections — stay a CLI
   feature until the page grows a reason to want them.
+- **A track set renders as a mix, and the mix is part of the key.** A sequence
+  belongs to a `media_group`, and rendering a set means the members mixed down
+  through ffmpeg `amix` at their stored gains and pans, muted tracks left out
+  — so "the passage without the bass, four times" is one file, which is the
+  point. The gain vector joins the sequence and the file hashes in the cache
+  key. `loop.py`'s engine never sees the set: it is handed one mixed snippet,
+  exactly as it is today.
 
 ## Schema sketch
 
 ```sql
 CREATE TABLE segment_sequence (
   id INTEGER PRIMARY KEY,
-  media_source_id INTEGER NOT NULL REFERENCES media_source(id) ON DELETE CASCADE,
+  media_group_id INTEGER NOT NULL REFERENCES media_group(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
@@ -72,7 +79,9 @@ CREATE UNIQUE INDEX segment_order ON segment(sequence_id, position);
    name the token when an address no longer resolves — the same voice as the
    CLI's.
 3. **Render and serve** — sequence in, cached file out through
-   `build_output`, played and downloaded over the media route.
+   `build_output`, played and downloaded over the media route. A set is mixed
+   down first, at the mix the page is showing; a group of one skips that step
+   and is the case the tests start from.
 4. **The UI** — click a marked span on the waveform to add it, reorder, set
    repeats, toggle silent; the resolved timeline drawn under the sequence;
    render, and the player switches to the result. Fragments everywhere; the
