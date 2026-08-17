@@ -61,9 +61,8 @@ jobs:
       # checkout onto the badges branch
       - name: Generate coverage badge
         run: |
-          pip install coverage-badge
-          mkdir -p badge
-          coverage-badge -o badge/coverage.svg -f
+          pip install coverage
+          python scripts/coverage_badge.py badge/coverage.svg
 
       # a branch of its own: the badge is generated output, and main's history
       # is for the practice app
