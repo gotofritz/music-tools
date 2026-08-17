@@ -1,6 +1,6 @@
 """Hand-written SQL in, pydantic models out.
 
-No ORM: the whole schema is four tables and the hot query is
+No ORM: the whole schema is six tables and the hot query is
 `ORDER BY next_due`. Nothing here opens a transaction — callers that need
 several writes to be atomic wrap them in `connection.transaction`.
 """
@@ -11,7 +11,14 @@ import sqlite3
 from datetime import date, datetime
 from typing import Any
 
-from music_tools.domain.models import Exercise, Module, PracticeDay, PracticeEntry
+from music_tools.domain.models import (
+    Exercise,
+    MediaGroup,
+    MediaSource,
+    Module,
+    PracticeDay,
+    PracticeEntry,
+)
 
 MODULE_COLUMNS = (
     "name",
@@ -35,6 +42,28 @@ EXERCISE_COLUMNS = (
     "last_recorded",
     "extra",
     "archived_at",
+)
+
+MEDIA_GROUP_COLUMNS = (
+    "exercise_id",
+    "label",
+    "position",
+    "added_at",
+)
+
+MEDIA_SOURCE_COLUMNS = (
+    "exercise_id",
+    "group_id",
+    "kind",
+    "path",
+    "url",
+    "body",
+    "label",
+    "position",
+    "gain",
+    "pan",
+    "muted",
+    "added_at",
 )
 
 ENTRY_COLUMNS = (
@@ -234,6 +263,153 @@ def module_dues(
         (module_id, excluding, excluding),
     ).fetchall()
     return [date.fromisoformat(row[0]) for row in rows]
+
+
+# --- media ------------------------------------------------------------------
+
+
+def create_media_group(
+    conn: sqlite3.Connection,
+    *,
+    exercise_id: int,
+    position: int,
+    added_at: datetime,
+    label: str | None = None,
+) -> MediaGroup:
+    cursor = conn.execute(
+        "INSERT INTO media_group (exercise_id, label, position, added_at)"
+        " VALUES (?, ?, ?, ?)",
+        (exercise_id, label, position, added_at.isoformat()),
+    )
+    return _require(get_media_group(conn, _row_id(cursor)), "media group")
+
+
+def get_media_group(conn: sqlite3.Connection, group_id: int) -> MediaGroup | None:
+    row = conn.execute("SELECT * FROM media_group WHERE id = ?", (group_id,)).fetchone()
+    return MediaGroup.model_validate(dict(row)) if row else None
+
+
+def media_groups_for_exercise(
+    conn: sqlite3.Connection, *, exercise_id: int
+) -> list[MediaGroup]:
+    rows = conn.execute(
+        "SELECT * FROM media_group WHERE exercise_id = ? ORDER BY position, id",
+        (exercise_id,),
+    ).fetchall()
+    return [MediaGroup.model_validate(dict(row)) for row in rows]
+
+
+def update_media_group(conn: sqlite3.Connection, group_id: int, **fields) -> MediaGroup:
+    columns = _check_columns(fields, MEDIA_GROUP_COLUMNS)
+    conn.execute(
+        f"UPDATE media_group SET {', '.join(f'{c} = ?' for c in columns)} WHERE id = ?",
+        [_encode(fields[column]) for column in columns] + [group_id],
+    )
+    return _require(get_media_group(conn, group_id), "media group")
+
+
+def delete_media_group(conn: sqlite3.Connection, group_id: int) -> None:
+    """The group, and — through the cascade — whatever still plays in it."""
+    conn.execute("DELETE FROM media_group WHERE id = ?", (group_id,))
+
+
+def create_media_source(
+    conn: sqlite3.Connection,
+    *,
+    exercise_id: int,
+    kind: str,
+    position: int,
+    added_at: datetime,
+    **fields,
+) -> MediaSource:
+    values = {
+        "exercise_id": exercise_id,
+        "kind": kind,
+        "position": position,
+        "added_at": added_at,
+        **fields,
+    }
+    columns = _check_columns(values, MEDIA_SOURCE_COLUMNS)
+    cursor = conn.execute(
+        f"INSERT INTO media_source ({', '.join(columns)})"
+        f" VALUES ({', '.join('?' for _ in columns)})",
+        [_encode(values[column]) for column in columns],
+    )
+    return _require(get_media_source(conn, _row_id(cursor)), "media source")
+
+
+def get_media_source(conn: sqlite3.Connection, source_id: int) -> MediaSource | None:
+    row = conn.execute(
+        "SELECT * FROM media_source WHERE id = ?", (source_id,)
+    ).fetchone()
+    return MediaSource.model_validate(dict(row)) if row else None
+
+
+def media_sources_for_exercise(
+    conn: sqlite3.Connection, *, exercise_id: int
+) -> list[MediaSource]:
+    rows = conn.execute(
+        "SELECT * FROM media_source WHERE exercise_id = ? ORDER BY position, id",
+        (exercise_id,),
+    ).fetchall()
+    return [MediaSource.model_validate(dict(row)) for row in rows]
+
+
+def media_sources_in_group(
+    conn: sqlite3.Connection, *, group_id: int
+) -> list[MediaSource]:
+    """The tracks of one set, in the order they play down the mixer strip."""
+    rows = conn.execute(
+        "SELECT * FROM media_source WHERE group_id = ? ORDER BY position, id",
+        (group_id,),
+    ).fetchall()
+    return [MediaSource.model_validate(dict(row)) for row in rows]
+
+
+def update_media_source(
+    conn: sqlite3.Connection, source_id: int, **fields
+) -> MediaSource:
+    columns = _check_columns(fields, MEDIA_SOURCE_COLUMNS)
+    conn.execute(
+        f"UPDATE media_source SET {', '.join(f'{c} = ?' for c in columns)}"
+        " WHERE id = ?",
+        [_encode(fields[column]) for column in columns] + [source_id],
+    )
+    return _require(get_media_source(conn, source_id), "media source")
+
+
+def delete_media_source(conn: sqlite3.Connection, source_id: int) -> None:
+    conn.execute("DELETE FROM media_source WHERE id = ?", (source_id,))
+
+
+def next_media_position(conn: sqlite3.Connection, *, exercise_id: int) -> int:
+    """Where the next card goes: one past whatever is furthest down already.
+
+    Two tables carry the exercise-level order — a group for the files, the
+    source itself for everything else — so the next position is the maximum of
+    both. Members of a set are ordered by their own position within the group.
+    """
+    groups = conn.execute(
+        "SELECT coalesce(max(position), -1) FROM media_group WHERE exercise_id = ?",
+        (exercise_id,),
+    ).fetchone()[0]
+    sources = conn.execute(
+        "SELECT coalesce(max(position), -1) FROM media_source"
+        " WHERE exercise_id = ? AND group_id IS NULL",
+        (exercise_id,),
+    ).fetchone()[0]
+    return max(groups, sources) + 1
+
+
+def next_track_position(conn: sqlite3.Connection, *, group_id: int) -> int:
+    """Where the next track goes in a set."""
+    return (
+        conn.execute(
+            "SELECT coalesce(max(position), -1) FROM media_source WHERE group_id = ?",
+            (group_id,),
+        ).fetchone()[0]
+        + 1
+    )
 
 
 # --- days and entries -------------------------------------------------------
