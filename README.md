@@ -14,14 +14,21 @@ one-off importer are all gone. This repo is the record now.
 uv run practice serve                # practise from a browser page
 uv run practice module list          # every module: how many rows, how many due
 uv run practice next SONGS           # that module's rows, most overdue first
-uv run practice done "le freak"      # schedule it, and log the time
-uv run practice start                # back after a break: drop the gap
+uv run practice start "le freak"     # playing it now: it goes into the log
+uv run practice done                 # schedule it, and close the line
 uv run practice log                  # today's block, with subtotals
 ```
 
-`practice serve` opens the same thing as a page on `127.0.0.1`: what is due,
-one click to mark it done, and a day log that fills itself in. It needs no
-network — the one JavaScript file it uses is served from the package — and it
+An exercise also carries its material: audio or video files, a YouTube URL, a
+MuseScore file, text — several at once if that is what the tune is, and several
+audio files can be one **track set** (stems, a click beside a backing track).
+Files are referenced by absolute path, never copied, and every path in is
+confined to the configured roots.
+
+`practice serve` opens the same thing as a page on `127.0.0.1`: what is due, a
+card carrying the material for whatever is being practised right now, and a day
+log that fills itself in. It needs no network — the one JavaScript file it uses
+is served from the package, and only a YouTube attachment reaches out — and it
 works with the JavaScript off, more slowly.
 
 **`loop`** is the audio half. Give it a few seconds of
@@ -71,7 +78,7 @@ source .venv/bin/activate
 ### Running it
 
 ```bash
-uv run practice --help              # the tracker: module, next, done, log, serve
+uv run practice --help              # the tracker: module, next, start, done, log, serve
 uv run practice serve               # the same thing as a page on 127.0.0.1:8765
 uv run loop practice.yml            # build the practice file
 uv run loop --expand practice.yml   # print what a drill stands for, and stop
@@ -83,6 +90,12 @@ The practice database lives at `~/.local/share/music-tools/practice.db`.
 `MUSIC_TOOLS_DB` moves it, and `--db` overrides both — which is how the tests
 run against a temporary file. Migrations are numbered `.sql` files applied on
 every open, gated by `PRAGMA user_version`.
+
+Media paths are confined to `MUSIC_TOOLS_MEDIA_ROOTS`, a `:`-separated list
+defaulting to `~/Documents/MuseScore4/Scores/TUNES` plus the app data
+directory. Every path in from the browser is resolved and checked against them
+— on the way in *and* on the way out, since the roots can be narrowed later —
+and the tests point them at a `tmp_path`.
 
 `--now` is the same idea for the clock: hidden, defaulting to the real one, and
 pinned by `test_cli.py` so the suite asserts exact dates instead of asking the
@@ -136,7 +149,7 @@ coverage one stays broken until the first push to `main` creates that branch.
 ```
 music_tools/cli.py      practice: the click group, and the only clock and rng
 music_tools/db/         connection, migrations, repository (SQL in, models out)
-music_tools/domain/     tempo, scheduling, session, catalogue, models
+music_tools/domain/     tempo, scheduling, session, catalogue, media, models
 music_tools/web/        the browser app: app.py, deps.py, routes/, templates/
 music_tools/loop.py     the loop tool: model, parsing, rendering, CLI
 music_tools/main.py     rearrange, plus config.py, generator.py, markers.py
@@ -187,12 +200,12 @@ output, so no test may call it until that is behind a flag (Phase 7).
 `docs/plans/00-practice-app.md` replaced the practice spreadsheet with a local
 app, and grows the audio tooling into it. Phase 1 (a test suite, CI and an
 importable `loop.py`), Phase 2 (the domain, the database and the `practice`
-CLI) and Phase 3 (`practice serve`: the browser app over the same domain
-functions, and the cutover) are done — the history is imported, the spreadsheet
-is retired, and the importer that carried it over has been removed along with
-it. Phases 4 to 7 attach the
-tune's media to the exercise that is due, play it in the browser — waveform,
-slow-down, pitch, and then a tune's 3–8 stems from one transport with a mixer
-strip — mark it up there, and rebuild the loop output from the markers by
-pointing at the page, replacing Transcribe! piece by piece. The
-YAML loop editor is parked at the back of the queue.
+CLI), Phase 3 (`practice serve`: the browser app over the same domain
+functions, and the cutover) and Phase 4 (media on an exercise, and **start**
+replacing the running clock) are done — the history is imported, the
+spreadsheet is retired, and the importer that carried it over has been removed
+along with it. Phases 5 to 7 play the attached media in the browser —
+waveform, slow-down, pitch, and then a tune's 3–8 stems from one transport with
+a mixer strip — mark it up there, and rebuild the loop output from the markers
+by pointing at the page, replacing Transcribe! piece by piece. The YAML loop
+editor is parked at the back of the queue.
