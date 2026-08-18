@@ -398,7 +398,9 @@ Three things are worth knowing:
   put a marker on that upbeat.
 - **A short first bar is a pickup.** If the first bar has fewer beats than the
   rest, the tool treats it as an upbeat rather than a bar, and calls it bar
-  **0**. Bar **1** is still the first full bar.
+  **0**. Bar **1** is still the first full bar. Beat markers before your first
+  barline count as that pickup too, so a snippet that starts mid-bar needs no
+  barline of its own on the upbeat.
 - **A last marker with nothing under it ends the passage.** If you dropped a
   marker on the closing barline, that marker is where the music stops. It is
   never played.

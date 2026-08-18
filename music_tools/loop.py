@@ -205,6 +205,9 @@ class Score:
 
         offset = entries[0][0]
         bars: list[Bar] = []
+        # a snippet cut mid-bar opens on loose beats, with no barline before
+        # them. They are an upbeat, so they open a bar of their own
+        implicit_pickup = False
         textblocks: list[TextBlock] = []
         ignored: Counter[str] = Counter()
         end = duration
@@ -222,24 +225,29 @@ class Score:
                 continue
 
             if kind in BEAT_TYPES or "beat" in kind:
-                if bars:
-                    bars[-1].beats.append(Beat(label, start, raw=timestamp))
+                if not bars:
+                    # the beats before the first barline are the tail of a bar
+                    # the cut fell inside, so they are the pickup, [0]
+                    implicit_pickup = True
+                    bars.append(Bar(name="0", start=start))
+                bars[-1].beats.append(Beat(label, start, raw=timestamp))
                 continue
 
             if kind not in BAR_TYPES:
                 ignored[kind] += 1
                 continue
 
-            # a bar opens on its own first beat
+            # a bar opens on its own first beat. An unnamed bar is named
+            # for its number, and an implicit pickup took the number 0
             bars.append(
                 Bar(
-                    name=label or str(len(bars) + 1),
+                    name=label or str(len(bars) + (0 if implicit_pickup else 1)),
                     start=start,
                     beats=[Beat(label, start, raw=timestamp)],
                 )
             )
 
-        if not bars:
+        if not bars or (implicit_pickup and len(bars) == 1):
             raise click.ClickException(
                 "No section or measure markers found in the marker file."
             )
@@ -748,7 +756,8 @@ stops where bar 3 begins.
 A snippet cut from a recording usually starts on an upbeat. Where the
 first bar is shorter than the ones after it, it is taken for a pickup
 and numbered 0, the way MuseScore numbers a pickup measure, so [1] is
-still the first full bar and [0-1] is the pickup on its own. The markers
+still the first full bar and [0-1] is the pickup on its own. Beats
+before the first barline are that pickup as well. The markers
 must cover that upbeat: the score is lined up on the first marker, so
 audio before it cannot be reached and shifts everything if included.
 

@@ -457,6 +457,10 @@ loud:
   so `[1]` stays the first full bar. `modal_beats` breaks a tie toward the
   longer count, so a 2+4+4+2 loop reads as two full bars between two partial
   ones.
+- **Beats before the first bar marker open that pickup bar.** A cut that falls
+  mid-bar leaves loose beats with no barline in front of them; they become an
+  implicit bar named `0` rather than being dropped, and the bars after it keep
+  their numbering.
 - **A literal label always beats the trailing-`x` reading.** A bar called
   `D51x` is played by `[D51x]`, not silenced.
 - **Bars and beats tile the snippet** with no gaps and no overlaps.
