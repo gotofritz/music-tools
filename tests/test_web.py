@@ -9,6 +9,7 @@ injects them, so a test can pin "now" without `freezegun`.
 """
 
 from datetime import date, datetime, time
+from html.parser import HTMLParser
 
 import pytest
 from fastapi.testclient import TestClient
@@ -694,6 +695,47 @@ def test_editing_a_day_puts_boxes_round_its_lines(client, earlier_days):
     assert 'value="day 6"' in response.text
     assert 'value="20:00"' in response.text
     assert 'href="/days/2026-06-06"' in response.text  # and a way back out
+
+
+def controls(page: str) -> list[dict[str, str]]:
+    """The boxes and buttons on a page, with the attributes they carry.
+
+    A form cannot span table cells — the browser closes it at the first
+    `</td>` — so a box in a later cell reaches its form only through the
+    `form` attribute. Reading that attribute back is as close as a
+    server-side test gets to the parse the browser will do.
+    """
+    found: list[dict[str, str]] = []
+
+    class Reader(HTMLParser):
+        def handle_starttag(self, tag, attrs):
+            if tag in {"input", "button", "select"}:
+                found.append({"tag": tag, **{key: value or "" for key, value in attrs}})
+
+    Reader().feed(page)
+    return found
+
+
+def test_every_box_on_an_edit_row_names_the_form_it_belongs_to(
+    client, conn, sample_block
+):
+    page = client.get("/days/2026-07-05/edit", headers=hx()).text
+    boxes = controls(page)
+
+    for entry in repo.entries_for_day(conn, sample_block.id):
+        form_id = f"entry-{entry.id}-edit"
+        assert f'id="{form_id}"' in page
+        mine = [box for box in boxes if box.get("form") == form_id]
+        assert {box["name"] for box in mine if box["tag"] == "input"} == {
+            "started_at",
+            "ended_at",
+            "description",
+            "notes",
+            "speed",
+            "log_group",
+        }
+        # the button too: it sits in the last cell, outside the form's element
+        assert [box for box in mine if box["tag"] == "button"]
 
 
 def test_leaving_edit_mode_gives_the_plain_day_back(client, earlier_days):
