@@ -18,6 +18,7 @@ from music_tools.domain.session import (
     EntryClosed,
     EntryRunning,
     UnknownEntry,
+    UnknownExercise,
     amend_entry,
     current_entry,
     day_summary,
@@ -377,6 +378,86 @@ def test_stop_with_nothing_running_does_nothing(db, stomp, steady_rng):
     assert result is None
     assert repo.list_days(db) == []
     assert loaded(repo.get_exercise(db, stomp.id)).practiced_count == 8
+
+
+def test_stop_with_nothing_running_backfills_from_the_last_line(
+    db, slap, stomp, steady_rng
+):
+    other = repo.create_exercise(db, module_id=slap.id, name="Skips")
+    start_exercise(db, exercise_id=other.id, now=datetime(2026, 7, 5, 21, 50), rng=RNG)
+    stop_exercise(
+        db,
+        exercise_id=other.id,
+        algorithm=Algorithm.NORMAL,
+        now=datetime(2026, 7, 5, 22, 10),
+        rng=steady_rng,
+    )
+
+    result = stop_exercise(
+        db, exercise_id=stomp.id, algorithm=Algorithm.NORMAL, now=NOW, rng=steady_rng
+    )
+
+    entry = loaded(result).closed
+    # a microsecond after the line before it: the stretch since is this one
+    assert entry.started_at == datetime(2026, 7, 5, 22, 10, 0, 1)
+    assert entry.ended_at == NOW
+    assert entry.exercise_id == stomp.id
+    assert entry.description == "Stomp!"
+    assert entry.speed == "80%"
+    assert entry.log_group == "TECHNIQUE"
+    assert loaded(loaded(result).exercise).practiced_count == 9
+    assert current_entry(db, now=NOW) is None
+
+
+def test_a_backfilled_stop_takes_the_algorithm_it_is_given(db, slap, stomp, steady_rng):
+    other = repo.create_exercise(db, module_id=slap.id, name="Skips")
+    start_exercise(db, exercise_id=other.id, now=datetime(2026, 7, 5, 21, 50), rng=RNG)
+    stop_exercise(
+        db,
+        exercise_id=other.id,
+        algorithm=Algorithm.NORMAL,
+        now=datetime(2026, 7, 5, 22, 10),
+        rng=steady_rng,
+    )
+
+    result = stop_exercise(
+        db, exercise_id=stomp.id, algorithm=Algorithm.HOLD, now=NOW, rng=steady_rng
+    )
+
+    # HOLD keeps the row where it was due rather than reading the interval
+    assert loaded(loaded(result).exercise).next_due == date(2026, 7, 1)
+
+
+def test_stop_backfills_nothing_when_the_last_line_ends_at_now(
+    db, slap, stomp, steady_rng
+):
+    other = repo.create_exercise(db, module_id=slap.id, name="Skips")
+    start_exercise(db, exercise_id=other.id, now=datetime(2026, 7, 5, 21, 50), rng=RNG)
+    stop_exercise(
+        db,
+        exercise_id=other.id,
+        algorithm=Algorithm.NORMAL,
+        now=NOW,
+        rng=steady_rng,
+    )
+
+    result = stop_exercise(
+        db, exercise_id=stomp.id, algorithm=Algorithm.NORMAL, now=NOW, rng=steady_rng
+    )
+
+    assert result is None
+    assert loaded(repo.get_exercise(db, stomp.id)).practiced_count == 8
+
+
+def test_stop_for_an_exercise_that_is_not_there_is_refused(db, steady_rng):
+    with pytest.raises(UnknownExercise):
+        stop_exercise(
+            db,
+            exercise_id=404,
+            algorithm=Algorithm.NORMAL,
+            now=NOW,
+            rng=steady_rng,
+        )
 
 
 def test_done_on_an_ad_hoc_entry_closes_it_and_schedules_nothing(db, steady_rng):

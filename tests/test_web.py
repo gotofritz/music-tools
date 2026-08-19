@@ -1118,6 +1118,30 @@ def test_stop_with_nothing_running_changes_nothing(client, conn, le_freak):
     assert after.practiced_count == 8
 
 
+def test_stop_with_nothing_running_logs_the_stretch_since_the_last_line(
+    client, conn, le_freak
+):
+    day = repo.create_day(conn, day=TODAY)
+    repo.create_entry(
+        conn,
+        day_id=day.id,
+        started_at=datetime(2026, 7, 5, 21, 50),
+        ended_at=datetime(2026, 7, 5, 22, 20),
+        description="warm-up",
+    )
+
+    response = stop(client, le_freak.id)
+
+    assert response.status_code == 200
+    after = repo.get_exercise(conn, le_freak.id)
+    assert after is not None
+    assert after.practiced_count == 9
+    logged = repo.entries_for_day(conn, day.id)[-1]
+    assert logged.description == "le freak"
+    assert logged.started_at == datetime(2026, 7, 5, 22, 20, 0, 1)
+    assert logged.ended_at == NOW
+
+
 def test_stop_on_an_exercise_that_is_not_there_is_404(client, conn):
     assert client.post("/exercises/404/stop", headers=hx()).status_code == 404
 

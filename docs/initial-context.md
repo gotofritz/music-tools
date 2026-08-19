@@ -208,9 +208,17 @@ replaced all of it with three operations:
   is left alone; only a note may be written now.
 - **`stop_exercise`** is `finish_entry` addressed to an exercise instead of to a
   line of the log: it finishes the running entry when that entry is this
-  exercise's, and returns `None` — writing nothing — when it is not. Every row
-  on a module page carries a stop button, so a stop aimed anywhere else is a
-  click on the wrong row rather than an error.
+  exercise's, and returns `None` — writing nothing — when something else is
+  running. Every row on a module page carries a stop button, so a stop aimed
+  anywhere else is a click on the wrong row rather than an error. With
+  **nothing** running it is the start that was never clicked, and the line is
+  written backwards: `_backfill` opens it a microsecond after the day's last
+  line closed, snapshots it as a start would, and closes it at `now` through
+  the same `_finish`. That is the one place a line is written for time that was
+  not attributed as it happened — the stretch since the last close is bounded
+  by two clicks of the player's own, so it is honest — and it stops there: with
+  no line to follow on from, or with the last one ending at `now` or later,
+  nothing is written and no day is opened.
 - **`discard_entry`** deletes a running entry — the false start.
 
 `start_ad_hoc` is `start_exercise` with a typed description instead of an
