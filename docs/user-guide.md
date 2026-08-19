@@ -153,10 +153,27 @@ starts it without opening a window.
   window.
 
 **Each module has its own page**, reached from the links at the top: the whole
-queue, most overdue first, and every field editable in place. **start** is the
-button at the end of each row — the same thing as `practice start`. Once a row
-is running, its own buttons become **done** and **discard**, so you can finish
-from the module page as well as from the card. The drop-down beside **done** is
+queue, most overdue first, and every field editable in place. **start** and
+**stop** are the buttons at the end of every row — the same two things as
+`practice start` and `practice done`, so you can finish from the module page as
+well as from the card. They stay where they are whatever is running, and the
+row that is running also offers **discard**.
+
+What a click means depends on what is running:
+
+| running | you click | what happens |
+| --- | --- | --- |
+| another row | **start** here | that one is closed at this moment, this one starts |
+| nothing | **start** here | this one starts |
+| this row | **start** here | nothing — the line keeps the time it began at |
+| another row | **stop** here | nothing |
+| nothing | **stop** here | nothing |
+| this row | **stop** here | the line closes and the schedule moves |
+
+Closing one row by starting another still logs its time and leaves its schedule
+alone: only **stop** (or **done** on the card) moves a schedule.
+
+The drop-down beside **stop** is
 the choice the flags give you on the command line: `normal`, `short` (this one
 is not sticking), `long` (this one is solid), `rotate` (to the back of the
 module's queue), `hold` (to the front). Click it and the row, today's log and

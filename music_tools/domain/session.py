@@ -82,8 +82,7 @@ def current_entry(conn: sqlite3.Connection, *, now: datetime) -> PracticeEntry |
     An entry left running from an earlier day is not it: that is time nobody
     attributed, and the next start discards it.
     """
-    day = repo.get_day(conn, practice_day_for(now))
-    return repo.running_entry(conn, day_id=day.id) if day else None
+    return _running_for(conn, now=now)
 
 
 def start_exercise(
@@ -95,11 +94,19 @@ def start_exercise(
     when it becomes visible: what it says is what the exercise was called when
     you sat down to it, whatever happens to the row afterwards. The schedule is
     not touched — `finish_entry` is what moves that.
+
+    Starting the exercise that is already running is nothing at all: the line
+    keeps the time it really began at. Every row on a module page carries a
+    start button, so the click is as likely to mean "this is the one" as it is
+    to mean "again from here", and restarting would lose the minutes played.
     """
     with transaction(conn):
         exercise = repo.get_exercise(conn, exercise_id)
         if exercise is None:
             raise UnknownExercise(exercise_id)
+        running = _running_for(conn, now=now)
+        if running is not None and running.exercise_id == exercise_id:
+            return StartResult(entry=running, closed=None)
         module = repo.get_module(conn, exercise.module_id)
         tempo = parse_tempo(exercise.speed or "", target_bpm=exercise.target_bpm)
 
@@ -210,6 +217,34 @@ def finish_entry(
             next_due=due,
         )
         return DoneResult(exercise=updated, closed=closed)
+
+
+def stop_exercise(
+    conn: sqlite3.Connection,
+    *,
+    exercise_id: int,
+    algorithm: Algorithm,
+    now: datetime,
+    rng: random.Random,
+    notes: str | None = None,
+) -> DoneResult | None:
+    """`finish_entry` addressed to an exercise rather than to a line of the log.
+
+    Every row carries a stop button, so most stops are aimed at something that
+    is not running: that is not an error, it is a click on the wrong row, and
+    nothing happens. Only the row that is running is finished by it.
+    """
+    running = _running_for(conn, now=now)
+    if running is None or running.exercise_id != exercise_id:
+        return None
+    return finish_entry(
+        conn,
+        entry_id=running.id,
+        algorithm=algorithm,
+        now=now,
+        rng=rng,
+        notes=notes,
+    )
 
 
 def discard_entry(conn: sqlite3.Connection, *, entry_id: int) -> None:
@@ -389,6 +424,12 @@ def _start_day(
         # attributed, and cannot be closed at an invented moment.
         repo.delete_entry(conn, stale.id)
     return day
+
+
+def _running_for(conn: sqlite3.Connection, *, now: datetime) -> PracticeEntry | None:
+    """`current_entry`, for callers already holding a transaction open."""
+    day = repo.get_day(conn, practice_day_for(now))
+    return repo.running_entry(conn, day_id=day.id) if day else None
 
 
 def _close_running(

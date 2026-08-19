@@ -97,7 +97,8 @@ def start(
     """Playing this now: the log gets a line for it, with its material on it.
 
     Whatever was running is closed at this instant — one entry at a time — and
-    nothing is scheduled: `done` is what moves the schedule.
+    nothing is scheduled: `done` is what moves the schedule. Starting the row
+    that is already running is nothing at all; it keeps the time it began at.
     """
     try:
         result = session.start_exercise(conn, exercise_id=exercise_id, now=now)
@@ -107,6 +108,34 @@ def start(
         ) from None
     exercise = repo.get_exercise(conn, result.entry.exercise_id or exercise_id)
     return fragment_or_redirect(request, _redraw(request, conn, now=now, row=exercise))
+
+
+@router.post("/exercises/{exercise_id}/stop")
+async def stop(
+    request: Request,
+    exercise_id: int,
+    conn: sqlite3.Connection = Depends(get_conn),
+    now: datetime = Depends(get_now),
+    rng: random.Random = Depends(get_rng),
+) -> Response:
+    """Finished with this one: `done`, addressed to the row rather than the line.
+
+    Every row carries a stop as well as a start, so a stop aimed at anything
+    but the row that is running is a click on the wrong row: nothing is
+    written and the page redraws as it was.
+    """
+    exercise = repo.get_exercise(conn, exercise_id)
+    if exercise is None:
+        raise HTTPException(status_code=404, detail="no exercise with that id")
+    result = session.stop_exercise(
+        conn,
+        exercise_id=exercise_id,
+        algorithm=_algorithm(request, await _form(request)),
+        now=now,
+        rng=rng,
+    )
+    row = result.exercise if result is not None else exercise
+    return fragment_or_redirect(request, _redraw(request, conn, now=now, row=row))
 
 
 @router.post("/entries/{entry_id}/done")

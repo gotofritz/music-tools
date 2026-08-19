@@ -31,6 +31,7 @@ from music_tools.domain.session import (
     start_ad_hoc,
     start_day,
     start_exercise,
+    stop_exercise,
 )
 
 NOW = datetime(2026, 7, 5, 22, 27)
@@ -240,6 +241,19 @@ def test_closing_the_previous_entry_does_not_move_its_schedule(db, slap, stomp):
     assert loaded(repo.get_exercise(db, stomp.id)).practiced_count == 8
 
 
+def test_starting_the_exercise_already_running_leaves_it_where_it_was(db, stomp):
+    first = start_exercise(db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 20))
+
+    again = start_exercise(db, exercise_id=stomp.id, now=NOW)
+
+    # the same line, still running from when it was really started
+    assert again.entry.id == first.entry.id
+    assert again.entry.started_at == datetime(2026, 7, 5, 22, 20)
+    assert again.closed is None
+    day = loaded(repo.get_day(db, date(2026, 7, 5)))
+    assert len(repo.entries_for_day(db, day.id)) == 1
+
+
 def test_starting_an_exercise_that_is_not_there_writes_nothing(db):
     with pytest.raises(Exception):
         start_exercise(db, exercise_id=404, now=NOW)
@@ -288,6 +302,53 @@ def test_done_writes_a_note_when_one_is_given(db, stomp, steady_rng):
     result = done(db, started.entry.id, steady_rng, notes="left hand only")
 
     assert result.closed.notes == "left hand only"
+
+
+def test_stop_finishes_the_exercise_that_is_running(db, stomp, steady_rng):
+    start_exercise(db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 20))
+
+    result = stop_exercise(
+        db,
+        exercise_id=stomp.id,
+        algorithm=Algorithm.NORMAL,
+        now=NOW,
+        rng=steady_rng,
+    )
+
+    assert loaded(loaded(result).exercise).practiced_count == 9
+    assert loaded(result).closed.ended_at == NOW
+    assert current_entry(db, now=NOW) is None
+
+
+def test_stop_addressed_to_another_exercise_does_nothing(db, slap, stomp, steady_rng):
+    other = repo.create_exercise(db, module_id=slap.id, name="Skips")
+    started = start_exercise(db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 20))
+
+    result = stop_exercise(
+        db,
+        exercise_id=other.id,
+        algorithm=Algorithm.NORMAL,
+        now=NOW,
+        rng=steady_rng,
+    )
+
+    assert result is None
+    assert loaded(current_entry(db, now=NOW)).id == started.entry.id
+    assert loaded(repo.get_exercise(db, stomp.id)).practiced_count == 8
+
+
+def test_stop_with_nothing_running_does_nothing(db, stomp, steady_rng):
+    result = stop_exercise(
+        db,
+        exercise_id=stomp.id,
+        algorithm=Algorithm.NORMAL,
+        now=NOW,
+        rng=steady_rng,
+    )
+
+    assert result is None
+    assert repo.list_days(db) == []
+    assert loaded(repo.get_exercise(db, stomp.id)).practiced_count == 8
 
 
 def test_done_on_an_ad_hoc_entry_closes_it_and_schedules_nothing(db, steady_rng):

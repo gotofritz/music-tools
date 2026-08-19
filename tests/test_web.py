@@ -66,6 +66,11 @@ def start(client, exercise_id: int, **headers: str):
     return client.post(f"/exercises/{exercise_id}/start", headers=hx(**headers))
 
 
+def stop(client, exercise_id: int, **headers: str):
+    """Finished with it: the click a module row's stop button sends."""
+    return client.post(f"/exercises/{exercise_id}/stop", headers=hx(**headers))
+
+
 def running(conn):
     """The entry being practised, straight out of the database."""
     day = repo.get_day(conn, TODAY)
@@ -1032,15 +1037,98 @@ def test_the_file_route_is_404_for_media_that_is_not_there(client):
     assert client.get("/media/404/file").status_code == 404
 
 
-def test_a_module_row_offers_start_and_then_done(client, conn, songs, le_freak):
+def test_a_module_row_offers_start_and_stop_whatever_is_running(
+    client, conn, songs, le_freak
+):
     page = client.get("/modules/songs").text
     assert f'action="/exercises/{le_freak.id}/start"' in page
+    assert f'action="/exercises/{le_freak.id}/stop"' in page
 
     start(client, le_freak.id)
 
     page = client.get("/modules/songs").text
-    assert f'action="/entries/{running(conn).id}/done"' in page
+    # both buttons stay put; the row that is running also offers a discard
+    assert f'action="/exercises/{le_freak.id}/start"' in page
+    assert f'action="/exercises/{le_freak.id}/stop"' in page
     assert f'action="/entries/{running(conn).id}/discard"' in page
+
+
+def test_stop_finishes_the_row_that_is_running(client, conn, le_freak, songs):
+    start(client, le_freak.id)
+
+    response = stop(
+        client, le_freak.id, referer=f"http://localhost/modules/{songs.slug}"
+    )
+
+    assert response.status_code == 200
+    assert f'id="exercise-{le_freak.id}"' in response.text
+    after = repo.get_exercise(conn, le_freak.id)
+    assert after is not None
+    assert after.practiced_count == 9
+    assert running(conn) is None
+
+
+def test_stop_takes_the_algorithm_the_row_chose(client, conn, le_freak, espresso):
+    start(client, le_freak.id)
+
+    client.post(
+        f"/exercises/{le_freak.id}/stop", data={"algorithm": "rotate"}, headers=hx()
+    )
+
+    after = repo.get_exercise(conn, le_freak.id)
+    assert after is not None
+    assert after.next_due == espresso.next_due  # the back of the queue, jitter aside
+
+
+def test_stop_on_a_row_that_is_not_the_running_one_changes_nothing(
+    client, conn, le_freak, espresso
+):
+    start(client, le_freak.id)
+
+    response = stop(client, espresso.id)
+
+    assert response.status_code == 200
+    assert running(conn).description == "le freak"  # still playing
+    after = repo.get_exercise(conn, espresso.id)
+    assert after is not None
+    assert after.practiced_count == 2
+
+
+def test_stop_with_nothing_running_changes_nothing(client, conn, le_freak):
+    response = stop(client, le_freak.id)
+
+    assert response.status_code == 200
+    assert repo.list_days(conn) == []
+    after = repo.get_exercise(conn, le_freak.id)
+    assert after is not None
+    assert after.practiced_count == 8
+
+
+def test_stop_on_an_exercise_that_is_not_there_is_404(client, conn):
+    assert client.post("/exercises/404/stop", headers=hx()).status_code == 404
+
+
+def test_stop_without_htmx_redirects_back_to_the_page(client, le_freak):
+    start(client, le_freak.id)
+
+    response = client.post(f"/exercises/{le_freak.id}/stop", follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/"
+
+
+def test_starting_the_row_that_is_already_running_does_not_restart_it(
+    client, conn, le_freak
+):
+    start(client, le_freak.id)
+    entry_id = running(conn).id
+
+    start(client, le_freak.id)
+
+    day = repo.get_day(conn, TODAY)
+    assert day is not None
+    assert [entry.id for entry in repo.entries_for_day(conn, day.id)] == [entry_id]
+    assert running(conn).started_at == NOW
 
 
 # --- attaching media from the page ------------------------------------------

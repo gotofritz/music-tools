@@ -199,10 +199,16 @@ replaced all of it with three operations:
 - **`start_exercise`** opens an entry, snapshotting `description`, `speed`,
   `bpm` and `log_group` *at the start* rather than at the close, because that is
   when the line becomes visible. It opens the day if there is not one, and
-  schedules nothing.
+  schedules nothing. Starting the exercise that is **already running** is a
+  no-op: the line keeps the time it really began at.
 - **`finish_entry`** stamps `ended_at` and moves the schedule: count +1,
   `last_practiced`, `next_due`, in one transaction. The snapshot the start took
   is left alone; only a note may be written now.
+- **`stop_exercise`** is `finish_entry` addressed to an exercise instead of to a
+  line of the log: it finishes the running entry when that entry is this
+  exercise's, and returns `None` — writing nothing — when it is not. Every row
+  on a module page carries a stop button, so a stop aimed anywhere else is a
+  click on the wrong row rather than an error.
 - **`discard_entry`** deletes a running entry — the false start.
 
 `start_ad_hoc` is `start_exercise` with a typed description instead of an
@@ -367,8 +373,9 @@ browser ──form/hx-post──▶ routes/ ──▶ domain/session, catalogue,
 
 Three rules hold this shape, and the tests in `tests/test_web.py` enforce them:
 
-- **Fragments, not JSON.** `POST /exercises/{id}/start` and
-  `POST /entries/{id}/done` change two or three things at once, so whichever
+- **Fragments, not JSON.** `POST /exercises/{id}/start`,
+  `POST /exercises/{id}/stop` and `POST /entries/{id}/done` change two or three
+  things at once, so whichever
   piece was clicked answers and the rest ride along out of band
   (`hx-swap-oob`). Which one that is comes off the referer: a click on a module
   page is targeting the exercise row, a click on the today page is targeting the
@@ -399,8 +406,10 @@ because it is reading a keystroke, not a submission.
 **The running entry is a card**, at the top of the day log: what is being
 practised, since when, its media, and the two buttons that end it. `chrome`
 reads the running entry, its exercise and that exercise's cards, so every page
-can draw it; a module row carries the same **done** and **discard** while it is
-the one running, and **start** otherwise. Display is minimal by design — a bare
+can draw it. A module row carries **start** and **stop** at all times — the
+buttons do not move about as rows change state, and the server decides what a
+click means (`start_exercise` and `stop_exercise` above) — plus **discard**
+while it is the one running. Display is minimal by design — a bare
 `<audio>` per file served from `GET /media/{id}/file`, the YouTube embed with the
 plain link behind it (the one thing in the app that reaches the network, and
 what it degrades to with the network off), a link for a score, text as text. A
