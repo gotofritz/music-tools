@@ -399,6 +399,14 @@ Three rules hold this shape, and the tests in `tests/test_web.py` enforce them:
   inline edit is registered for both `PATCH` and `POST`, and a request without
   the `HX-Request` header gets a 303 back to the page it came from instead of a
   fragment. A broken `htmx.min.js` costs page reloads, not the app.
+- **A form never spans table cells.** The parser closes it at the first
+  `</td>`, and every box after that belongs to no form at all: it is left out
+  of the submit, and a save button beyond the cell submits nothing. Both edit
+  rows keep the `<form>` element inside one cell — the exercise row puts its
+  boxes there with it, the log's row spreads its boxes over the columns they
+  belong to and binds each one, and the save button, with `form="…"`. That
+  attribute is ordinary form ownership, so a plain submit carries the whole
+  row as well.
 - **Nothing is fetched over the network.** `htmx.min.js` is vendored in
   `static/`; there is no CDN link and no build step. Leaving Sheets was about
   practising with the network off.
