@@ -38,7 +38,7 @@ def serve(
     db_path: str | Path,
     *,
     host: str = "127.0.0.1",
-    port: int = 8765,
+    port: int = 8567,
     open_browser: bool = True,
 ) -> None:
     """Run the app on the loopback interface. One machine, one user, no auth.

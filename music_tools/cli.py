@@ -535,7 +535,7 @@ def done(
 
 @practice.command("serve")
 @click.option("--host", default="127.0.0.1", show_default=True)
-@click.option("--port", default=8765, show_default=True)
+@click.option("--port", default=8567, show_default=True)
 @click.option(
     "--browser/--no-browser", default=True, help="Open a browser on the page."
 )

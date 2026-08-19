@@ -82,7 +82,7 @@ source .venv/bin/activate
 
 ```bash
 uv run practice --help              # the tracker: module, next, start, done, log, serve
-uv run practice serve               # the same thing as a page on 127.0.0.1:8765
+uv run practice serve               # the same thing as a page on 127.0.0.1:8567
 uv run loop practice.yml            # build the practice file
 uv run loop --expand practice.yml   # print what a drill stands for, and stop
 uv run loop --help                  # the full pattern grammar

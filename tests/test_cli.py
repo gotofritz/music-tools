@@ -368,7 +368,7 @@ def test_serve_runs_the_app_over_the_named_database(run, uvicorn_run, tmp_path):
     assert result.exit_code == 0, result.output
     app, kwargs = uvicorn_run[0]
     assert app.state.db_path == tmp_path / "practice.db"
-    assert (kwargs["host"], kwargs["port"]) == ("127.0.0.1", 8765)
+    assert (kwargs["host"], kwargs["port"]) == ("127.0.0.1", 8567)
 
 
 def test_serve_opens_a_browser_unless_told_not_to(run, uvicorn_run, monkeypatch):

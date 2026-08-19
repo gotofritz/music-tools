@@ -116,7 +116,7 @@ Everything above has a page, if you would rather click than type:
 uv run practice serve
 ```
 
-That opens a browser on `http://127.0.0.1:8765/`. It runs on your own machine
+That opens a browser on `http://127.0.0.1:8567/`. It runs on your own machine
 and nowhere else: nothing is uploaded, nothing is fetched, and it works with
 the wifi off. Leave the Terminal window open while you practise, and press
 `ctrl-c` in it when you are done.
