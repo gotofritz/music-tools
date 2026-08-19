@@ -27,7 +27,10 @@ confined to the configured roots.
 
 `practice serve` opens the same thing as a page on `127.0.0.1`: what is due, a
 card carrying the material for whatever is being practised right now, and a day
-log that fills itself in. It needs no network — the one JavaScript file it uses
+log that fills itself in. Every row of a module carries a **start** and a
+**stop** button — starting one row closes whichever was running and schedules
+it the normal way, and stop is how you choose the interval instead. It needs no
+network — the one JavaScript file it uses
 is served from the package, and only a YouTube attachment reaches out — and it
 works with the JavaScript off, more slowly.
 
@@ -79,7 +82,7 @@ source .venv/bin/activate
 
 ```bash
 uv run practice --help              # the tracker: module, next, start, done, log, serve
-uv run practice serve               # the same thing as a page on 127.0.0.1:8765
+uv run practice serve               # the same thing as a page on 127.0.0.1:8567
 uv run loop practice.yml            # build the practice file
 uv run loop --expand practice.yml   # print what a drill stands for, and stop
 uv run loop --help                  # the full pattern grammar

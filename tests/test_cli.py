@@ -211,6 +211,19 @@ def test_starting_the_next_one_closes_the_one_before_it(stocked, run):
     assert log.count("(running)") == 1
 
 
+def test_the_one_it_closed_is_scheduled_the_normal_way(stocked, run):
+    run("start", "le freak")
+
+    run("start", "espresso")
+
+    # x1 and a date in the future: nothing else would ever move that row
+    line = next(
+        line for line in run("next", "SONGS").output.splitlines() if "le freak" in line
+    )
+    assert "x1" in line
+    assert TODAY.isoformat() not in line
+
+
 def test_done_finishes_whatever_is_running(stocked, run):
     run("start", "le freak")
 
@@ -355,7 +368,7 @@ def test_serve_runs_the_app_over_the_named_database(run, uvicorn_run, tmp_path):
     assert result.exit_code == 0, result.output
     app, kwargs = uvicorn_run[0]
     assert app.state.db_path == tmp_path / "practice.db"
-    assert (kwargs["host"], kwargs["port"]) == ("127.0.0.1", 8765)
+    assert (kwargs["host"], kwargs["port"]) == ("127.0.0.1", 8567)
 
 
 def test_serve_opens_a_browser_unless_told_not_to(run, uvicorn_run, monkeypatch):

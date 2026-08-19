@@ -29,8 +29,11 @@ from music_tools.domain.catalogue import (
 )
 from music_tools.domain.scheduling import Algorithm
 from music_tools.domain.session import finish_entry, start_exercise
+from tests.conftest import SteadyRandom
 
 NOW = datetime(2026, 7, 5, 22, 27)
+#: Jitter dialled out, so the dates a start schedules are assertable.
+RNG = SteadyRandom()
 TODAY = date(2026, 7, 5)
 
 
@@ -41,7 +44,7 @@ def loaded[T](value: T | None) -> T:
 
 def practised(db, exercise_id, rng):
     """Start an exercise and finish it: one line in the log, and a schedule."""
-    started = start_exercise(db, exercise_id=exercise_id, now=NOW)
+    started = start_exercise(db, exercise_id=exercise_id, now=NOW, rng=RNG)
     return finish_entry(
         db,
         entry_id=started.entry.id,

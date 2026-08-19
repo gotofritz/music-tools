@@ -79,8 +79,11 @@ logged 22:46-23:03  00:17  REPERTOIRE  87.8 BPM (66%)
 ```
 
 You never type a time. One thing runs at a time, so starting the next exercise
-closes the one before it — it was attributed when you started it, so closing it
-there is honest — but only `done` moves a schedule. **The gaps are gaps**: the
+closes the one before it and schedules it on the normal interval — it was
+attributed when you started it, and you have gone on to something else, so
+nothing would ever move it otherwise. Say `done` yourself when you want to
+choose the interval (`--short`, `--long`, `--rotate`, `--hold`).
+**The gaps are gaps**: the
 coffee, the phone call and the walk round the block are simply not in the log,
 and there is no clock to stop when you are finished for the evening.
 
@@ -113,7 +116,7 @@ Everything above has a page, if you would rather click than type:
 uv run practice serve
 ```
 
-That opens a browser on `http://127.0.0.1:8765/`. It runs on your own machine
+That opens a browser on `http://127.0.0.1:8567/`. It runs on your own machine
 and nowhere else: nothing is uploaded, nothing is fetched, and it works with
 the wifi off. Leave the Terminal window open while you practise, and press
 `ctrl-c` in it when you are done.
@@ -153,11 +156,31 @@ starts it without opening a window.
   window.
 
 **Each module has its own page**, reached from the links at the top: the whole
-queue, most overdue first, and every field editable in place. **start** is the
-button at the end of each row — the same thing as `practice start`. Once a row
-is running, its own buttons become **done** and **discard**, so you can finish
-from the module page as well as from the card. The drop-down beside **done** is
-the choice the flags give you on the command line: `normal`, `short` (this one
+queue, most overdue first, and every field editable in place. **start** and
+**stop** are the buttons at the end of every row — the same two things as
+`practice start` and `practice done`, so you can finish from the module page as
+well as from the card. They stay where they are whatever is running, and the
+row that is running also offers **discard**.
+
+What a click means depends on what is running:
+
+| running | you click | what happens |
+| --- | --- | --- |
+| another row | **start** here | that one is closed and scheduled the normal way, this one starts |
+| nothing | **start** here | this one starts |
+| this row | **start** here | nothing — the line keeps the time it began at |
+| another row | **stop** here | nothing |
+| nothing | **stop** here | nothing |
+| this row | **stop** here | the line closes and the schedule moves |
+
+Starting one row while another is running is the old chained log: the row you
+leave is closed there and scheduled on the **normal** interval, because you
+have gone on to the next thing and nothing else would ever move it. Use **stop**
+when you want to say how it comes back — the drop-down beside it — and
+**discard** when the time should not be logged at all.
+
+The drop-down beside **stop** is the choice the flags give you on the command
+line: `normal`, `short` (this one
 is not sticking), `long` (this one is solid), `rotate` (to the back of the
 module's queue), `hold` (to the front). Click it and the row, today's log and
 the totals all update where they are; the page does not reload.

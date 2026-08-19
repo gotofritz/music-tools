@@ -41,11 +41,16 @@
   <td>{{ format_when(exercise.next_due, today) }}</td>
   <td>x{{ exercise.practiced_count }}</td>
   <td>
-    {% if running and running.exercise_id == exercise.id %}
-    {# This is the one being practised: the same two buttons the card carries,
-       so a module page is a place to finish from as well as to start from. #}
-    <form action="/entries/{{ running.id }}/done" method="post"
-          hx-post="/entries/{{ running.id }}/done"
+    {# Both buttons on every row, whatever is running: the server decides what
+       a click means. Start on the row that is already running keeps its time;
+       stop on any row but that one does nothing. #}
+    <form action="/exercises/{{ exercise.id }}/start" method="post"
+          hx-post="/exercises/{{ exercise.id }}/start"
+          hx-target="#exercise-{{ exercise.id }}" hx-swap="outerHTML">
+      <button type="submit">start</button>
+    </form>
+    <form action="/exercises/{{ exercise.id }}/stop" method="post"
+          hx-post="/exercises/{{ exercise.id }}/stop"
           hx-target="#exercise-{{ exercise.id }}" hx-swap="outerHTML">
       <select name="algorithm" aria-label="how it comes back">
         <option value="normal">normal</option>
@@ -54,19 +59,15 @@
         <option value="rotate">rotate</option>
         <option value="hold">hold</option>
       </select>
-      <button type="submit">done</button>
+      <button type="submit">stop</button>
     </form>
+    {% if running and running.exercise_id == exercise.id %}
+    {# The one being practised, so a false start can be taken out from here. #}
     <form action="/entries/{{ running.id }}/discard" method="post"
           hx-post="/entries/{{ running.id }}/discard"
           hx-target="#exercise-{{ exercise.id }}" hx-swap="outerHTML"
           hx-confirm="Discard this line? No time is logged for it.">
       <button type="submit" class="remove">discard</button>
-    </form>
-    {% else %}
-    <form action="/exercises/{{ exercise.id }}/start" method="post"
-          hx-post="/exercises/{{ exercise.id }}/start"
-          hx-target="#exercise-{{ exercise.id }}" hx-swap="outerHTML">
-      <button type="submit">start</button>
     </form>
     {% endif %}
     <form action="/exercises/{{ exercise.id }}/archive" method="post"
