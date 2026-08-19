@@ -6,13 +6,16 @@ existed to keep the tiling honest across a break. Phase 4 of
 `docs/plans/00-practice-app.md` drops all of that:
 
 - **start** opens an entry, immediately visible in the day log with the
-  exercise's material on it. Nothing is scheduled by starting.
+  exercise's material on it.
 - **done** closes that entry and moves the schedule on.
 - **discard** takes a false start out again.
 
 Two rules survive the change. **One entry runs at a time**: starting the next
 closes the one before it at that instant — it was attributed when it was
-started, so closing it is honest — but only `done` touches the schedule. And
+started, so closing it is honest — and closing it says `done` for it, on the
+normal interval: the sheet's chained log is back, because nothing else is ever
+going to move that exercise's schedule. Only **discard** closes a line without
+scheduling it. And
 **time nobody attributed is not practice time**: the gaps between entries are
 gaps, nothing re-tiles, and an entry left running from an earlier day is
 discarded rather than closed at an invented moment.
@@ -86,14 +89,16 @@ def current_entry(conn: sqlite3.Connection, *, now: datetime) -> PracticeEntry |
 
 
 def start_exercise(
-    conn: sqlite3.Connection, *, exercise_id: int, now: datetime
+    conn: sqlite3.Connection, *, exercise_id: int, now: datetime, rng: random.Random
 ) -> StartResult:
     """Playing this now: open an entry for it, and show it in the day log.
 
     The line is snapshotted here rather than when it closes, because this is
     when it becomes visible: what it says is what the exercise was called when
-    you sat down to it, whatever happens to the row afterwards. The schedule is
-    not touched — `finish_entry` is what moves that.
+    you sat down to it, whatever happens to the row afterwards. This exercise's
+    own schedule is not touched — `finish_entry` is what moves that — but the
+    entry this start closes is scheduled as though `done` had been said for it,
+    on the normal interval, which is why the rng is wanted here.
 
     Starting the exercise that is already running is nothing at all: the line
     keeps the time it really began at. Every row on a module page carries a
@@ -111,7 +116,7 @@ def start_exercise(
         tempo = parse_tempo(exercise.speed or "", target_bpm=exercise.target_bpm)
 
         day = _start_day(conn, now=now)
-        closed = _close_running(conn, day_id=day.id, now=now)
+        closed = _close_running(conn, day_id=day.id, now=now, rng=rng)
         entry = repo.create_entry(
             conn,
             day_id=day.id,
@@ -131,6 +136,7 @@ def start_ad_hoc(
     *,
     description: str,
     now: datetime,
+    rng: random.Random,
     log_group: str | None = None,
     speed: str | None = None,
     notes: str | None = None,
@@ -138,11 +144,12 @@ def start_ad_hoc(
     """Start something the catalogue does not know about: a warm-up, a jam.
 
     `start_exercise` with a description typed in instead of an exercise to
-    snapshot, so there is nothing to schedule when it finishes.
+    snapshot, so there is nothing to schedule when it finishes. The entry it
+    closes is scheduled, though, exactly as `start_exercise` schedules it.
     """
     with transaction(conn):
         day = _start_day(conn, now=now)
-        closed = _close_running(conn, day_id=day.id, now=now)
+        closed = _close_running(conn, day_id=day.id, now=now, rng=rng)
         entry = repo.create_entry(
             conn,
             day_id=day.id,
@@ -176,47 +183,63 @@ def finish_entry(
             raise UnknownEntry(entry_id)
         if entry.ended_at is not None:
             raise EntryClosed(entry_id)
+        return _finish(conn, entry, algorithm=algorithm, now=now, rng=rng, notes=notes)
 
-        exercise = (
-            repo.get_exercise(conn, entry.exercise_id)
-            if entry.exercise_id is not None
-            else None
-        )
-        closed = repo.close_entry(
-            conn,
-            entry.id,
-            ended_at=now,
-            **({"notes": notes} if notes is not None else {}),
-        )
-        if exercise is None:
-            return DoneResult(exercise=None, closed=closed)
 
-        tempo = parse_tempo(exercise.speed or "", target_bpm=exercise.target_bpm)
-        count = exercise.practiced_count + 1
-        # HOLD's scan skips the row being scheduled and ROTATE's does not; the
-        # sheet's two scans disagree on exactly this.
-        dues = repo.module_dues(
-            conn,
-            module_id=exercise.module_id,
-            excluding=exercise.id if algorithm is Algorithm.HOLD else None,
-        )
-        due = next_due(
-            algorithm=algorithm,
-            count=count,
-            last_practiced=now.date(),
-            ratio=tempo.ratio,
-            module_dues=dues,
-            rng=rng,
-            current_due=exercise.next_due,
-        )
-        updated = repo.update_exercise(
-            conn,
-            exercise.id,
-            practiced_count=count,
-            last_practiced=now.date(),
-            next_due=due,
-        )
-        return DoneResult(exercise=updated, closed=closed)
+def _finish(
+    conn: sqlite3.Connection,
+    entry: PracticeEntry,
+    *,
+    algorithm: Algorithm,
+    now: datetime,
+    rng: random.Random,
+    notes: str | None = None,
+) -> DoneResult:
+    """Close a running entry and move its schedule, inside a transaction.
+
+    The body `finish_entry` and `_close_running` share: `done` said out loud,
+    and `done` said by starting the next thing.
+    """
+    exercise = (
+        repo.get_exercise(conn, entry.exercise_id)
+        if entry.exercise_id is not None
+        else None
+    )
+    closed = repo.close_entry(
+        conn,
+        entry.id,
+        ended_at=now,
+        **({"notes": notes} if notes is not None else {}),
+    )
+    if exercise is None:
+        return DoneResult(exercise=None, closed=closed)
+
+    tempo = parse_tempo(exercise.speed or "", target_bpm=exercise.target_bpm)
+    count = exercise.practiced_count + 1
+    # HOLD's scan skips the row being scheduled and ROTATE's does not; the
+    # sheet's two scans disagree on exactly this.
+    dues = repo.module_dues(
+        conn,
+        module_id=exercise.module_id,
+        excluding=exercise.id if algorithm is Algorithm.HOLD else None,
+    )
+    due = next_due(
+        algorithm=algorithm,
+        count=count,
+        last_practiced=now.date(),
+        ratio=tempo.ratio,
+        module_dues=dues,
+        rng=rng,
+        current_due=exercise.next_due,
+    )
+    updated = repo.update_exercise(
+        conn,
+        exercise.id,
+        practiced_count=count,
+        last_practiced=now.date(),
+        next_due=due,
+    )
+    return DoneResult(exercise=updated, closed=closed)
 
 
 def stop_exercise(
@@ -433,14 +456,18 @@ def _running_for(conn: sqlite3.Connection, *, now: datetime) -> PracticeEntry | 
 
 
 def _close_running(
-    conn: sqlite3.Connection, *, day_id: int, now: datetime
+    conn: sqlite3.Connection, *, day_id: int, now: datetime, rng: random.Random
 ) -> PracticeEntry | None:
     """One entry at a time: starting the next closes whatever was running.
 
     It was attributed when it was started, so closing it at this instant is
-    honest. Its schedule is another matter, and only `finish_entry` moves that.
+    honest, and it is scheduled here too, on the normal interval — the sheet
+    chained its log the same way. Nothing else would ever move that exercise:
+    the player has gone on to the next thing. A choice other than `normal` is
+    what `finish_entry` is for, and a line that should not be scheduled at all
+    is `discard_entry`.
     """
     running = repo.running_entry(conn, day_id=day_id)
     if running is None:
         return None
-    return repo.close_entry(conn, running.id, ended_at=now)
+    return _finish(conn, running, algorithm=Algorithm.NORMAL, now=now, rng=rng).closed

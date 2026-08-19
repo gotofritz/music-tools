@@ -425,9 +425,10 @@ def start(
 ) -> None:
     """Playing this now: put it in the day log, and leave it running.
 
-    Nothing is scheduled by starting — `done` is what moves the schedule on.
-    Whatever was running is closed at this moment, because one entry runs at a
-    time.
+    This exercise is not scheduled by starting it — `done` is what moves that
+    on. Whatever was running is closed at this moment, because one entry runs
+    at a time, and that one is scheduled on the normal interval: the player has
+    gone on to the next thing, so nothing else would ever move it.
     """
     if bool(exercise) == bool(ad_hoc):
         raise click.ClickException("name an exercise, or pass --ad-hoc TEXT")
@@ -435,16 +436,23 @@ def start(
     now = _now(ctx)
     if ad_hoc:
         result = start_ad_hoc(
-            conn, description=ad_hoc, log_group=log_group, speed=speed, now=now
+            conn,
+            description=ad_hoc,
+            log_group=log_group,
+            speed=speed,
+            now=now,
+            rng=random.Random(),
         )
     else:
         found = _resolve(conn, exercise or "")
-        result = start_exercise(conn, exercise_id=found.id, now=now)
+        result = start_exercise(
+            conn, exercise_id=found.id, now=now, rng=random.Random()
+        )
     click.echo(f"{result.entry.description} started at {now:%H:%M}")
     if result.closed is not None:
         click.echo(
             f"closed {result.closed.description}"
-            f" at {now:%H:%M} — `done` was never said for it"
+            f" at {now:%H:%M} — scheduled on the normal interval"
         )
 
 
@@ -643,7 +651,9 @@ def _entry_to_finish(
     found = _resolve(conn, exercise)
     running = current_entry(conn, now=now)
     if running is None:
-        return start_exercise(conn, exercise_id=found.id, now=now).entry.id
+        return start_exercise(
+            conn, exercise_id=found.id, now=now, rng=random.Random()
+        ).entry.id
     if running.exercise_id != found.id:
         raise click.ClickException(
             f"{running.description} is running — finish or discard that one first"

@@ -28,8 +28,9 @@ confined to the configured roots.
 `practice serve` opens the same thing as a page on `127.0.0.1`: what is due, a
 card carrying the material for whatever is being practised right now, and a day
 log that fills itself in. Every row of a module carries a **start** and a
-**stop** button — starting one row closes whichever was running, and only stop
-moves a schedule. It needs no network — the one JavaScript file it uses
+**stop** button — starting one row closes whichever was running and schedules
+it the normal way, and stop is how you choose the interval instead. It needs no
+network — the one JavaScript file it uses
 is served from the package, and only a YouTube attachment reaches out — and it
 works with the JavaScript off, more slowly.
 

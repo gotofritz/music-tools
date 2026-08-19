@@ -33,8 +33,11 @@ from music_tools.domain.session import (
     start_exercise,
     stop_exercise,
 )
+from tests.conftest import SteadyRandom
 
 NOW = datetime(2026, 7, 5, 22, 27)
+#: Jitter dialled out, so the dates a start schedules are assertable.
+RNG = SteadyRandom()
 
 
 def loaded[T](value: T | None) -> T:
@@ -185,7 +188,7 @@ def done(db, entry_id, rng, *, algorithm=Algorithm.NORMAL, now=None, notes=None)
 
 
 def test_starting_an_exercise_logs_it_straight_away(db, stomp, slap):
-    result = start_exercise(db, exercise_id=stomp.id, now=NOW)
+    result = start_exercise(db, exercise_id=stomp.id, now=NOW, rng=RNG)
 
     assert result.entry.exercise_id == stomp.id
     assert result.entry.started_at == NOW
@@ -199,13 +202,13 @@ def test_starting_an_exercise_logs_it_straight_away(db, stomp, slap):
 
 
 def test_starting_an_exercise_opens_the_day_it_falls_in(db, stomp):
-    start_exercise(db, exercise_id=stomp.id, now=NOW)
+    start_exercise(db, exercise_id=stomp.id, now=NOW, rng=RNG)
 
     assert repo.get_day(db, date(2026, 7, 5)) is not None
 
 
 def test_starting_does_not_move_the_schedule(db, stomp):
-    start_exercise(db, exercise_id=stomp.id, now=NOW)
+    start_exercise(db, exercise_id=stomp.id, now=NOW, rng=RNG)
 
     still = loaded(repo.get_exercise(db, stomp.id))
     assert still.practiced_count == 8
@@ -213,7 +216,7 @@ def test_starting_does_not_move_the_schedule(db, stomp):
 
 
 def test_the_snapshot_does_not_follow_a_rename(db, stomp, slap):
-    result = start_exercise(db, exercise_id=stomp.id, now=NOW)
+    result = start_exercise(db, exercise_id=stomp.id, now=NOW, rng=RNG)
 
     repo.update_exercise(db, stomp.id, name="Stomp! (renamed)", speed="100%")
 
@@ -222,9 +225,9 @@ def test_the_snapshot_does_not_follow_a_rename(db, stomp, slap):
 
 def test_starting_the_next_exercise_closes_the_one_that_was_running(db, slap, stomp):
     other = repo.create_exercise(db, module_id=slap.id, name="Skips")
-    start_exercise(db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 20))
+    start_exercise(db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 20), rng=RNG)
 
-    result = start_exercise(db, exercise_id=other.id, now=NOW)
+    result = start_exercise(db, exercise_id=other.id, now=NOW, rng=RNG)
 
     # attributed when it was started, so closing it at that instant is honest
     assert loaded(result.closed).description == "Stomp!"
@@ -232,19 +235,34 @@ def test_starting_the_next_exercise_closes_the_one_that_was_running(db, slap, st
     assert current_entry(db, now=NOW) == result.entry
 
 
-def test_closing_the_previous_entry_does_not_move_its_schedule(db, slap, stomp):
+def test_closing_the_previous_entry_schedules_it_the_normal_way(db, slap, stomp):
     other = repo.create_exercise(db, module_id=slap.id, name="Skips")
-    start_exercise(db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 20))
+    start_exercise(db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 20), rng=RNG)
 
-    start_exercise(db, exercise_id=other.id, now=NOW)
+    start_exercise(db, exercise_id=other.id, now=NOW, rng=RNG)
 
-    assert loaded(repo.get_exercise(db, stomp.id)).practiced_count == 8
+    # nobody else is going to move it: the start that closed it says `done`
+    moved = loaded(repo.get_exercise(db, stomp.id))
+    assert moved.practiced_count == 9
+    assert moved.last_practiced == date(2026, 7, 5)
+    # count 9 reads INTERVALS[9] = 55, scaled by the 80% ratio: 44 days
+    assert moved.next_due == date(2026, 7, 5) + timedelta(days=44)
+
+
+def test_something_ad_hoc_also_schedules_what_it_closed(db, stomp):
+    start_exercise(db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 20), rng=RNG)
+
+    start_ad_hoc(db, description="warm-up", now=NOW, rng=RNG)
+
+    assert loaded(repo.get_exercise(db, stomp.id)).practiced_count == 9
 
 
 def test_starting_the_exercise_already_running_leaves_it_where_it_was(db, stomp):
-    first = start_exercise(db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 20))
+    first = start_exercise(
+        db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 20), rng=RNG
+    )
 
-    again = start_exercise(db, exercise_id=stomp.id, now=NOW)
+    again = start_exercise(db, exercise_id=stomp.id, now=NOW, rng=RNG)
 
     # the same line, still running from when it was really started
     assert again.entry.id == first.entry.id
@@ -256,13 +274,15 @@ def test_starting_the_exercise_already_running_leaves_it_where_it_was(db, stomp)
 
 def test_starting_an_exercise_that_is_not_there_writes_nothing(db):
     with pytest.raises(Exception):
-        start_exercise(db, exercise_id=404, now=NOW)
+        start_exercise(db, exercise_id=404, now=NOW, rng=RNG)
 
     assert repo.list_days(db) == []
 
 
 def test_something_ad_hoc_is_started_against_no_exercise(db):
-    result = start_ad_hoc(db, description="warm-up", log_group="TECHNIQUE", now=NOW)
+    result = start_ad_hoc(
+        db, description="warm-up", log_group="TECHNIQUE", now=NOW, rng=RNG
+    )
 
     assert result.entry.exercise_id is None
     assert result.entry.description == "warm-up"
@@ -271,7 +291,9 @@ def test_something_ad_hoc_is_started_against_no_exercise(db):
 
 
 def test_done_closes_the_entry_and_moves_the_schedule(db, stomp, steady_rng):
-    started = start_exercise(db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 20))
+    started = start_exercise(
+        db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 20), rng=RNG
+    )
 
     result = done(db, started.entry.id, steady_rng)
 
@@ -285,7 +307,9 @@ def test_done_closes_the_entry_and_moves_the_schedule(db, stomp, steady_rng):
 
 
 def test_done_keeps_the_snapshot_the_start_took(db, stomp, slap, steady_rng):
-    started = start_exercise(db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 20))
+    started = start_exercise(
+        db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 20), rng=RNG
+    )
     repo.update_exercise(db, stomp.id, name="Stomp! (renamed)", speed="100%")
 
     result = done(db, started.entry.id, steady_rng)
@@ -297,7 +321,9 @@ def test_done_keeps_the_snapshot_the_start_took(db, stomp, slap, steady_rng):
 
 
 def test_done_writes_a_note_when_one_is_given(db, stomp, steady_rng):
-    started = start_exercise(db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 20))
+    started = start_exercise(
+        db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 20), rng=RNG
+    )
 
     result = done(db, started.entry.id, steady_rng, notes="left hand only")
 
@@ -305,7 +331,7 @@ def test_done_writes_a_note_when_one_is_given(db, stomp, steady_rng):
 
 
 def test_stop_finishes_the_exercise_that_is_running(db, stomp, steady_rng):
-    start_exercise(db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 20))
+    start_exercise(db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 20), rng=RNG)
 
     result = stop_exercise(
         db,
@@ -322,7 +348,9 @@ def test_stop_finishes_the_exercise_that_is_running(db, stomp, steady_rng):
 
 def test_stop_addressed_to_another_exercise_does_nothing(db, slap, stomp, steady_rng):
     other = repo.create_exercise(db, module_id=slap.id, name="Skips")
-    started = start_exercise(db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 20))
+    started = start_exercise(
+        db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 20), rng=RNG
+    )
 
     result = stop_exercise(
         db,
@@ -352,7 +380,9 @@ def test_stop_with_nothing_running_does_nothing(db, stomp, steady_rng):
 
 
 def test_done_on_an_ad_hoc_entry_closes_it_and_schedules_nothing(db, steady_rng):
-    started = start_ad_hoc(db, description="jam", now=datetime(2026, 7, 5, 22, 20))
+    started = start_ad_hoc(
+        db, description="jam", now=datetime(2026, 7, 5, 22, 20), rng=RNG
+    )
 
     result = done(db, started.entry.id, steady_rng)
 
@@ -361,7 +391,9 @@ def test_done_on_an_ad_hoc_entry_closes_it_and_schedules_nothing(db, steady_rng)
 
 
 def test_done_twice_is_refused(db, stomp, steady_rng):
-    started = start_exercise(db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 20))
+    started = start_exercise(
+        db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 20), rng=RNG
+    )
     done(db, started.entry.id, steady_rng)
 
     with pytest.raises(EntryClosed):
@@ -376,7 +408,9 @@ def test_done_on_an_entry_that_is_not_there_is_an_error(db, steady_rng):
 
 
 def test_done_is_one_transaction(db, stomp, slap, steady_rng, monkeypatch):
-    started = start_exercise(db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 20))
+    started = start_exercise(
+        db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 20), rng=RNG
+    )
 
     def explode(*args, **kwargs):
         raise RuntimeError("boom")
@@ -395,7 +429,9 @@ def test_hold_scans_the_module_without_the_exercise_itself(db, slap, stomp, stea
     repo.create_exercise(
         db, module_id=slap.id, name="Skips", next_due=date(2026, 6, 15)
     )
-    started = start_exercise(db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 20))
+    started = start_exercise(
+        db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 20), rng=RNG
+    )
 
     # stomp is due 2026-07-01; the day in front of the *other* row is sooner
     result = done(db, started.entry.id, steady_rng, algorithm=Algorithm.HOLD)
@@ -407,7 +443,9 @@ def test_rotate_scans_the_module_including_the_exercise_itself(db, slap, steady_
     back = repo.create_exercise(
         db, module_id=slap.id, name="Skips", next_due=date(2027, 1, 5)
     )
-    started = start_exercise(db, exercise_id=back.id, now=datetime(2026, 7, 5, 22, 20))
+    started = start_exercise(
+        db, exercise_id=back.id, now=datetime(2026, 7, 5, 22, 20), rng=RNG
+    )
 
     result = done(db, started.entry.id, steady_rng, algorithm=Algorithm.ROTATE)
 
@@ -418,7 +456,9 @@ def test_rotate_scans_the_module_including_the_exercise_itself(db, slap, steady_
 
 
 def test_a_false_start_is_discarded_rather_than_logged(db, stomp):
-    started = start_exercise(db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 20))
+    started = start_exercise(
+        db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 20), rng=RNG
+    )
 
     discard_entry(db, entry_id=started.entry.id)
 
@@ -427,7 +467,9 @@ def test_a_false_start_is_discarded_rather_than_logged(db, stomp):
 
 
 def test_a_finished_line_is_not_discarded(db, stomp, steady_rng):
-    started = start_exercise(db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 20))
+    started = start_exercise(
+        db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 20), rng=RNG
+    )
     done(db, started.entry.id, steady_rng)
 
     with pytest.raises(EntryClosed):
@@ -440,9 +482,9 @@ def test_discarding_something_that_is_not_there_is_an_error(db):
 
 
 def test_an_entry_left_running_from_an_earlier_day_is_discarded(db, stomp):
-    start_exercise(db, exercise_id=stomp.id, now=datetime(2026, 7, 4, 21, 0))
+    start_exercise(db, exercise_id=stomp.id, now=datetime(2026, 7, 4, 21, 0), rng=RNG)
 
-    start_exercise(db, exercise_id=stomp.id, now=NOW)
+    start_exercise(db, exercise_id=stomp.id, now=NOW, rng=RNG)
 
     yesterday = loaded(repo.get_day(db, date(2026, 7, 4)))
     assert repo.entries_for_day(db, yesterday.id) == []
@@ -459,11 +501,15 @@ def test_nothing_is_running_before_anything_is_started(db, stomp):
 
 def test_the_gap_between_two_entries_is_not_practice_time(db, slap, stomp, steady_rng):
     other = repo.create_exercise(db, module_id=slap.id, name="Skips")
-    first = start_exercise(db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 0))
+    first = start_exercise(
+        db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 0), rng=RNG
+    )
     done(db, first.entry.id, steady_rng, now=datetime(2026, 7, 5, 22, 10))
 
     # twenty minutes of coffee, then something else for ten
-    second = start_exercise(db, exercise_id=other.id, now=datetime(2026, 7, 5, 22, 30))
+    second = start_exercise(
+        db, exercise_id=other.id, now=datetime(2026, 7, 5, 22, 30), rng=RNG
+    )
     done(db, second.entry.id, steady_rng, now=datetime(2026, 7, 5, 22, 40))
 
     summary = day_summary(db, day=date(2026, 7, 5), now=datetime(2026, 7, 5, 22, 45))
@@ -536,9 +582,11 @@ def test_log_groups_need_not_be_contiguous(db, sample_day):
 
 
 def test_a_running_entry_counts_up_to_now(db, songs, stomp, steady_rng):
-    first = start_exercise(db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 0))
+    first = start_exercise(
+        db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 0), rng=RNG
+    )
     done(db, first.entry.id, steady_rng, now=datetime(2026, 7, 5, 22, 10))
-    start_exercise(db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 10))
+    start_exercise(db, exercise_id=stomp.id, now=datetime(2026, 7, 5, 22, 10), rng=RNG)
 
     summary = day_summary(db, day=date(2026, 7, 5), now=datetime(2026, 7, 5, 22, 25))
 
@@ -546,7 +594,7 @@ def test_a_running_entry_counts_up_to_now(db, songs, stomp, steady_rng):
 
 
 def test_a_stale_running_entry_adds_nothing_to_an_earlier_day(db, songs, stomp):
-    start_exercise(db, exercise_id=stomp.id, now=datetime(2026, 7, 4, 21, 0))
+    start_exercise(db, exercise_id=stomp.id, now=datetime(2026, 7, 4, 21, 0), rng=RNG)
 
     summary = day_summary(db, day=date(2026, 7, 4), now=datetime(2026, 7, 5, 22, 25))
 

@@ -211,6 +211,19 @@ def test_starting_the_next_one_closes_the_one_before_it(stocked, run):
     assert log.count("(running)") == 1
 
 
+def test_the_one_it_closed_is_scheduled_the_normal_way(stocked, run):
+    run("start", "le freak")
+
+    run("start", "espresso")
+
+    # x1 and a date in the future: nothing else would ever move that row
+    line = next(
+        line for line in run("next", "SONGS").output.splitlines() if "le freak" in line
+    )
+    assert "x1" in line
+    assert TODAY.isoformat() not in line
+
+
 def test_done_finishes_whatever_is_running(stocked, run):
     run("start", "le freak")
 

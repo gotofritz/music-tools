@@ -198,9 +198,11 @@ replaced all of it with three operations:
 
 - **`start_exercise`** opens an entry, snapshotting `description`, `speed`,
   `bpm` and `log_group` *at the start* rather than at the close, because that is
-  when the line becomes visible. It opens the day if there is not one, and
-  schedules nothing. Starting the exercise that is **already running** is a
-  no-op: the line keeps the time it really began at.
+  when the line becomes visible. It opens the day if there is not one, and does
+  not touch *this* exercise's schedule — but the entry it closes is scheduled
+  on the normal interval (below), which is why it takes an rng. Starting the
+  exercise that is **already running** is a no-op: the line keeps the time it
+  really began at.
 - **`finish_entry`** stamps `ended_at` and moves the schedule: count +1,
   `last_practiced`, `next_due`, in one transaction. The snapshot the start took
   is left alone; only a note may be written now.
@@ -217,7 +219,12 @@ nothing to schedule when it finishes.
 
 Two rules hold the shape. **One entry runs at a time**: `_close_running` closes
 whatever was running as the next thing starts, at that instant, because it was
-attributed when it was started — but only `finish_entry` touches a schedule.
+attributed when it was started — and says `done` for it on `Algorithm.NORMAL`,
+through the same `_finish` body `finish_entry` uses. That is the sheet's chained
+log, brought back: the player has gone on to the next exercise, so nothing else
+would ever move the schedule of the one they left. A different algorithm is
+what a deliberate `finish_entry` is for, and a line that should not be
+scheduled at all is `discard_entry`.
 And **time nobody attributed is not practice time**: the gaps between entries
 are gaps, nothing re-tiles, a discarded entry leaves nothing behind, and an
 entry left running from an earlier day is **discarded** rather than closed at an

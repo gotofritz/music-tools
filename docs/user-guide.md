@@ -79,8 +79,11 @@ logged 22:46-23:03  00:17  REPERTOIRE  87.8 BPM (66%)
 ```
 
 You never type a time. One thing runs at a time, so starting the next exercise
-closes the one before it — it was attributed when you started it, so closing it
-there is honest — but only `done` moves a schedule. **The gaps are gaps**: the
+closes the one before it and schedules it on the normal interval — it was
+attributed when you started it, and you have gone on to something else, so
+nothing would ever move it otherwise. Say `done` yourself when you want to
+choose the interval (`--short`, `--long`, `--rotate`, `--hold`).
+**The gaps are gaps**: the
 coffee, the phone call and the walk round the block are simply not in the log,
 and there is no clock to stop when you are finished for the evening.
 
@@ -163,18 +166,21 @@ What a click means depends on what is running:
 
 | running | you click | what happens |
 | --- | --- | --- |
-| another row | **start** here | that one is closed at this moment, this one starts |
+| another row | **start** here | that one is closed and scheduled the normal way, this one starts |
 | nothing | **start** here | this one starts |
 | this row | **start** here | nothing — the line keeps the time it began at |
 | another row | **stop** here | nothing |
 | nothing | **stop** here | nothing |
 | this row | **stop** here | the line closes and the schedule moves |
 
-Closing one row by starting another still logs its time and leaves its schedule
-alone: only **stop** (or **done** on the card) moves a schedule.
+Starting one row while another is running is the old chained log: the row you
+leave is closed there and scheduled on the **normal** interval, because you
+have gone on to the next thing and nothing else would ever move it. Use **stop**
+when you want to say how it comes back — the drop-down beside it — and
+**discard** when the time should not be logged at all.
 
-The drop-down beside **stop** is
-the choice the flags give you on the command line: `normal`, `short` (this one
+The drop-down beside **stop** is the choice the flags give you on the command
+line: `normal`, `short` (this one
 is not sticking), `long` (this one is solid), `rotate` (to the back of the
 module's queue), `hold` (to the front). Click it and the row, today's log and
 the totals all update where they are; the page does not reload.

@@ -93,15 +93,18 @@ def start(
     exercise_id: int,
     conn: sqlite3.Connection = Depends(get_conn),
     now: datetime = Depends(get_now),
+    rng: random.Random = Depends(get_rng),
 ) -> Response:
     """Playing this now: the log gets a line for it, with its material on it.
 
     Whatever was running is closed at this instant — one entry at a time — and
-    nothing is scheduled: `done` is what moves the schedule. Starting the row
-    that is already running is nothing at all; it keeps the time it began at.
+    scheduled the normal way, because the player has moved on and nothing else
+    would move it. This exercise's own schedule waits for its stop. Starting
+    the row that is already running is nothing at all; it keeps the time it
+    began at.
     """
     try:
-        result = session.start_exercise(conn, exercise_id=exercise_id, now=now)
+        result = session.start_exercise(conn, exercise_id=exercise_id, now=now, rng=rng)
     except session.UnknownExercise:
         raise HTTPException(
             status_code=404, detail="no exercise with that id"
@@ -202,10 +205,12 @@ def add_entry(
     notes: str | None = Form(None),
     conn: sqlite3.Connection = Depends(get_conn),
     now: datetime = Depends(get_now),
+    rng: random.Random = Depends(get_rng),
 ) -> Response:
     """Start something the catalogue does not know about: a warm-up, a jam."""
     session.start_ad_hoc(
         conn,
+        rng=rng,
         description=description,
         log_group=log_group or None,
         speed=speed or None,

@@ -210,6 +210,20 @@ def test_starting_the_next_one_closes_the_one_before_it(
     ]
 
 
+def test_starting_the_next_one_schedules_the_one_it_closed(
+    client, conn, le_freak, espresso
+):
+    start(client, le_freak.id)
+
+    start(client, espresso.id)
+
+    # closed by the next start, and scheduled the normal way: nothing else will
+    after = repo.get_exercise(conn, le_freak.id)
+    assert after is not None
+    assert after.practiced_count == 9
+    assert after.next_due == date(2026, 8, 10)
+
+
 def test_a_form_post_without_htmx_redirects_back_to_the_page(client, le_freak):
     """No JavaScript: a real form, a real redirect, a working app."""
     response = client.post(f"/exercises/{le_freak.id}/start", follow_redirects=False)
