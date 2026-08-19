@@ -243,3 +243,53 @@ def test_a_file_with_no_bar_markers_raises(write_markers):
         Score.build(parse_markers(path), 4.0)
 
     assert "No section or measure markers" in error.value.message
+
+
+def test_beats_before_the_first_bar_marker_open_a_pickup(write_markers):
+    """A snippet cut mid-bar has its upbeat marked as beats, with no barline."""
+    path = write_markers("""
+0:00:10.500000 Marker (beat): ""
+0:00:11.000000 Marker (measure): "A1"
+0:00:11.500000 Marker (beat): ""
+0:00:12.000000 Marker (beat): ""
+0:00:12.500000 Marker (beat): ""
+0:00:13.000000 Marker (measure): "A2"
+0:00:13.500000 Marker (beat): ""
+0:00:14.000000 Marker (beat): ""
+0:00:14.500000 Marker (beat): ""
+""")
+    score = Score.build(parse_markers(path), 5.0)
+
+    assert [len(bar.beats) for bar in score.bars] == [1, 4, 4]
+    assert score.pickup is True
+    assert score.numbered_from == 0
+    assert score.address("0") == pytest.approx(0.0)
+    assert score.address("1") == bar_named(score, "A1").start
+    assert score.bars[0].end == pytest.approx(0.5)
+
+
+def test_an_unnamed_bar_after_a_loose_pickup_is_numbered_from_one(write_markers):
+    """The implicit pickup is [0], so the bar after it is still [1]."""
+    path = write_markers("""
+0:00:10.500000 Marker (beat): ""
+0:00:11.000000 Marker (measure): ""
+0:00:11.500000 Marker (beat): ""
+0:00:12.000000 Marker (beat): ""
+0:00:12.500000 Marker (beat): ""
+0:00:13.000000 Marker (measure): ""
+0:00:13.500000 Marker (beat): ""
+0:00:14.000000 Marker (beat): ""
+0:00:14.500000 Marker (beat): ""
+""")
+    score = Score.build(parse_markers(path), 5.0)
+
+    assert [bar.name for bar in score.bars] == ["0", "1", "2"]
+
+
+def test_a_marker_file_of_beats_alone_is_still_an_error(write_markers):
+    path = write_markers("""
+0:00:10.500000 Marker (beat): ""
+0:00:11.000000 Marker (beat): ""
+""")
+    with pytest.raises(click.ClickException, match="No section or measure"):
+        Score.build(parse_markers(path), 5.0)
