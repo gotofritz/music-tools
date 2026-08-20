@@ -407,6 +407,13 @@ Three rules hold this shape, and the tests in `tests/test_web.py` enforce them:
   belong to and binds each one, and the save button, with `form="…"`. That
   attribute is ordinary form ownership, so a plain submit carries the whole
   row as well.
+- **A refusal is a message on the page.** The domain writes a sentence, the
+  route turns it into a status code, and `create_app`'s handler renders that
+  sentence: HTMX gets it retargeted to the `#problem` slot `base.html` carries
+  — the list the write was aimed at is left alone — and a browser with no
+  JavaScript gets the same message as a page. The page's `htmx-config` meta is
+  what makes it arrive at all: HTMX drops a 4xx body by default, which is why
+  a mistyped path used to be a click that did nothing and said nothing.
 - **Nothing is fetched over the network.** `htmx.min.js` is vendored in
   `static/`; there is no CDN link and no build step. Leaving Sheets was about
   practising with the network off.

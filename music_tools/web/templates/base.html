@@ -5,9 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}practice{% endblock %}</title>
     <link rel="stylesheet" href="/static/app.css">
+    {# HTMX drops the body of a 4xx by default, which made every refusal a
+       click that did nothing at all. Swapping them lets the message reach the
+       page; the response says where it goes. #}
+    <meta name="htmx-config" content='{"responseHandling": [{"code": "204", "swap": false}, {"code": "[23]..", "swap": true}, {"code": "[45]..", "swap": true, "error": true}]}'>
     <script src="/static/htmx.min.js" defer></script>
   </head>
-  <body>
+  <body hx-on::before-request="this.querySelector('#problem').textContent = ''">
     <header>
       <nav>
         <a href="/">today</a>
@@ -17,6 +21,7 @@
       </nav>
     </header>
     <main>
+      {% include "_problem.html" %}
       {% block main %}{% endblock %}
     </main>
   </body>

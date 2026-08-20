@@ -232,7 +232,8 @@ practised from — and the forms that add more. Four kinds:
   another program's job. A tune you want offline is downloaded with that and
   attached as a file, with the URL kept beside it so you know where it came
   from.
-- **a score** (a MuseScore file), as a link that opens it.
+- **a score** — a MuseScore file, a PDF, anything your machine opens — as a
+  link. Nothing is checked but the path: the file is opened where it lies.
 - **text**: a fingering, a chord chart, a reminder about the bridge.
 
 Files are **referenced where they are and never copied**, so a path has to be

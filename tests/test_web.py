@@ -1274,6 +1274,66 @@ def test_a_path_outside_the_roots_is_refused_with_a_message(
     assert media.exercise_media(conn, exercise_id=le_freak.id) == []
 
 
+def test_a_score_can_be_a_pdf(client, conn, le_freak, roots):
+    score = roots / "tune.pdf"
+    score.write_bytes(b"%PDF-1.4\n")
+
+    response = client.post(
+        f"/exercises/{le_freak.id}/media",
+        data={"kind": "musescore", "path": str(score)},
+        headers=hx(),
+    )
+
+    assert response.status_code == 200
+    cards = media.exercise_media(conn, exercise_id=le_freak.id)
+    assert [card.sources[0].path for card in cards] == [str(score)]
+
+
+def test_a_refusal_comes_back_where_htmx_will_show_it(
+    client, le_freak, roots, tmp_path
+):
+    outside = tmp_path / "elsewhere.pdf"
+    outside.write_bytes(b"")
+
+    response = client.post(
+        f"/exercises/{le_freak.id}/media",
+        data={"kind": "musescore", "path": str(outside)},
+        headers=hx(),
+    )
+
+    assert response.status_code == 400
+    # a 4xx lands in the slot the page keeps for it, not in the list it was
+    # aimed at: the attachment that is there already stays on screen
+    assert response.headers["HX-Retarget"] == "#problem"
+    assert response.headers["HX-Reswap"] == "outerHTML"
+    assert 'id="problem"' in response.text
+    assert "outside the configured roots" in response.text
+
+
+def test_a_refusal_without_htmx_is_a_page_rather_than_json(
+    client, le_freak, roots, tmp_path
+):
+    outside = tmp_path / "elsewhere.pdf"
+    outside.write_bytes(b"")
+
+    response = client.post(
+        f"/exercises/{le_freak.id}/media",
+        data={"kind": "musescore", "path": str(outside)},
+    )
+
+    assert response.status_code == 400
+    assert response.headers["content-type"].startswith("text/html")
+    assert "outside the configured roots" in response.text
+
+
+def test_the_page_carries_the_slot_a_refusal_lands_in(client, le_freak, roots):
+    page = client.get(f"/exercises/{le_freak.id}/media").text
+
+    assert 'id="problem"' in page
+    # htmx throws a 4xx body away unless the page's own config says otherwise
+    assert '"[45].."' in page
+
+
 def test_a_file_that_is_not_there_is_refused_with_a_message(client, le_freak, roots):
     response = client.post(
         f"/exercises/{le_freak.id}/media",
