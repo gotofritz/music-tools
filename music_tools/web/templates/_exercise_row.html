@@ -43,15 +43,17 @@
   <td>
     {# Both buttons on every row, whatever is running: the server decides what
        a click means. Start on the row that is already running keeps its time;
-       stop on any row but that one does nothing. #}
+       stop on any row but that one does nothing. All three swap the whole
+       queue rather than this row: they move due dates, and a due date that
+       moved has changed where its row belongs in the order. #}
     <form action="/exercises/{{ exercise.id }}/start" method="post"
           hx-post="/exercises/{{ exercise.id }}/start"
-          hx-target="#exercise-{{ exercise.id }}" hx-swap="outerHTML">
+          hx-target="#queue" hx-swap="outerHTML">
       <button type="submit">start</button>
     </form>
     <form action="/exercises/{{ exercise.id }}/stop" method="post"
           hx-post="/exercises/{{ exercise.id }}/stop"
-          hx-target="#exercise-{{ exercise.id }}" hx-swap="outerHTML">
+          hx-target="#queue" hx-swap="outerHTML">
       <select name="algorithm" aria-label="how it comes back">
         <option value="normal">normal</option>
         <option value="short">short</option>
@@ -65,7 +67,7 @@
     {# The one being practised, so a false start can be taken out from here. #}
     <form action="/entries/{{ running.id }}/discard" method="post"
           hx-post="/entries/{{ running.id }}/discard"
-          hx-target="#exercise-{{ exercise.id }}" hx-swap="outerHTML"
+          hx-target="#queue" hx-swap="outerHTML"
           hx-confirm="Discard this line? No time is logged for it.">
       <button type="submit" class="remove">discard</button>
     </form>

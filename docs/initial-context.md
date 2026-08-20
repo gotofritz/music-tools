@@ -395,8 +395,11 @@ Three rules hold this shape, and the tests in `tests/test_web.py` enforce them:
   things at once, so whichever
   piece was clicked answers and the rest ride along out of band
   (`hx-swap-oob`). Which one that is comes off the referer: a click on a module
-  page is targeting the exercise row, a click on the today page is targeting the
-  log. The same id must not appear twice in one response, or the swaps fight.
+  page is targeting that module's whole queue (`_queue.html`), a click on the
+  today page is targeting the log. The queue rather than the one row, because
+  these three writes move due dates and the queue is ordered by them — swapping
+  the row alone left it where the page had drawn it until a reload. The same id
+  must not appear twice in one response, or the swaps fight.
 - **Every action is a real form.** HTML forms send only GET and POST, so the
   inline edit is registered for both `PATCH` and `POST`, and a request without
   the `HX-Request` header gets a 303 back to the page it came from instead of a

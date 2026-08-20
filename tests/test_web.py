@@ -1124,6 +1124,38 @@ def test_stop_finishes_the_row_that_is_running(client, conn, le_freak, songs):
     assert running(conn) is None
 
 
+def test_stopping_a_row_re_sorts_the_queue_it_came_from(
+    client, conn, songs, le_freak, espresso
+):
+    # le freak is the overdue one, espresso is due on the 20th; stopping le
+    # freak schedules it past espresso, so the two swap places
+    start(client, le_freak.id)
+
+    response = stop(
+        client, le_freak.id, referer=f"http://localhost/modules/{songs.slug}"
+    )
+
+    assert 'id="queue"' in response.text  # the whole queue, not the row alone
+    assert response.text.index(f'id="exercise-{espresso.id}"') < response.text.index(
+        f'id="exercise-{le_freak.id}"'
+    )
+
+
+def test_done_from_a_module_page_re_sorts_the_queue_too(
+    client, conn, songs, le_freak, espresso
+):
+    start(client, le_freak.id)
+
+    response = client.post(
+        f"/entries/{running(conn).id}/done",
+        headers=hx(referer=f"http://localhost/modules/{songs.slug}"),
+    )
+
+    assert response.text.index(f'id="exercise-{espresso.id}"') < response.text.index(
+        f'id="exercise-{le_freak.id}"'
+    )
+
+
 def test_stop_takes_the_algorithm_the_row_chose(client, conn, le_freak, espresso):
     start(client, le_freak.id)
 

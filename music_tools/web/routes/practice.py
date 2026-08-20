@@ -300,17 +300,21 @@ def _redraw(
 ) -> str:
     """The piece that was clicked, and whatever else the write changed.
 
-    A click on a module page is targeting the exercise row; a click on the
+    A click on a module page is targeting that module's queue; a click on the
     today page is targeting the log. Whichever it is answers, and the rest are
     out-of-band swaps — the same id twice in one response is a fight over the
     swap.
+
+    The queue rather than the row, because these writes move due dates: the
+    row is re-read in the order it now belongs to, instead of keeping the
+    place it had when the page was drawn.
     """
     context = views.today_context(conn, now=now)
     if row is not None and not _is_today_page(request):
         return render(
-            "_exercise_row.html",
-            exercise=row,
-            module=context["modules_by_id"][row.module_id],
+            "_queue.html",
+            exercises=repo.exercises_due(conn, module_id=row.module_id),
+            modules_by_id=context["modules_by_id"],
             today=context["today"],
             running=context["running"],
         ) + render("_day_totals.html", oob=True, **context)
