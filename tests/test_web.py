@@ -18,6 +18,7 @@ from music_tools.db import repository as repo
 from music_tools.db.connection import open_db
 from music_tools.db.migrate import migrate
 from music_tools.domain import media
+from music_tools.web import deps
 from music_tools.web.app import create_app
 from music_tools.web.deps import get_now, get_rng
 from tests.conftest import SteadyRandom
@@ -142,6 +143,12 @@ def sample_block(conn):
 
 
 # --- Step 1: the app factory ------------------------------------------------
+
+
+def test_the_templates_are_read_once_with_the_code_that_answers_them():
+    # a running server that picks up new markup while still running the old
+    # routes swaps fragments into targets those routes know nothing about
+    assert deps.env.auto_reload is False
 
 
 def test_the_root_page_is_the_practice_day(client):

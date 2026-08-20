@@ -78,6 +78,13 @@ def _environment() -> Environment:
         autoescape=select_autoescape(("html",)),
         trim_blocks=True,
         lstrip_blocks=True,
+        # Read once, with the code that answers them. Jinja's default is to
+        # re-read a changed file, which sounds harmless and is not: a running
+        # server that has pulled a new checkout picks up the new markup while
+        # still running the old routes, and a fragment swapped into a target
+        # the old route knows nothing about takes the page apart. Restarting
+        # is what a change costs, exactly as it does for the Python.
+        auto_reload=False,
     )
     helpers: dict[str, Any] = {
         "format_due": format_due,
