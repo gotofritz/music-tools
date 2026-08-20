@@ -299,8 +299,10 @@ entry running right now) counts towards the day total but has no subtotal.
   `kind` (`file` | `youtube` | `score` | `text`) saying which of `path`,
   `url` and `body` means anything. Nothing is copied.
 - **Every path in is confined to configured roots.** `MUSIC_TOOLS_MEDIA_ROOTS`
-  (`:`-separated), defaulting to `~/Documents/MuseScore4/Scores` plus the
-  app data directory. A path is resolved before it is compared, so `..` and a
+  (`:`-separated), defaulting to the home directory plus the app data
+  directory — the player's files, not the machine's, since a narrower default
+  turned out to be a guess about how one person files their music and refused
+  a real tune for it. A path is resolved before it is compared, so `..` and a
   symlink out of a root are refused rather than followed, and a relative path is
   refused outright. The check runs again when a file is *served*, because the
   roots can be narrowed after a row was written and a stored path is not a

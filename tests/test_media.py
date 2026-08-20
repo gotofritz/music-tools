@@ -575,15 +575,22 @@ def test_anything_else_is_left_as_a_plain_link(url):
     assert media.youtube_embed(url) is None
 
 
-def test_the_default_roots_are_the_scores_and_the_app_data_directory(monkeypatch):
+def test_the_default_roots_are_the_home_and_app_data_directories(monkeypatch):
     monkeypatch.delenv("MUSIC_TOOLS_MEDIA_ROOTS", raising=False)
 
     roots = media.media_roots()
 
-    # the whole scores directory, not one folder inside it: a tune is filed
-    # wherever the player files it
-    assert any(root.name == "Scores" for root in roots)
+    # the player's own files, wherever they keep them; the roots are about
+    # /etc and /var, not about how a music folder is arranged
+    assert Path.home() in roots
     assert any(root.name == "music-tools" for root in roots)
+
+
+def test_a_path_outside_the_home_is_still_refused_by_default(monkeypatch):
+    monkeypatch.delenv("MUSIC_TOOLS_MEDIA_ROOTS", raising=False)
+
+    with pytest.raises(media.OutsideRoots):
+        media.resolve_within_roots("/etc/passwd")
 
 
 def test_a_kind_that_carries_no_group_cannot_be_given_one(db, le_freak):

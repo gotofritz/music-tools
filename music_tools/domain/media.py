@@ -12,11 +12,12 @@ load-bearing.
 
 - **Files stay on disk.** A source row holds an absolute path and nothing is
   ever copied — the rule since Phase 2.
-- **Every path in from the browser is confined to configured roots.** The
-  scores directory and the app data directory, unless
-  `MUSIC_TOOLS_MEDIA_ROOTS` says otherwise. The server binds `127.0.0.1` and
-  this is one user's machine, but `?path=/etc/passwd` is still a mistake worth
-  not making.
+- **Every path in from the browser is confined to configured roots.** The home
+  directory and the app data directory, unless `MUSIC_TOOLS_MEDIA_ROOTS` says
+  otherwise. The server binds `127.0.0.1` and this is one user's machine, so
+  the line is drawn between the player's own files and the machine's:
+  `?path=/etc/passwd` is still a mistake worth not making, and how someone
+  arranges their music is not this module's business.
 - **Every audio file is in a group, and most groups have one member.** A
   single file gets a group made for it, so a set of one and a set of stems are
   the same shape downstream: Phase 5b plays a set, and Phase 6 hangs markers
@@ -46,10 +47,13 @@ KINDS = ("file", "youtube", "score", "text")
 PATH_KINDS = ("file", "score")
 
 #: Where a path is allowed to point unless the environment says otherwise: the
-#: scores directory, and the directory the database lives in. The whole scores
-#: directory rather than one folder inside it — a tune is filed where the
-#: player files it, and `TUNES` was only where the first ones happened to be.
-DEFAULT_ROOTS = (Path("~/Documents/MuseScore4/Scores"),)
+#: player's own home directory, and wherever the database lives. It started as
+#: the scores folder, which turned out to be a guess about how one person
+#: files their music — and being wrong about that refuses a real tune. The
+#: line worth holding is between the player's files and the machine's: `/etc`
+#: and `/var` are still refused, and `MUSIC_TOOLS_MEDIA_ROOTS` narrows this to
+#: anything tighter.
+DEFAULT_ROOTS = (Path("~"),)
 
 #: How many tracks one set may hold. Phase 5b holds every member decoded in
 #: memory at once, and eight four-minute stems is already a few hundred
