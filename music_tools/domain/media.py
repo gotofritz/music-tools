@@ -46,8 +46,10 @@ KINDS = ("file", "youtube", "score", "text")
 PATH_KINDS = ("file", "score")
 
 #: Where a path is allowed to point unless the environment says otherwise: the
-#: scores directory, and the directory the database lives in.
-DEFAULT_ROOTS = (Path("~/Documents/MuseScore4/Scores/TUNES"),)
+#: scores directory, and the directory the database lives in. The whole scores
+#: directory rather than one folder inside it — a tune is filed where the
+#: player files it, and `TUNES` was only where the first ones happened to be.
+DEFAULT_ROOTS = (Path("~/Documents/MuseScore4/Scores"),)
 
 #: How many tracks one set may hold. Phase 5b holds every member decoded in
 #: memory at once, and eight four-minute stems is already a few hundred

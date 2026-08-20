@@ -238,8 +238,8 @@ practised from — and the forms that add more. Four kinds:
 
 Files are **referenced where they are and never copied**, so a path has to be
 absolute and has to point inside the folders the app is allowed to read —
-normally `~/Documents/MuseScore4/Scores/TUNES` and the app's own data
-directory. The media page lists them; set `MUSIC_TOOLS_MEDIA_ROOTS` (a
+normally `~/Documents/MuseScore4/Scores` — all of it, however you file
+things inside — and the app's own data directory. The media page lists them; set `MUSIC_TOOLS_MEDIA_ROOTS` (a
 `:`-separated list, like `PATH`) to change them. Anything outside is refused
 with a message rather than quietly read.
 

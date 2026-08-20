@@ -95,7 +95,7 @@ run against a temporary file. Migrations are numbered `.sql` files applied on
 every open, gated by `PRAGMA user_version`.
 
 Media paths are confined to `MUSIC_TOOLS_MEDIA_ROOTS`, a `:`-separated list
-defaulting to `~/Documents/MuseScore4/Scores/TUNES` plus the app data
+defaulting to `~/Documents/MuseScore4/Scores` plus the app data
 directory. Every path in from the browser is resolved and checked against them
 — on the way in *and* on the way out, since the roots can be narrowed later —
 and the tests point them at a `tmp_path`.

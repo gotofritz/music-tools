@@ -580,7 +580,9 @@ def test_the_default_roots_are_the_scores_and_the_app_data_directory(monkeypatch
 
     roots = media.media_roots()
 
-    assert any(root.name == "TUNES" for root in roots)
+    # the whole scores directory, not one folder inside it: a tune is filed
+    # wherever the player files it
+    assert any(root.name == "Scores" for root in roots)
     assert any(root.name == "music-tools" for root in roots)
 
 
