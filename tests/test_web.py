@@ -1280,7 +1280,7 @@ def test_a_score_can_be_a_pdf(client, conn, le_freak, roots):
 
     response = client.post(
         f"/exercises/{le_freak.id}/media",
-        data={"kind": "musescore", "path": str(score)},
+        data={"kind": "score", "path": str(score)},
         headers=hx(),
     )
 
@@ -1297,7 +1297,7 @@ def test_a_refusal_comes_back_where_htmx_will_show_it(
 
     response = client.post(
         f"/exercises/{le_freak.id}/media",
-        data={"kind": "musescore", "path": str(outside)},
+        data={"kind": "score", "path": str(outside)},
         headers=hx(),
     )
 
@@ -1318,7 +1318,7 @@ def test_a_refusal_without_htmx_is_a_page_rather_than_json(
 
     response = client.post(
         f"/exercises/{le_freak.id}/media",
-        data={"kind": "musescore", "path": str(outside)},
+        data={"kind": "score", "path": str(outside)},
     )
 
     assert response.status_code == 400

@@ -296,7 +296,7 @@ entry running right now) counts towards the day total but has no subtotal.
 `domain/media.py` over them. Four decisions are load-bearing:
 
 - **Media is rows; files stay on disk.** A `media_source` per attachment,
-  `kind` (`file` | `youtube` | `musescore` | `text`) saying which of `path`,
+  `kind` (`file` | `youtube` | `score` | `text`) saying which of `path`,
   `url` and `body` means anything. Nothing is copied.
 - **Every path in is confined to configured roots.** `MUSIC_TOOLS_MEDIA_ROOTS`
   (`:`-separated), defaulting to `~/Documents/MuseScore4/Scores/TUNES` plus the

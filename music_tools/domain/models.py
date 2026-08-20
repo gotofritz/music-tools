@@ -74,8 +74,8 @@ class MediaSource(BaseModel):
     id: int
     exercise_id: int
     group_id: int | None = None  # 'file' only: the set it plays in
-    kind: str  # 'file' | 'youtube' | 'musescore' | 'text'
-    path: str | None = None  # absolute; 'file' and 'musescore'
+    kind: str  # 'file' | 'youtube' | 'score' | 'text'
+    path: str | None = None  # absolute; 'file' and 'score'
     url: str | None = None  # 'youtube'
     body: str | None = None  # 'text'
     label: str | None = None  # also the track name in a set: "bass", "drums"
