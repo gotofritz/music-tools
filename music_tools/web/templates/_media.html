@@ -17,7 +17,9 @@
   {% endif %}
   {% for track in card.sources %}
   <div class="track">
-    <span class="track-name">{{ track.label or file_name(track.path) }}</span>
+    <span class="track-name">
+      <a href="/media/{{ track.id }}/file" target="_blank" rel="noopener">
+        {{ track.label or file_name(track.path) }}</a></span>
     <audio controls preload="none" src="/media/{{ track.id }}/file"></audio>
   </div>
   {% endfor %}
@@ -35,7 +37,8 @@
   <p><a href="{{ source.url }}" rel="noreferrer">{{ source.url }}</a></p>
   {% elif card.kind == "score" %}
   {% set source = card.sources[0] %}
-  <p><a href="/media/{{ source.id }}/file">{{ source.label or file_name(source.path) }}</a>
+  <p><a href="/media/{{ source.id }}/file" target="_blank" rel="noopener">
+      {{ source.label or file_name(source.path) }}</a>
     <span class="muted">{{ source.path }}</span></p>
   {% else %}
   <pre class="media-text">{{ card.sources[0].body }}</pre>

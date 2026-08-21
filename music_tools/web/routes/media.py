@@ -14,6 +14,7 @@ domain refuses anything else. A refusal is a message on the page: a mistyped
 path is a mistake to fix, not an error to hide.
 """
 
+import mimetypes
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -31,6 +32,19 @@ from music_tools.web.deps import fragment_or_redirect, get_conn, get_now, render
 
 router = APIRouter()
 
+#: What a browser would *run* rather than show. Everything else is served
+#: inline, so a click opens the score in whatever the machine opens it with
+#: instead of dropping it in the downloads folder — but these come back as a
+#: download: the app is the origin they would run in, and a page that can
+#: script can talk to the app as the app.
+SCRIPTABLE = (
+    "text/html",
+    "application/xhtml+xml",
+    "image/svg+xml",
+    "application/xml",
+    "text/xml",
+)
+
 
 @router.get("/media/{source_id}/file")
 def media_file(
@@ -39,7 +53,11 @@ def media_file(
     """The file itself, as it sits on disk. Never copied, only read.
 
     `FileResponse` answers range requests on its own, which is what a browser
-    seeking through a track sends.
+    seeking through a track sends. It is served **inline**, so following the
+    link on the page opens the tune's score in whatever the machine opens a
+    PDF or a `.mscz` with, rather than saving a second copy of a file that was
+    never copied in the first place. Anything that scripts is the exception —
+    see `SCRIPTABLE`.
     """
     source = repo.get_media_source(conn, source_id)
     if source is None or source.path is None:
@@ -50,7 +68,9 @@ def media_file(
         raise HTTPException(status_code=403, detail=str(outside)) from None
     if not path.is_file():
         raise HTTPException(status_code=404, detail=f"{source.path} is not there")
-    return FileResponse(path, filename=Path(path).name)
+    return FileResponse(
+        path, filename=Path(path).name, content_disposition_type=_disposition(path)
+    )
 
 
 @router.get("/exercises/{exercise_id}/media", response_class=HTMLResponse)
@@ -204,6 +224,12 @@ def _reporting() -> Iterator[None]:
         raise HTTPException(status_code=409, detail=str(refused)) from None
     except (media.OutsideRoots, media.MissingFile, media.BadMedia) as wrong:
         raise HTTPException(status_code=400, detail=str(wrong)) from None
+
+
+def _disposition(path: Path) -> str:
+    """`inline` for the tune's material, `attachment` for what would script."""
+    guessed, _ = mimetypes.guess_type(path.name)
+    return "attachment" if guessed in SCRIPTABLE else "inline"
 
 
 def _exercise(conn: sqlite3.Connection, exercise_id: int) -> Exercise:

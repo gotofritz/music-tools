@@ -447,7 +447,12 @@ click means (`start_exercise` and `stop_exercise` above) — plus **discard**
 while it is the one running. Display is minimal by design — a bare
 `<audio>` per file served from `GET /media/{id}/file`, the YouTube embed with the
 plain link behind it (the one thing in the app that reaches the network, and
-what it degrades to with the network off), a link for a score, text as text. A
+what it degrades to with the network off), a link for a score, text as text.
+Every file on disk is a link to that same route, `target="_blank"`, and the
+route serves it **inline**: the machine opens the score with whatever it opens
+scores with, rather than saving a second copy of a file the app deliberately
+never copied. `SCRIPTABLE` is the exception — an attached page or SVG comes
+back as a download, because inline it would run in the app's own origin. A
 track set renders as stacked players, which is honest about being
 unsynchronised; Phase 5b is the one transport with a mixer.
 

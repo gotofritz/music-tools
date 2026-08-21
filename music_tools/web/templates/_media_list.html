@@ -47,6 +47,11 @@
             {% elif source.kind == "youtube" %}
             <a href="{{ source.url }}" rel="noreferrer">{{ source.url }}</a>
             {% else %}
+            {# The file, opened by whatever the machine opens it with: served
+               inline, in a tab of its own so the page it was opened from is
+               still there behind it. #}
+            <a href="/media/{{ source.id }}/file" target="_blank" rel="noopener">
+              {{ file_name(source.path) }}</a>
             <span class="muted">{{ source.path }}</span>
             {% endif %}
           </td>
