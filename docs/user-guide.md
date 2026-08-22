@@ -233,10 +233,7 @@ practised from — and the forms that add more. Four kinds:
   attached as a file, with the URL kept beside it so you know where it came
   from.
 - **a score** — a MuseScore file, a PDF, anything your machine opens — as a
-  link. Click it and it opens in a tab of its own, handed to whatever your
-  machine opens that kind of file with; the page you clicked from stays where
-  it was. Nothing is checked but the path: the file is opened where it lies.
-  An audio or video file's name is a link in the same way, beside its player.
+  link. Nothing is checked but the path: the file is opened where it lies.
 - **text**: a fingering, a chord chart, a reminder about the bridge.
 
 Files are **referenced where they are and never copied**, so a path has to be

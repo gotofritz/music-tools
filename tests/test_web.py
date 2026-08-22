@@ -1073,52 +1073,6 @@ def test_the_file_route_serves_what_is_on_disk(client, conn, le_freak, loop_wav)
     assert response.content == loop_wav.read_bytes()
 
 
-def test_the_file_route_serves_a_score_for_opening_rather_than_saving(
-    client, conn, le_freak, roots
-):
-    score = roots / "tune.pdf"
-    score.write_bytes(b"%PDF-1.4\n")
-    source = media.attach(
-        conn, exercise_id=le_freak.id, kind="score", path=str(score), now=NOW
-    )
-
-    response = client.get(f"/media/{source.id}/file")
-
-    # inline, so the browser hands it to whatever opens a PDF instead of
-    # dropping it in the downloads folder
-    assert response.headers["content-disposition"].startswith("inline")
-    assert "tune.pdf" in response.headers["content-disposition"]
-
-
-def test_the_file_route_still_makes_a_page_of_markup_a_download(
-    client, conn, le_freak, roots
-):
-    # served from the app's own origin, so an attached page shown inline could
-    # talk to the app as the app; nothing that scripts is opened in place
-    page = roots / "notes.html"
-    page.write_text("<script>fetch('/entries')</script>")
-    source = media.attach(
-        conn, exercise_id=le_freak.id, kind="score", path=str(page), now=NOW
-    )
-
-    response = client.get(f"/media/{source.id}/file")
-
-    assert response.headers["content-disposition"].startswith("attachment")
-
-
-def test_the_media_page_links_every_file_it_lists(client, conn, le_freak, roots):
-    score = roots / "tune.pdf"
-    score.write_bytes(b"%PDF-1.4\n")
-    attached = media.attach(
-        conn, exercise_id=le_freak.id, kind="score", path=str(score), now=NOW
-    )
-
-    page = client.get(f"/exercises/{le_freak.id}/media").text
-
-    assert f'href="/media/{attached.id}/file"' in page
-    assert 'target="_blank"' in page
-
-
 def test_the_file_route_refuses_a_path_outside_the_roots(
     client, conn, le_freak, loop_wav, tmp_path, monkeypatch
 ):
