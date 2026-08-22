@@ -5,36 +5,43 @@
    Read-only until asked: a log is for reading, and a page of boxes reads
    like a form. The running line has no boxes even then — that one is what is
    being practised, and the card above the log is where `done` and `discard`
-   live. #}
+   live.
+
+   The edit form lives in one cell and the boxes name it: a form cannot span
+   table cells — the browser closes it at the first `</td>`, and everything
+   after that would be a box belonging to nothing, saving nothing. The `form`
+   attribute is what carries the row's cells back to it, for a plain submit
+   and for HTMX alike. #}
 <tr id="entry-{{ entry.id }}"{% if not entry.ended_at %} class="running"{% endif %}>
   {% if editing and entry.ended_at %}
+  {% set edit_form = "entry-" ~ entry.id ~ "-edit" %}
   <td>
-    <form action="/entries/{{ entry.id }}" method="post"
+    <form id="{{ edit_form }}" action="/entries/{{ entry.id }}" method="post"
           hx-patch="/entries/{{ entry.id }}"
           hx-target="{{ entry_target }}" hx-swap="outerHTML">
       <input type="text" name="started_at" value="{{ entry.started_at.strftime("%H:%M") }}"
-             size="5" aria-label="from" placeholder="from">
+             size="5" aria-label="from" placeholder="from" form="{{ edit_form }}">
+    </form>
   </td>
   <td>
-      <input type="text" name="ended_at" value="{{ entry.ended_at.strftime("%H:%M") }}"
-             size="5" aria-label="to" placeholder="to">
+    <input type="text" name="ended_at" value="{{ entry.ended_at.strftime("%H:%M") }}"
+           size="5" aria-label="to" placeholder="to" form="{{ edit_form }}">
   </td>
   <td>{{ duration_text(entry, live) }}</td>
   <td>
-      <input type="text" name="description" value="{{ entry.description }}" size="24"
-             aria-label="what" placeholder="what you played">
-      <input type="text" name="notes" value="{{ entry.notes or "" }}" size="14"
-             aria-label="notes" placeholder="notes">
+    <input type="text" name="description" value="{{ entry.description }}" size="24"
+           aria-label="what" placeholder="what you played" form="{{ edit_form }}">
+    <input type="text" name="notes" value="{{ entry.notes or "" }}" size="14"
+           aria-label="notes" placeholder="notes" form="{{ edit_form }}">
   </td>
   <td>
-      <input type="text" name="speed" value="{{ entry.speed or "" }}" size="7"
-             aria-label="speed" placeholder="speed">
+    <input type="text" name="speed" value="{{ entry.speed or "" }}" size="7"
+           aria-label="speed" placeholder="speed" form="{{ edit_form }}">
   </td>
   <td>
-      <input type="text" name="log_group" value="{{ entry.log_group or "" }}" size="11"
-             aria-label="log group" placeholder="group">
-      <button type="submit">save</button>
-    </form>
+    <input type="text" name="log_group" value="{{ entry.log_group or "" }}" size="11"
+           aria-label="log group" placeholder="group" form="{{ edit_form }}">
+    <button type="submit" form="{{ edit_form }}">save</button>
     <form action="/entries/{{ entry.id }}/delete" method="post"
           hx-delete="/entries/{{ entry.id }}"
           hx-target="{{ entry_target }}" hx-swap="outerHTML"

@@ -36,11 +36,12 @@
   <form action="/exercises/{{ exercise.id }}/media" method="post"
         hx-post="/exercises/{{ exercise.id }}/media"
         hx-target="#media-list" hx-swap="outerHTML">
-    <input type="hidden" name="kind" value="musescore">
+    <input type="hidden" name="kind" value="score">
     <input type="text" name="path" size="40" required aria-label="score path"
-           placeholder="/absolute/path/to/tune.mscz">
+           placeholder="/absolute/path/to/tune.mscz or tune.pdf">
     <input type="text" name="label" size="12" aria-label="label" placeholder="label">
     <button type="submit">attach a score</button>
+    <span class="muted">MuseScore, PDF — whatever opens it</span>
   </form>
 
   <form action="/exercises/{{ exercise.id }}/media" method="post"

@@ -135,14 +135,14 @@ def test_a_youtube_url_is_attached_as_a_url_and_has_no_group(db, le_freak):
     assert source.group_id is None  # an embed cannot be sample-locked to anything
 
 
-def test_a_musescore_file_is_attached_by_path_without_a_group(db, le_freak, audio_file):
+def test_a_score_file_is_attached_by_path_without_a_group(db, le_freak, audio_file):
     path = audio_file("S/Stomp/stomp.mscz")
 
     source = media.attach(
-        db, exercise_id=le_freak.id, kind="musescore", path=str(path), now=NOW
+        db, exercise_id=le_freak.id, kind="score", path=str(path), now=NOW
     )
 
-    assert source.kind == "musescore"
+    assert source.kind == "score"
     assert source.group_id is None
 
 
@@ -172,7 +172,7 @@ def test_a_kind_nobody_knows_is_refused(db, le_freak):
         ("file", {"url": "https://example.com/x.wav"}),
         ("youtube", {"path": "/tmp/x.wav"}),
         ("text", {}),
-        ("musescore", {"body": "notes"}),
+        ("score", {"body": "notes"}),
     ],
 )
 def test_a_kind_without_what_it_needs_is_refused(db, le_freak, roots, kind, fields):
@@ -575,13 +575,22 @@ def test_anything_else_is_left_as_a_plain_link(url):
     assert media.youtube_embed(url) is None
 
 
-def test_the_default_roots_are_the_scores_and_the_app_data_directory(monkeypatch):
+def test_the_default_roots_are_the_home_and_app_data_directories(monkeypatch):
     monkeypatch.delenv("MUSIC_TOOLS_MEDIA_ROOTS", raising=False)
 
     roots = media.media_roots()
 
-    assert any(root.name == "TUNES" for root in roots)
+    # the player's own files, wherever they keep them; the roots are about
+    # /etc and /var, not about how a music folder is arranged
+    assert Path.home() in roots
     assert any(root.name == "music-tools" for root in roots)
+
+
+def test_a_path_outside_the_home_is_still_refused_by_default(monkeypatch):
+    monkeypatch.delenv("MUSIC_TOOLS_MEDIA_ROOTS", raising=False)
+
+    with pytest.raises(media.OutsideRoots):
+        media.resolve_within_roots("/etc/passwd")
 
 
 def test_a_kind_that_carries_no_group_cannot_be_given_one(db, le_freak):

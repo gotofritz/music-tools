@@ -253,21 +253,89 @@ def stop_exercise(
 ) -> DoneResult | None:
     """`finish_entry` addressed to an exercise rather than to a line of the log.
 
-    Every row carries a stop button, so most stops are aimed at something that
-    is not running: that is not an error, it is a click on the wrong row, and
-    nothing happens. Only the row that is running is finished by it.
+    Every row carries a stop button, so a stop while something else is running
+    is a click on the wrong row: nothing happens. With **nothing** running it
+    is the start that was never clicked — the player went on playing after
+    stopping the last thing — so the line is written backwards from the stop:
+    it opens a microsecond after the last line of the day closed, and closes
+    now. The gap since the last line is what was practised, so attributing it
+    is honest; inventing one before there is a line to follow on from is not,
+    and a day with nothing logged in it yet writes nothing.
     """
     running = _running_for(conn, now=now)
-    if running is None or running.exercise_id != exercise_id:
-        return None
-    return finish_entry(
+    if running is not None:
+        if running.exercise_id != exercise_id:
+            return None
+        return finish_entry(
+            conn,
+            entry_id=running.id,
+            algorithm=algorithm,
+            now=now,
+            rng=rng,
+            notes=notes,
+        )
+    return _backfill(
         conn,
-        entry_id=running.id,
+        exercise_id=exercise_id,
         algorithm=algorithm,
         now=now,
         rng=rng,
         notes=notes,
     )
+
+
+def _backfill(
+    conn: sqlite3.Connection,
+    *,
+    exercise_id: int,
+    algorithm: Algorithm,
+    now: datetime,
+    rng: random.Random,
+    notes: str | None = None,
+) -> DoneResult | None:
+    """The start that was never clicked: a line from the last close to now.
+
+    Snapshotted exactly as `start_exercise` snapshots it, then closed and
+    scheduled through the same `_finish` a deliberate stop goes through. The
+    day is never opened here and no earlier day is tidied: without a line to
+    follow on from there is no stretch to attribute, so there is nothing to
+    write.
+    """
+    with transaction(conn):
+        exercise = repo.get_exercise(conn, exercise_id)
+        if exercise is None:
+            raise UnknownExercise(exercise_id)
+        day = repo.get_day(conn, practice_day_for(now))
+        if day is None:
+            return None
+        last_end = _last_end(conn, day_id=day.id)
+        if last_end is None or last_end >= now:
+            return None
+
+        module = repo.get_module(conn, exercise.module_id)
+        tempo = parse_tempo(exercise.speed or "", target_bpm=exercise.target_bpm)
+        entry = repo.create_entry(
+            conn,
+            day_id=day.id,
+            started_at=last_end + timedelta(microseconds=1),
+            exercise_id=exercise.id,
+            description=exercise.name,
+            speed=exercise.speed,
+            bpm=tempo.bpm,
+            log_group=module.log_group if module else None,
+            notes=exercise.notes,
+        )
+        return _finish(conn, entry, algorithm=algorithm, now=now, rng=rng, notes=notes)
+
+
+def _last_end(conn: sqlite3.Connection, *, day_id: int) -> datetime | None:
+    """When the last line of the day closed, or None on an empty day."""
+    ends = [
+        entry.ended_at
+        for entry in repo.entries_for_day(conn, day_id)
+        if entry.ended_at is not None
+    ]
+    return max(ends) if ends else None
 
 
 def discard_entry(conn: sqlite3.Connection, *, entry_id: int) -> None:

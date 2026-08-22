@@ -7,11 +7,7 @@
   <thead>
     {% include "_queue_head.html" %}
   </thead>
-  <tbody id="queue">
-    {% for exercise in exercises %}
-    {% include "_exercise_row.html" %}
-    {% endfor %}
-  </tbody>
+  {% include "_queue.html" %}
 </table>
 {% if not exercises %}
 <p>Nothing in this module yet.</p>

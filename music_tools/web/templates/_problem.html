@@ -1,0 +1,5 @@
+{# Where a refusal lands. A mistyped path is something to retype, so the
+   message the domain wrote is put in front of the page it was refused from
+   rather than replacing it — HTMX retargets 4xx here, and `hx-on` empties it
+   before the next request. Empty, it takes no room: `:empty` hides it. #}
+<p id="problem" class="problem" role="alert">{{ problem or "" }}</p>

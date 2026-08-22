@@ -170,7 +170,7 @@ What a click means depends on what is running:
 | nothing | **start** here | this one starts |
 | this row | **start** here | nothing — the line keeps the time it began at |
 | another row | **stop** here | nothing |
-| nothing | **stop** here | nothing |
+| nothing | **stop** here | the line is written backwards, from the last line's end to now |
 | this row | **stop** here | the line closes and the schedule moves |
 
 Starting one row while another is running is the old chained log: the row you
@@ -178,6 +178,13 @@ leave is closed there and scheduled on the **normal** interval, because you
 have gone on to the next thing and nothing else would ever move it. Use **stop**
 when you want to say how it comes back — the drop-down beside it — and
 **discard** when the time should not be logged at all.
+
+**Stop works even when you forgot to start.** Stop one tune, play the next
+without clicking anything, then stop that one: the line is written from where
+the last one ended to the moment you stopped, and the row is scheduled the
+usual way. It is the stretch you were playing in, so it is yours. Nothing is
+written when there is no line to follow on from — a day with nothing logged in
+it yet has no stretch to attribute, so start that one first.
 
 The drop-down beside **stop** is the choice the flags give you on the command
 line: `normal`, `short` (this one
@@ -225,13 +232,15 @@ practised from — and the forms that add more. Four kinds:
   another program's job. A tune you want offline is downloaded with that and
   attached as a file, with the URL kept beside it so you know where it came
   from.
-- **a score** (a MuseScore file), as a link that opens it.
+- **a score** — a MuseScore file, a PDF, anything your machine opens — as a
+  link. Nothing is checked but the path: the file is opened where it lies.
 - **text**: a fingering, a chord chart, a reminder about the bridge.
 
 Files are **referenced where they are and never copied**, so a path has to be
 absolute and has to point inside the folders the app is allowed to read —
-normally `~/Documents/MuseScore4/Scores/TUNES` and the app's own data
-directory. The media page lists them; set `MUSIC_TOOLS_MEDIA_ROOTS` (a
+normally your home directory and the app's own data directory — so file
+your music however you like. The roots are there to keep the app out of the
+machine's own files, not to tidy yours. The media page lists them; set `MUSIC_TOOLS_MEDIA_ROOTS` (a
 `:`-separated list, like `PATH`) to change them. Anything outside is refused
 with a message rather than quietly read.
 

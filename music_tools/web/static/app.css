@@ -242,3 +242,12 @@ button.remove {
 .edit-day:focus {
   color: var(--ink);
 }
+
+.problem {
+  color: var(--overdue);
+  margin: 0 0 1rem;
+}
+
+.problem:empty {
+  display: none;
+}

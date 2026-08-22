@@ -208,9 +208,17 @@ replaced all of it with three operations:
   is left alone; only a note may be written now.
 - **`stop_exercise`** is `finish_entry` addressed to an exercise instead of to a
   line of the log: it finishes the running entry when that entry is this
-  exercise's, and returns `None` — writing nothing — when it is not. Every row
-  on a module page carries a stop button, so a stop aimed anywhere else is a
-  click on the wrong row rather than an error.
+  exercise's, and returns `None` — writing nothing — when something else is
+  running. Every row on a module page carries a stop button, so a stop aimed
+  anywhere else is a click on the wrong row rather than an error. With
+  **nothing** running it is the start that was never clicked, and the line is
+  written backwards: `_backfill` opens it a microsecond after the day's last
+  line closed, snapshots it as a start would, and closes it at `now` through
+  the same `_finish`. That is the one place a line is written for time that was
+  not attributed as it happened — the stretch since the last close is bounded
+  by two clicks of the player's own, so it is honest — and it stops there: with
+  no line to follow on from, or with the last one ending at `now` or later,
+  nothing is written and no day is opened.
 - **`discard_entry`** deletes a running entry — the false start.
 
 `start_ad_hoc` is `start_exercise` with a typed description instead of an
@@ -288,11 +296,13 @@ entry running right now) counts towards the day total but has no subtotal.
 `domain/media.py` over them. Four decisions are load-bearing:
 
 - **Media is rows; files stay on disk.** A `media_source` per attachment,
-  `kind` (`file` | `youtube` | `musescore` | `text`) saying which of `path`,
+  `kind` (`file` | `youtube` | `score` | `text`) saying which of `path`,
   `url` and `body` means anything. Nothing is copied.
 - **Every path in is confined to configured roots.** `MUSIC_TOOLS_MEDIA_ROOTS`
-  (`:`-separated), defaulting to `~/Documents/MuseScore4/Scores/TUNES` plus the
-  app data directory. A path is resolved before it is compared, so `..` and a
+  (`:`-separated), defaulting to the home directory plus the app data
+  directory — the player's files, not the machine's, since a narrower default
+  turned out to be a guess about how one person files their music and refused
+  a real tune for it. A path is resolved before it is compared, so `..` and a
   symlink out of a root are refused rather than followed, and a relative path is
   refused outright. The check runs again when a file is *served*, because the
   roots can be narrowed after a row was written and a stored path is not a
@@ -385,12 +395,30 @@ Three rules hold this shape, and the tests in `tests/test_web.py` enforce them:
   things at once, so whichever
   piece was clicked answers and the rest ride along out of band
   (`hx-swap-oob`). Which one that is comes off the referer: a click on a module
-  page is targeting the exercise row, a click on the today page is targeting the
-  log. The same id must not appear twice in one response, or the swaps fight.
+  page is targeting that module's whole queue (`_queue.html`), a click on the
+  today page is targeting the log. The queue rather than the one row, because
+  these three writes move due dates and the queue is ordered by them — swapping
+  the row alone left it where the page had drawn it until a reload. The same id
+  must not appear twice in one response, or the swaps fight.
 - **Every action is a real form.** HTML forms send only GET and POST, so the
   inline edit is registered for both `PATCH` and `POST`, and a request without
   the `HX-Request` header gets a 303 back to the page it came from instead of a
   fragment. A broken `htmx.min.js` costs page reloads, not the app.
+- **A form never spans table cells.** The parser closes it at the first
+  `</td>`, and every box after that belongs to no form at all: it is left out
+  of the submit, and a save button beyond the cell submits nothing. Both edit
+  rows keep the `<form>` element inside one cell — the exercise row puts its
+  boxes there with it, the log's row spreads its boxes over the columns they
+  belong to and binds each one, and the save button, with `form="…"`. That
+  attribute is ordinary form ownership, so a plain submit carries the whole
+  row as well.
+- **A refusal is a message on the page.** The domain writes a sentence, the
+  route turns it into a status code, and `create_app`'s handler renders that
+  sentence: HTMX gets it retargeted to the `#problem` slot `base.html` carries
+  — the list the write was aimed at is left alone — and a browser with no
+  JavaScript gets the same message as a page. The page's `htmx-config` meta is
+  what makes it arrive at all: HTMX drops a 4xx body by default, which is why
+  a mistyped path used to be a click that did nothing and said nothing.
 - **Nothing is fetched over the network.** `htmx.min.js` is vendored in
   `static/`; there is no CDN link and no build step. Leaving Sheets was about
   practising with the network off.
