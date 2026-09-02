@@ -33,6 +33,7 @@ from music_tools.domain.catalogue import (
     delete_exercise,
     delete_module,
     module_overview,
+    move_exercises,
     rename_module,
     restore_exercise,
     restore_module,
@@ -313,6 +314,29 @@ def edit_exercise(
         f"{_module_name(conn, updated)}/{updated.name}"
         f"  {_tempo(updated)}  due {format_due(updated.next_due)}"
     )
+
+
+@practice.command("move")
+@click.argument("exercises", metavar="EXERCISE...", nargs=-1, required=True)
+@click.option(
+    "--to", "module_name", metavar="MODULE", required=True, help="Where they go."
+)
+@click.pass_context
+def move_rows(ctx: click.Context, exercises: tuple[str, ...], module_name: str) -> None:
+    """Move rows to another module, keeping their schedule and their log.
+
+    `--to` is an option rather than a second argument because `move A B C`
+    cannot say which of the three is the module. Say `MODULE/NAME` for a row
+    whose name lives in more than one module.
+    """
+    conn = _connect(ctx)
+    target = _find_module(conn, module_name)
+    found = [_resolve(conn, token) for token in exercises]
+    with _reporting():
+        moved = move_exercises(conn, [row.id for row in found], module_id=target.id)
+    click.echo(f"{_plural(len(moved), 'row')} in {target.name}:")
+    for row in moved:
+        click.echo(f"  {row.name}")
 
 
 @practice.command("archive")
