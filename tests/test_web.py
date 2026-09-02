@@ -9,6 +9,7 @@ injects them, so a test can pin "now" without `freezegun`.
 """
 
 from datetime import date, datetime, time
+from html.parser import HTMLParser
 
 import pytest
 from fastapi.testclient import TestClient
@@ -17,6 +18,7 @@ from music_tools.db import repository as repo
 from music_tools.db.connection import open_db
 from music_tools.db.migrate import migrate
 from music_tools.domain import media
+from music_tools.web import deps
 from music_tools.web.app import create_app
 from music_tools.web.deps import get_now, get_rng
 from tests.conftest import SteadyRandom
@@ -141,6 +143,12 @@ def sample_block(conn):
 
 
 # --- Step 1: the app factory ------------------------------------------------
+
+
+def test_the_templates_are_read_once_with_the_code_that_answers_them():
+    # a running server that picks up new markup while still running the old
+    # routes swaps fragments into targets those routes know nothing about
+    assert deps.env.auto_reload is False
 
 
 def test_the_root_page_is_the_practice_day(client):
@@ -696,6 +704,47 @@ def test_editing_a_day_puts_boxes_round_its_lines(client, earlier_days):
     assert 'href="/days/2026-06-06"' in response.text  # and a way back out
 
 
+def controls(page: str) -> list[dict[str, str]]:
+    """The boxes and buttons on a page, with the attributes they carry.
+
+    A form cannot span table cells — the browser closes it at the first
+    `</td>` — so a box in a later cell reaches its form only through the
+    `form` attribute. Reading that attribute back is as close as a
+    server-side test gets to the parse the browser will do.
+    """
+    found: list[dict[str, str]] = []
+
+    class Reader(HTMLParser):
+        def handle_starttag(self, tag, attrs):
+            if tag in {"input", "button", "select"}:
+                found.append({"tag": tag, **{key: value or "" for key, value in attrs}})
+
+    Reader().feed(page)
+    return found
+
+
+def test_every_box_on_an_edit_row_names_the_form_it_belongs_to(
+    client, conn, sample_block
+):
+    page = client.get("/days/2026-07-05/edit", headers=hx()).text
+    boxes = controls(page)
+
+    for entry in repo.entries_for_day(conn, sample_block.id):
+        form_id = f"entry-{entry.id}-edit"
+        assert f'id="{form_id}"' in page
+        mine = [box for box in boxes if box.get("form") == form_id]
+        assert {box["name"] for box in mine if box["tag"] == "input"} == {
+            "started_at",
+            "ended_at",
+            "description",
+            "notes",
+            "speed",
+            "log_group",
+        }
+        # the button too: it sits in the last cell, outside the form's element
+        assert [box for box in mine if box["tag"] == "button"]
+
+
 def test_leaving_edit_mode_gives_the_plain_day_back(client, earlier_days):
     response = client.get("/days/2026-06-06", headers=hx())
 
@@ -1082,6 +1131,38 @@ def test_stop_finishes_the_row_that_is_running(client, conn, le_freak, songs):
     assert running(conn) is None
 
 
+def test_stopping_a_row_re_sorts_the_queue_it_came_from(
+    client, conn, songs, le_freak, espresso
+):
+    # le freak is the overdue one, espresso is due on the 20th; stopping le
+    # freak schedules it past espresso, so the two swap places
+    start(client, le_freak.id)
+
+    response = stop(
+        client, le_freak.id, referer=f"http://localhost/modules/{songs.slug}"
+    )
+
+    assert 'id="queue"' in response.text  # the whole queue, not the row alone
+    assert response.text.index(f'id="exercise-{espresso.id}"') < response.text.index(
+        f'id="exercise-{le_freak.id}"'
+    )
+
+
+def test_done_from_a_module_page_re_sorts_the_queue_too(
+    client, conn, songs, le_freak, espresso
+):
+    start(client, le_freak.id)
+
+    response = client.post(
+        f"/entries/{running(conn).id}/done",
+        headers=hx(referer=f"http://localhost/modules/{songs.slug}"),
+    )
+
+    assert response.text.index(f'id="exercise-{espresso.id}"') < response.text.index(
+        f'id="exercise-{le_freak.id}"'
+    )
+
+
 def test_stop_takes_the_algorithm_the_row_chose(client, conn, le_freak, espresso):
     start(client, le_freak.id)
 
@@ -1116,6 +1197,30 @@ def test_stop_with_nothing_running_changes_nothing(client, conn, le_freak):
     after = repo.get_exercise(conn, le_freak.id)
     assert after is not None
     assert after.practiced_count == 8
+
+
+def test_stop_with_nothing_running_logs_the_stretch_since_the_last_line(
+    client, conn, le_freak
+):
+    day = repo.create_day(conn, day=TODAY)
+    repo.create_entry(
+        conn,
+        day_id=day.id,
+        started_at=datetime(2026, 7, 5, 21, 50),
+        ended_at=datetime(2026, 7, 5, 22, 20),
+        description="warm-up",
+    )
+
+    response = stop(client, le_freak.id)
+
+    assert response.status_code == 200
+    after = repo.get_exercise(conn, le_freak.id)
+    assert after is not None
+    assert after.practiced_count == 9
+    logged = repo.entries_for_day(conn, day.id)[-1]
+    assert logged.description == "le freak"
+    assert logged.started_at == datetime(2026, 7, 5, 22, 20, 0, 1)
+    assert logged.ended_at == NOW
 
 
 def test_stop_on_an_exercise_that_is_not_there_is_404(client, conn):
@@ -1206,6 +1311,66 @@ def test_a_path_outside_the_roots_is_refused_with_a_message(
     assert response.status_code == 400
     assert "outside the configured roots" in response.text
     assert media.exercise_media(conn, exercise_id=le_freak.id) == []
+
+
+def test_a_score_can_be_a_pdf(client, conn, le_freak, roots):
+    score = roots / "tune.pdf"
+    score.write_bytes(b"%PDF-1.4\n")
+
+    response = client.post(
+        f"/exercises/{le_freak.id}/media",
+        data={"kind": "score", "path": str(score)},
+        headers=hx(),
+    )
+
+    assert response.status_code == 200
+    cards = media.exercise_media(conn, exercise_id=le_freak.id)
+    assert [card.sources[0].path for card in cards] == [str(score)]
+
+
+def test_a_refusal_comes_back_where_htmx_will_show_it(
+    client, le_freak, roots, tmp_path
+):
+    outside = tmp_path / "elsewhere.pdf"
+    outside.write_bytes(b"")
+
+    response = client.post(
+        f"/exercises/{le_freak.id}/media",
+        data={"kind": "score", "path": str(outside)},
+        headers=hx(),
+    )
+
+    assert response.status_code == 400
+    # a 4xx lands in the slot the page keeps for it, not in the list it was
+    # aimed at: the attachment that is there already stays on screen
+    assert response.headers["HX-Retarget"] == "#problem"
+    assert response.headers["HX-Reswap"] == "outerHTML"
+    assert 'id="problem"' in response.text
+    assert "outside the configured roots" in response.text
+
+
+def test_a_refusal_without_htmx_is_a_page_rather_than_json(
+    client, le_freak, roots, tmp_path
+):
+    outside = tmp_path / "elsewhere.pdf"
+    outside.write_bytes(b"")
+
+    response = client.post(
+        f"/exercises/{le_freak.id}/media",
+        data={"kind": "score", "path": str(outside)},
+    )
+
+    assert response.status_code == 400
+    assert response.headers["content-type"].startswith("text/html")
+    assert "outside the configured roots" in response.text
+
+
+def test_the_page_carries_the_slot_a_refusal_lands_in(client, le_freak, roots):
+    page = client.get(f"/exercises/{le_freak.id}/media").text
+
+    assert 'id="problem"' in page
+    # htmx throws a 4xx body away unless the page's own config says otherwise
+    assert '"[45].."' in page
 
 
 def test_a_file_that_is_not_there_is_refused_with_a_message(client, le_freak, roots):

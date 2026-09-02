@@ -8,7 +8,12 @@ import sqlite3
 import pytest
 
 from music_tools.db.connection import open_db, transaction
-from music_tools.db.migrate import MigrationError, latest_version, migrate
+from music_tools.db.migrate import (
+    MIGRATIONS_DIR,
+    MigrationError,
+    latest_version,
+    migrate,
+)
 
 TABLES = {
     "module",
@@ -54,6 +59,35 @@ def test_the_module_table_does_not_track_an_instrument(db):
 
     assert "instrument" not in columns
     assert {"name", "slug", "log_group", "position"} <= columns
+
+
+def test_a_score_attached_before_the_rename_is_carried_over(memory_db):
+    # The kind was `musescore` until a PDF turned out to be just as good a
+    # score; 003 renames what is already attached rather than stranding it.
+    memory_db.executescript(
+        "BEGIN;"
+        + (MIGRATIONS_DIR / "001_initial.sql").read_text()
+        + (MIGRATIONS_DIR / "002_media.sql").read_text()
+        + "PRAGMA user_version = 2;COMMIT;"
+    )
+    with transaction(memory_db):
+        memory_db.execute(
+            "INSERT INTO module (name, slug, log_group, position)"
+            " VALUES ('SONGS', 'songs', 'REPERTOIRE', 0)"
+        )
+        memory_db.execute(
+            "INSERT INTO exercise (module_id, name, practiced_count)"
+            " VALUES (1, 'le freak', 0)"
+        )
+        memory_db.execute(
+            "INSERT INTO media_source (exercise_id, kind, path, position, added_at)"
+            " VALUES (1, 'musescore', '/tunes/le-freak.mscz', 0, '2026-08-20T21:00')"
+        )
+
+    migrate(memory_db)
+
+    kinds = [row[0] for row in memory_db.execute("SELECT kind FROM media_source")]
+    assert kinds == ["score"]
 
 
 def test_migrate_is_idempotent(memory_db):

@@ -1,0 +1,9 @@
+{# The same refusal for a browser with no JavaScript: a page saying what was
+   wrong, and the way back. The message itself is in the slot `base.html`
+   already carries. #}
+{% extends "base.html" %}
+{% block title %}{{ status }} — practice{% endblock %}
+{% block main %}
+<h1>That did not go in</h1>
+<p><a href="/">back to today</a></p>
+{% endblock %}

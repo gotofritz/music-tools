@@ -2,7 +2,7 @@
 
 An exercise used to be a name and a schedule; the tune itself lived in
 Transcribe!, in a folder of scores, on YouTube. Here it is attached: a local
-audio or video file, a YouTube URL, a MuseScore file, plain text — or several
+audio or video file, a YouTube URL, a score, plain text — or several
 at once, since one tune can be audio downloaded from a URL with the score kept
 in a file beside it.
 
@@ -12,11 +12,12 @@ load-bearing.
 
 - **Files stay on disk.** A source row holds an absolute path and nothing is
   ever copied — the rule since Phase 2.
-- **Every path in from the browser is confined to configured roots.** The
-  scores directory and the app data directory, unless
-  `MUSIC_TOOLS_MEDIA_ROOTS` says otherwise. The server binds `127.0.0.1` and
-  this is one user's machine, but `?path=/etc/passwd` is still a mistake worth
-  not making.
+- **Every path in from the browser is confined to configured roots.** The home
+  directory and the app data directory, unless `MUSIC_TOOLS_MEDIA_ROOTS` says
+  otherwise. The server binds `127.0.0.1` and this is one user's machine, so
+  the line is drawn between the player's own files and the machine's:
+  `?path=/etc/passwd` is still a mistake worth not making, and how someone
+  arranges their music is not this module's business.
 - **Every audio file is in a group, and most groups have one member.** A
   single file gets a group made for it, so a set of one and a set of stems are
   the same shape downstream: Phase 5b plays a set, and Phase 6 hangs markers
@@ -38,15 +39,21 @@ from music_tools.db.connection import default_db_path, transaction
 from music_tools.domain.models import MediaGroup, MediaSource
 
 #: What an attachment can be. `file` is audio or video and is the only kind
-#: that plays, which is why it is the only one with a group.
-KINDS = ("file", "youtube", "musescore", "text")
+#: that plays, which is why it is the only one with a group. A `score` is
+#: whatever opens as one — a MuseScore file, a PDF — and nothing reads it.
+KINDS = ("file", "youtube", "score", "text")
 
 #: The kinds that name something on disk.
-PATH_KINDS = ("file", "musescore")
+PATH_KINDS = ("file", "score")
 
 #: Where a path is allowed to point unless the environment says otherwise: the
-#: scores directory, and the directory the database lives in.
-DEFAULT_ROOTS = (Path("~/Documents/MuseScore4/Scores/TUNES"),)
+#: player's own home directory, and wherever the database lives. It started as
+#: the scores folder, which turned out to be a guess about how one person
+#: files their music — and being wrong about that refuses a real tune. The
+#: line worth holding is between the player's files and the machine's: `/etc`
+#: and `/var` are still refused, and `MUSIC_TOOLS_MEDIA_ROOTS` narrows this to
+#: anything tighter.
+DEFAULT_ROOTS = (Path("~"),)
 
 #: How many tracks one set may hold. Phase 5b holds every member decoded in
 #: memory at once, and eight four-minute stems is already a few hundred
@@ -206,9 +213,7 @@ def attach(
         raise NotFound(exercise_id)
 
     given = {"path": path, "url": url, "body": body}
-    wanted = {"file": "path", "musescore": "path", "youtube": "url", "text": "body"}[
-        kind
-    ]
+    wanted = {"file": "path", "score": "path", "youtube": "url", "text": "body"}[kind]
     for name, value in given.items():
         if name != wanted and value:
             raise BadMedia(f"a {kind} attachment has no {name}")

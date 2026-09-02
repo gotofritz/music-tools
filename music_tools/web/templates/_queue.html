@@ -1,0 +1,12 @@
+{# A module's queue, most overdue first.
+
+   The whole tbody is what anything that moves a due date answers with: a row
+   whose date changed has moved in the order too, and swapping the row on its
+   own left it sitting where it was until the page was reloaded. The header is
+   not in here — `_queue_head.html` does not change when the order does. #}
+<tbody id="queue">
+  {% for exercise in exercises %}
+  {% set module = modules_by_id[exercise.module_id] %}
+  {% include "_exercise_row.html" %}
+  {% endfor %}
+</tbody>
