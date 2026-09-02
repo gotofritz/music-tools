@@ -267,9 +267,9 @@ The page is a tick box per row and one bar under the table
 form, tied to it by `form="move"`, because a form cannot wrap rows that already
 carry forms — the browser and HTMX both read the attribute, so it degrades with
 the JavaScript off like everything else. The answer is the queue the rows left
-rather than a row, which is why the tbody is its own fragment
-(`_queue_rows.html`). The terminal says the same thing as
-`practice move EXERCISE... --to MODULE`.
+rather than a row — `_queue.html`, the same tbody that a start or a stop swaps,
+because a move takes rows off the page and there is no single row to hand back.
+The terminal says the same thing as `practice move EXERCISE... --to MODULE`.
 
 ### Archiving and deleting
 
