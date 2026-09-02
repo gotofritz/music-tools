@@ -16,11 +16,13 @@ import pytest
 from music_tools.db import repository as repo
 from music_tools.domain.catalogue import (
     InUse,
+    NotFound,
     archive_exercise,
     archive_module,
     delete_exercise,
     delete_module,
     module_overview,
+    move_exercises,
     rename_module,
     restore_exercise,
     restore_module,
@@ -253,3 +255,122 @@ def test_a_row_in_the_day_log_is_archived_rather_than_deleted(db, slap, steady_r
 
     assert "archive" in str(raised.value)
     assert repo.get_exercise(db, exercise.id) is not None
+
+
+# --- moving rows between modules --------------------------------------------
+
+
+def test_a_row_moves_with_its_schedule_and_its_media(db, slap, songs):
+    exercise = repo.create_exercise(
+        db,
+        module_id=slap.id,
+        name="le freak",
+        next_due=date(2026, 7, 9),
+        practiced_count=7,
+    )
+    source = repo.create_media_source(
+        db,
+        exercise_id=exercise.id,
+        kind="youtube",
+        url="https://youtu.be/lQ_0Vc8ZCEA",
+        position=1,
+        added_at=NOW,
+    )
+
+    moved = move_exercises(db, [exercise.id], module_id=songs.id)
+
+    assert [row.module_id for row in moved] == [songs.id]
+    kept = loaded(repo.get_exercise(db, exercise.id))
+    assert (kept.next_due, kept.practiced_count) == (date(2026, 7, 9), 7)
+    assert [
+        row.id for row in repo.media_sources_for_exercise(db, exercise_id=exercise.id)
+    ] == [source.id]
+
+
+def test_moving_a_row_leaves_the_day_log_as_it_was_written(db, slap, songs, steady_rng):
+    exercise = repo.create_exercise(db, module_id=slap.id, name="Stomp!")
+    result = practised(db, exercise.id, steady_rng)
+
+    move_exercises(db, [exercise.id], module_id=songs.id)
+
+    entry = loaded(repo.get_entry(db, result.closed.id))
+    assert (entry.exercise_id, entry.log_group) == (exercise.id, "TECHNIQUE")
+
+
+def test_several_rows_move_at_once(db, stocked):
+    slap, songs = stocked
+    rows = repo.exercises_due(db, module_id=slap.id)
+
+    move_exercises(db, [row.id for row in rows], module_id=songs.id)
+
+    assert repo.exercises_due(db, module_id=slap.id) == []
+    assert len(repo.exercises_due(db, module_id=songs.id)) == 4
+
+
+def test_a_name_the_target_already_uses_stops_the_whole_move(db, slap, songs):
+    keeper = repo.create_exercise(db, module_id=slap.id, name="Skips")
+    clashing = repo.create_exercise(db, module_id=slap.id, name="le freak")
+    repo.create_exercise(db, module_id=songs.id, name="LE FREAK")
+
+    with pytest.raises(InUse) as raised:
+        move_exercises(db, [keeper.id, clashing.id], module_id=songs.id)
+
+    assert "le freak" in str(raised.value)
+    assert [row.module_id for row in repo.exercises_due(db, module_id=slap.id)] == [
+        slap.id,
+        slap.id,
+    ]
+
+
+def test_two_rows_of_the_same_name_cannot_land_in_one_module(db, slap, songs):
+    one = repo.create_exercise(db, module_id=slap.id, name="Stomp!")
+    other = repo.create_exercise(db, module_id=songs.id, name="Stomp!")
+    target = repo.create_module(db, name="TECHNIQUE", log_group="TECHNIQUE")
+
+    with pytest.raises(InUse):
+        move_exercises(db, [one.id, other.id], module_id=target.id)
+
+    assert repo.exercises_due(db, module_id=target.id) == []
+
+
+def test_an_archived_name_in_the_target_does_not_block_the_move(db, slap, songs):
+    gone = repo.create_exercise(db, module_id=songs.id, name="le freak")
+    archive_exercise(db, gone.id, now=NOW)
+    exercise = repo.create_exercise(db, module_id=slap.id, name="le freak")
+
+    moved = move_exercises(db, [exercise.id], module_id=songs.id)
+
+    assert [row.module_id for row in moved] == [songs.id]
+
+
+def test_a_row_already_in_the_target_is_left_where_it_is(db, songs):
+    exercise = repo.create_exercise(db, module_id=songs.id, name="le freak")
+
+    moved = move_exercises(db, [exercise.id], module_id=songs.id)
+
+    assert [row.id for row in moved] == [exercise.id]
+    assert len(repo.exercises_due(db, module_id=songs.id)) == 1
+
+
+def test_moving_nothing_is_not_an_error(db, songs):
+    assert move_exercises(db, [], module_id=songs.id) == []
+
+
+def test_an_archived_row_is_restored_before_it_is_moved(db, slap, songs):
+    exercise = repo.create_exercise(db, module_id=slap.id, name="Stomp!")
+    archive_exercise(db, exercise.id, now=NOW)
+
+    with pytest.raises(NotFound):
+        move_exercises(db, [exercise.id], module_id=songs.id)
+
+    assert loaded(repo.get_exercise(db, exercise.id)).module_id == slap.id
+
+
+def test_rows_are_not_moved_into_an_archived_module(db, slap, songs):
+    exercise = repo.create_exercise(db, module_id=slap.id, name="Stomp!")
+    archive_module(db, songs.id, now=NOW)
+
+    with pytest.raises(NotFound):
+        move_exercises(db, [exercise.id], module_id=songs.id)
+
+    assert loaded(repo.get_exercise(db, exercise.id)).module_id == slap.id
