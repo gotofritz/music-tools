@@ -17,6 +17,7 @@ uv run practice next SONGS           # that module's rows, most overdue first
 uv run practice start "le freak"     # playing it now: it goes into the log
 uv run practice done                 # schedule it, and close the line
 uv run practice log                  # today's block, with subtotals
+uv run practice move "le freak" --to SLAP   # filed under the wrong module
 ```
 
 An exercise also carries its material: audio or video files, a YouTube URL, a
@@ -29,10 +30,13 @@ confined to the configured roots.
 card carrying the material for whatever is being practised right now, and a day
 log that fills itself in. Every row of a module carries a **start** and a
 **stop** button — starting one row closes whichever was running and schedules
-it the normal way, and stop is how you choose the interval instead. It needs no
-network — the one JavaScript file it uses
-is served from the package, and only a YouTube attachment reaches out — and it
-works with the JavaScript off, more slowly.
+it the normal way, and stop is how you choose the interval instead. Rows filed
+in the wrong module are ticked and **moved** to another one, in bulk, keeping
+their schedule and their history.
+
+It needs no network — the one JavaScript file it uses is served from the
+package, and only a YouTube attachment reaches out — and it works with the
+JavaScript off, more slowly.
 
 **`loop`** is the audio half. Give it a few seconds of
 audio, a marker file exported from Transcribe!, and a short YAML file saying

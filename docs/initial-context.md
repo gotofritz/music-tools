@@ -48,7 +48,8 @@ music_tools/
         models.py        Module, Exercise, PracticeDay, PracticeEntry, ...
         tempo.py         the speed grammar
         scheduling.py    the five algorithms, pure
-        catalogue.py     modules and their rows: CRUD, and what may be deleted
+        catalogue.py     modules and their rows: CRUD, moving, and what may
+                         be deleted
         media.py         attachments: kinds, the roots guard, track sets
         session.py       start an exercise, finish it, discard it, day totals
     web/
@@ -124,7 +125,7 @@ Three rules hold the shape:
   writes are composed.** They open one transaction per operation and call the
   repository inside it. `session.py` is a practice session — start, done,
   discard, the totals. `catalogue.py` is the shape of the catalogue itself —
-  modules, their rows, and what may be renamed, archived or deleted.
+  modules, their rows, and what may be renamed, moved, archived or deleted.
   `media.py` is the material hanging off a row — which kind carries which
   column, where a path may point, and what makes several files one set.
 - **`db/repository.py` never opens a transaction** and never makes a decision.
@@ -241,6 +242,34 @@ invented time — it is the dangling `FROM` the sheet left behind.
 `start_day` survives as "open today's block", with no entry and no clock:
 starting an exercise opens the day anyway, so it is only for a day that wants
 notes on it before anything is played.
+
+### Moving a row between modules
+
+`catalogue.move_exercises` writes `exercise.module_id` and nothing else, so the
+row keeps its id and its schedule, its media and every day-log entry pointing
+at it come with it. There is no migration behind the feature: `module_id` was
+always a column.
+
+- **Names stay unique within a module.** Arriving by a move is the third way to
+  collide, after `add_exercise` and a rename, and it is refused the same way.
+  An *archived* row of that name in the target does not block the move —
+  `find_exercises` is live-only, and `restore_exercise` owns the other side of
+  that trade.
+- **A bulk move is all-or-nothing.** The clash check runs over every row before
+  any of them is written, inside one transaction: half a move cannot be read
+  off the page it leaves behind.
+- **The log does not follow.** An entry snapshots its `log_group` when it is
+  started, so finished days read as they always did and only what is practised
+  from now on subtotals into the new module's group.
+
+The page is a tick box per row and one bar under the table
+(`POST /modules/{slug}/move`). The boxes sit in the rows but belong to the bar's
+form, tied to it by `form="move"`, because a form cannot wrap rows that already
+carry forms — the browser and HTMX both read the attribute, so it degrades with
+the JavaScript off like everything else. The answer is the queue the rows left
+rather than a row, which is why the tbody is its own fragment
+(`_queue_rows.html`). The terminal says the same thing as
+`practice move EXERCISE... --to MODULE`.
 
 ### Archiving and deleting
 

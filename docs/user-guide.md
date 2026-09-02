@@ -350,6 +350,34 @@ uv run practice speed "Stomp!" 85%             # shorthand for edit --speed
 Editing a row never rewrites the day log. What you played last Tuesday was
 called what it was called last Tuesday.
 
+## Moving a row to another module
+
+A lick you filed under SONGS turns out to be slap practice; a tune you were
+drilling as TECHNIQUE has become repertoire. Move it rather than typing it out
+again somewhere else:
+
+```bash
+uv run practice move "Stomp!" --to SLAP
+uv run practice move espresso "love me jeje" --to SLAP   # several at once
+uv run practice move SONGS/espresso --to SLAP            # if the name repeats
+```
+
+On the page, every row in a module has a tick box, and under the table there is
+a **move ticked rows to** picker: tick as many as you like, choose the module,
+click **move**. They leave the queue you are looking at and turn up in the
+other one.
+
+The row takes everything with it — how many times you have played it, when it
+is next due, the speed, the files attached to it. **The day log does not
+change**: what you practised on Tuesday still says what it said on Tuesday, and
+still counts towards the bucket it counted towards then. Only what you play
+from now on subtotals into the new module's log group.
+
+Two rows in one module cannot have the same name, so a move into a module that
+already has that name is refused, and nothing moves — not even the other rows
+you ticked. Rename one of them, or archive the one you have finished with.
+Archived rows are not moved at all; `restore` them first.
+
 ## Putting things away
 
 Two ways, and the difference matters:
