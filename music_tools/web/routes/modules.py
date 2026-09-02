@@ -3,6 +3,9 @@
 `PATCH /exercises/{id}` is registered for `POST` as well. HTML forms only send
 GET and POST, so the same handler answers both: with JavaScript HTMX sends the
 PATCH, and without it the form still submits.
+
+Every write here answers with the row it changed, except a move: that one
+takes rows off the page, so it answers with the queue they left.
 """
 
 import sqlite3
@@ -39,6 +42,37 @@ def module_page(
             **views.chrome(conn, now=now),
         )
     )
+
+
+@router.post("/modules/{slug}/move")
+def move_rows(
+    request: Request,
+    slug: str,
+    module_id: int = Form(...),
+    exercise_id: list[int] = Form(default=[]),
+    conn: sqlite3.Connection = Depends(get_conn),
+    now: datetime = Depends(get_now),
+) -> Response:
+    """Move the ticked rows out of this module, and redraw the queue they left.
+
+    The module they leave is in the path rather than the form: it is the page
+    answering, and `/exercises/move` would be read as an exercise called
+    "move" by the route above it.
+
+    Nothing ticked is a quiet no-op — a mis-click is not worth an error page —
+    and a name the target already uses stops the whole move rather than the
+    row it collides with, so the queue that comes back is never half a move.
+    """
+    module = _module(conn, slug)
+    try:
+        catalogue.move_exercises(conn, exercise_id, module_id=module_id)
+    except catalogue.NotFound:
+        raise HTTPException(
+            status_code=404, detail="no module or exercise with that id"
+        ) from None
+    except catalogue.InUse as clash:
+        raise HTTPException(status_code=409, detail=str(clash)) from None
+    return fragment_or_redirect(request, _queue(conn, module, now=now))
 
 
 @router.api_route("/exercises/{exercise_id}", methods=["PATCH", "POST"])
@@ -160,6 +194,16 @@ def _module(conn: sqlite3.Connection, slug: str) -> Module:
     if module is None or module.archived_at is not None:
         raise HTTPException(status_code=404, detail=f"no module called {slug}")
     return module
+
+
+def _queue(conn: sqlite3.Connection, module: Module, *, now: datetime) -> str:
+    """The module's rows as they now stand — the tbody, not one row of it."""
+    return render(
+        "_queue.html",
+        exercises=repo.exercises_due(conn, module_id=module.id),
+        modules_by_id=views.modules_by_id(conn),
+        **views.chrome(conn, now=now),
+    )
 
 
 def _row(conn: sqlite3.Connection, exercise: Exercise, *, now: datetime) -> str:

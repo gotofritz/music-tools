@@ -339,6 +339,56 @@ def test_a_row_can_be_edited_archived_and_deleted(stocked, run):
     assert "Espresso" not in run("module", "show", "SONGS").output
 
 
+def test_a_row_moves_to_another_module(stocked, run):
+    run("module", "add", "SLAP", "--log-group", "TECHNIQUE")
+
+    result = run("move", "espresso", "--to", "SLAP")
+
+    assert result.exit_code == 0
+    assert "espresso" in run("module", "show", "SLAP").output
+    assert "espresso" not in run("module", "show", "SONGS").output
+
+
+def test_several_rows_move_in_one_go(stocked, run):
+    run("module", "add", "SLAP", "--log-group", "TECHNIQUE")
+
+    result = run("move", "espresso", "love me jeje", "--to", "SLAP")
+
+    assert result.exit_code == 0
+    shown = run("module", "show", "SLAP").output
+    assert "espresso" in shown
+    assert "love me jeje" in shown
+
+
+def test_a_moved_row_keeps_its_schedule(stocked, run):
+    run("module", "add", "SLAP", "--log-group", "TECHNIQUE")
+    run("done", "le freak")
+    before = run("module", "show", "SONGS").output
+
+    run("move", "le freak", "--to", "SLAP")
+
+    assert "x1" in before
+    assert "x1" in run("module", "show", "SLAP").output
+
+
+def test_moving_to_a_module_that_is_not_there_is_a_message(stocked, run):
+    result = run("move", "espresso", "--to", "SLAP")
+
+    assert result.exit_code != 0
+    assert "no module called SLAP" in result.output
+
+
+def test_a_name_the_target_already_uses_is_a_message(stocked, run):
+    run("module", "add", "SLAP", "--log-group", "TECHNIQUE")
+    run("add", "SLAP", "espresso")
+
+    result = run("move", "SONGS/espresso", "--to", "SLAP")
+
+    assert result.exit_code != 0
+    assert "already a row called espresso" in result.output
+    assert "espresso" in run("module", "show", "SONGS").output
+
+
 def test_a_row_in_the_log_is_not_deleted(stocked, run):
     run("done", "le freak")
 

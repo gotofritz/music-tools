@@ -1573,3 +1573,173 @@ def test_attaching_without_htmx_redirects_back_to_the_media_page(
 
 def test_the_media_page_is_404_for_an_exercise_that_is_not_there(client):
     assert client.get("/exercises/404/media").status_code == 404
+
+
+# --- Moving rows between modules (#29) --------------------------------------
+
+
+def move(client, *, from_slug: str, module_id: int, exercise_ids: list[int], **headers):
+    """The click the move bar sends: the ticked rows, and where they go."""
+    return client.post(
+        f"/modules/{from_slug}/move",
+        data={
+            "module_id": str(module_id),
+            "exercise_id": [str(exercise_id) for exercise_id in exercise_ids],
+        },
+        headers=hx(**headers),
+    )
+
+
+def test_ticked_rows_leave_the_queue_they_were_on(
+    client, conn, slap, songs, le_freak, espresso
+):
+    response = move(
+        client,
+        from_slug="songs",
+        module_id=slap.id,
+        exercise_ids=[le_freak.id, espresso.id],
+    )
+
+    assert response.status_code == 200
+    assert repo.exercises_due(conn, module_id=songs.id) == []
+    assert [row.name for row in repo.exercises_due(conn, module_id=slap.id)] == [
+        "le freak",
+        "espresso",
+    ]
+
+
+def test_the_answer_is_the_queue_the_rows_left(client, slap, songs, le_freak, espresso):
+    """A move takes rows off the page, so the fragment is the whole tbody."""
+    response = move(
+        client, from_slug="songs", module_id=slap.id, exercise_ids=[le_freak.id]
+    )
+
+    assert f'id="exercise-{espresso.id}"' in response.text
+    assert f'id="exercise-{le_freak.id}"' not in response.text
+
+
+def test_moving_one_row_is_one_ticked_box(client, conn, slap, songs, le_freak):
+    response = move(
+        client, from_slug="songs", module_id=slap.id, exercise_ids=[le_freak.id]
+    )
+
+    assert response.status_code == 200
+    assert [row.module_id for row in repo.find_exercises(conn, "le freak")] == [slap.id]
+
+
+def test_a_move_keeps_the_schedule_and_the_log(client, conn, slap, songs, le_freak):
+    start(client, le_freak.id)
+    stop(client, le_freak.id)
+    before = repo.get_exercise(conn, le_freak.id)
+    assert before is not None
+
+    move(client, from_slug="songs", module_id=slap.id, exercise_ids=[le_freak.id])
+
+    after = repo.get_exercise(conn, le_freak.id)
+    assert after is not None
+    assert (after.next_due, after.practiced_count) == (
+        before.next_due,
+        before.practiced_count,
+    )
+    day = repo.get_day(conn, TODAY)
+    assert day is not None
+    entries = repo.entries_for_day(conn, day.id)
+    assert [entry.log_group for entry in entries] == ["REPERTOIRE"]
+
+
+def test_ticking_nothing_moves_nothing(client, conn, slap, songs, le_freak):
+    response = move(client, from_slug="songs", module_id=slap.id, exercise_ids=[])
+
+    assert response.status_code == 200
+    assert [row.name for row in repo.exercises_due(conn, module_id=songs.id)] == [
+        "le freak"
+    ]
+
+
+def test_a_name_the_target_already_uses_is_refused(client, conn, slap, songs, le_freak):
+    twin = repo.create_exercise(conn, module_id=slap.id, name="le freak")
+
+    response = move(
+        client, from_slug="songs", module_id=slap.id, exercise_ids=[le_freak.id]
+    )
+
+    assert response.status_code == 409
+    assert [row.module_id for row in repo.exercises_due(conn, module_id=songs.id)] == [
+        songs.id
+    ]
+    assert [row.id for row in repo.exercises_due(conn, module_id=slap.id)] == [twin.id]
+
+
+def test_moving_into_a_module_that_is_not_there_is_404(client, songs, le_freak):
+    response = move(
+        client, from_slug="songs", module_id=404, exercise_ids=[le_freak.id]
+    )
+
+    assert response.status_code == 404
+
+
+def test_moving_a_row_that_is_not_there_is_404(client, slap, songs):
+    assert (
+        move(
+            client, from_slug="songs", module_id=slap.id, exercise_ids=[404]
+        ).status_code
+        == 404
+    )
+
+
+def test_moving_from_a_module_that_is_not_there_is_404(client, slap, le_freak):
+    response = move(
+        client, from_slug="nope", module_id=slap.id, exercise_ids=[le_freak.id]
+    )
+
+    assert response.status_code == 404
+
+
+def test_a_move_without_htmx_redirects_back_to_the_page(client, slap, songs, le_freak):
+    """No JavaScript: the checkboxes are still in the form, the form still posts."""
+    response = client.post(
+        "/modules/songs/move",
+        data={
+            "module_id": str(slap.id),
+            "exercise_id": [str(le_freak.id)],
+        },
+        headers={"Referer": "http://testserver/modules/songs"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/modules/songs"
+
+
+def test_the_move_bar_offers_every_other_live_module(client, slap, songs, le_freak):
+    page = client.get("/modules/songs").text
+
+    assert f'<option value="{slap.id}">SLAP</option>' in page
+    assert f'<option value="{songs.id}">' not in page
+
+
+def test_a_row_carries_a_tick_box_tied_to_the_move_form(client, songs, le_freak):
+    page = client.get("/modules/songs").text
+    row = page[page.index('id="exercise-%d"' % le_freak.id) :]
+    row = row[: row.index("</tr>")]
+
+    assert 'name="exercise_id"' in row
+    assert f'value="{le_freak.id}"' in row
+    assert 'form="move"' in row
+
+
+def test_with_nowhere_to_move_to_there_is_no_move_bar(client, songs, le_freak):
+    """One module is the whole catalogue: the bar would offer nothing."""
+    page = client.get("/modules/songs").text
+
+    assert 'id="move"' not in page
+
+
+def test_an_archived_module_is_not_offered_as_a_target(
+    client, conn, slap, songs, le_freak
+):
+    repo.update_module(conn, slap.id, archived_at=NOW)
+
+    page = client.get("/modules/songs").text
+
+    assert 'id="move"' not in page

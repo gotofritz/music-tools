@@ -251,3 +251,20 @@ button.remove {
 .problem:empty {
   display: none;
 }
+
+/* The tick column and the move bar: a row changes module without being retyped. */
+th.pick,
+td.pick {
+  width: 1.5rem;
+}
+
+.move {
+  display: block;
+  margin: 0.75rem 0 1.25rem;
+  color: var(--muted);
+}
+
+.move select,
+.move button {
+  margin-left: 0.35rem;
+}

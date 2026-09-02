@@ -17,6 +17,7 @@ something is a decision, and `db/repository.py` does not make those:
 """
 
 import sqlite3
+from collections.abc import Sequence
 from datetime import date, datetime
 
 from pydantic import BaseModel
@@ -148,6 +149,45 @@ def update_exercise(conn: sqlite3.Connection, exercise_id: int, **fields) -> Exe
         if clash:
             raise InUse(f"there is already a row called {clash[0].name} here")
     return repo.update_exercise(conn, exercise.id, **fields)
+
+
+def move_exercises(
+    conn: sqlite3.Connection, exercise_ids: Sequence[int], *, module_id: int
+) -> list[Exercise]:
+    """Move rows to another module, keeping their schedule and their history.
+
+    The row keeps its id, so its dates, its count, its media and every day-log
+    entry pointing at it come with it. The log itself does not follow: an entry
+    snapshots its `log_group` when it is started, so finished days read as they
+    always did and only what is practised from now on subtotals into the new
+    module's group.
+
+    The whole move is one transaction. A name the target already uses stops all
+    of it rather than the row it collides with, because a half-finished bulk
+    move cannot be read off the page it leaves behind.
+    """
+    target = _module(conn, module_id)
+    rows = [_exercise(conn, exercise_id) for exercise_id in exercise_ids]
+    moving = [row for row in rows if row.module_id != target.id]
+    _refuse_name_clash(conn, moving, target)
+    with transaction(conn):
+        moved = {
+            row.id: repo.update_exercise(conn, row.id, module_id=target.id)
+            for row in moving
+        }
+    return [moved.get(row.id, row) for row in rows]
+
+
+def _refuse_name_clash(
+    conn: sqlite3.Connection, moving: list[Exercise], target: Module
+) -> None:
+    """Names are unique within a module, whichever way a row arrives in one."""
+    taken: set[str] = set()
+    for row in moving:
+        name = row.name.strip().lower()
+        if name in taken or repo.find_exercises(conn, row.name, module_id=target.id):
+            raise InUse(f"there is already a row called {row.name} in {target.name}")
+        taken.add(name)
 
 
 def archive_exercise(
