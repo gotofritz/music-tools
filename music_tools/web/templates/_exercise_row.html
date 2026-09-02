@@ -2,9 +2,17 @@
 
    The edit form lives in one cell: a form that spanned several would be
    hoisted out of the table by the browser. It is a real form with a real
-   action, so it works with the JavaScript off. #}
+   action, so it works with the JavaScript off.
+
+   The tick box belongs to the move form below the table for the same reason —
+   a form cannot wrap rows that already contain forms — so it says which one it
+   is in with `form="move"`, which both the browser and HTMX read. #}
 <tr id="exercise-{{ exercise.id }}"
     class="{% if exercise.next_due and exercise.next_due <= today %}overdue{% endif %}">
+  <td class="pick">
+    <input type="checkbox" name="exercise_id" value="{{ exercise.id }}" form="move"
+           aria-label="move {{ exercise.name }}">
+  </td>
   <td>{{ module.name }}</td>
   <td class="name">
     <form action="/exercises/{{ exercise.id }}" method="post"

@@ -63,6 +63,11 @@ intact, and the same is available from the terminal.
 - **The answer to a move is the whole queue, not a row.** Every other write in
   the app swaps one `#exercise-{id}` back; a move takes rows *off* the page, so
   the fragment is the tbody (`_queue_rows.html`), targeted `innerHTML`.
+- **The module the rows leave is in the path: `POST /modules/{slug}/move`.** It
+  is the page answering, so it addresses the page. `POST /exercises/move` was
+  the first shape and is wrong twice over: `/exercises/{exercise_id}` is
+  declared above it and reads `move` as an id (422 before the handler is
+  reached), and the source module then has to travel as a hidden field.
 - **The CLI keeps parity**, as it has for every catalogue verb:
   `practice move EXERCISE... --to MODULE`. Exercises are variadic and `--to` is
   a named option, because `move A B C` cannot say which of the three is the
@@ -103,11 +108,11 @@ naming the first row whose name is taken in the target.
 
 ### The route
 
-`POST /exercises/move`, form-encoded:
+`POST /modules/{slug}/move` — `slug` is the module the rows leave, and the
+body is form-encoded:
 
 | field | | |
 | --- | --- | --- |
-| `from_slug` | hidden | the module whose queue answers |
 | `module_id` | select | where the ticked rows go |
 | `exercise_id` | checkbox, repeated | which rows move |
 
@@ -122,7 +127,7 @@ TDD throughout (`red → green → refactor`), one commit a step.
    the schedule and the media survive; the day log keeps its snapshot; a clash
    in the target is refused and *nothing* moves; an archived row and an
    archived target are `NotFound`; a row already in the target is a no-op.
-2. **`POST /exercises/move`.** Tests in `test_web.py`: ticking two rows empties
+2. **`POST /modules/{slug}/move`.** Tests in `test_web.py`: ticking two rows empties
    them out of the answering queue and puts them in the other module; the
    response is the tbody; nothing ticked changes nothing; a clash is 409 and
    leaves both queues alone; a plain form post (no `HX-Request`) redirects back.

@@ -12,6 +12,22 @@
 {% if not exercises %}
 <p>Nothing in this module yet.</p>
 {% endif %}
+{% set targets = modules | rejectattr("id", "equalto", module.id) | list %}
+{% if targets %}
+{# The ticked rows and where they go. Nothing ticked is a quiet no-op: a
+   mis-click is not worth an error page. #}
+<form id="move" class="move" action="/modules/{{ module.slug }}/move" method="post"
+      hx-post="/modules/{{ module.slug }}/move" hx-target="#queue"
+      hx-swap="outerHTML">
+  <label for="move-to">move ticked rows to</label>
+  <select id="move-to" name="module_id">
+    {% for target in targets %}
+    <option value="{{ target.id }}">{{ target.name }}</option>
+    {% endfor %}
+  </select>
+  <button type="submit">move</button>
+</form>
+{% endif %}
 
 <section id="add">
   <h2>Add a row</h2>
