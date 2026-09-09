@@ -526,6 +526,10 @@ loud:
 - **A trailing bar marker with no beats under it closes the score** rather than
   opening a bar. It lands in `score.end_marker`, is addressable, and is never
   played.
+- **Nothing past the end of the score is part of it.** A marker labelled `end`
+  drops the rest of the file outright; a text block written past a score closed
+  any other way lands in `score.outside`, out of `by_name` and reported as
+  dropped. Either way an address there would open a span with no audio in it.
 - **A short first bar is a pickup**, numbered 0 the way MuseScore numbers one,
   so `[1]` stays the first full bar. `modal_beats` breaks a tie toward the
   longer count, so a 2+4+4+2 loop reads as two full bars between two partial

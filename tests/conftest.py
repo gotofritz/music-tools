@@ -32,6 +32,8 @@ DURATIONS = {
     "endmarker": 6.0,
     # longer than the score: the bare 93 marker closes it at 6.0
     "twoway": 7.0,
+    # longer again: the bare A21 closes the score at 4.0, and M7 is past it
+    "pastend": 4.5,
 }
 
 

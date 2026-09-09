@@ -569,6 +569,9 @@ Four rules cover the rest:
   of nothing, because the first is closed by the second. `[1-2][1-2]` is bar 1
   played twice.
 - **`END` always means the end of the snippet**, wherever you write it.
+- **Nothing past the end of the score counts.** A text block you dropped
+  after the last barline is not part of the passage, so it cannot open or
+  close a span. The tool lists what it dropped, and where.
 
 A trailing `x` silences a span — unless a bar really is *called* `D51x`, in
 which case `[D51x]` plays it. Names win.
@@ -650,6 +653,9 @@ The messages are meant to be read. A few common ones:
 - **"has nowhere to run"** — a span is closed by the one after it, and the one
   after it starts earlier. Either put the spans in time order, or give this
   one an end of its own.
+- **"M7 is at 4.500s, past the end of the score at 4.000s"** — the text block
+  is written after the passage ends, so there is nothing there to play. Use a
+  block inside the passage, or `END` if you meant the end of it.
 - **"Markers run past the end of the snippet"** — the marker file and the
   audio are not the same passage.
 - **"beats has 16 characters but the markers define 15 beats"** — count them

@@ -7,7 +7,15 @@ changes it says so. See docs/plans/01-foundations.md, "Honest caveat".
 import click
 import pytest
 
-from music_tools.loop import Bar, Beat, Score, modal_beats, parse_markers, report
+from music_tools.loop import (
+    Bar,
+    Beat,
+    Score,
+    describe,
+    modal_beats,
+    parse_markers,
+    report,
+)
 
 
 def bar_named(score, name):
@@ -100,6 +108,55 @@ def test_a_marker_labelled_end_truncates_the_score(build_score):
     assert [bar.name for bar in score.bars] == ["E1", "E2"]
     assert score.duration == pytest.approx(4.0)
     assert score.address("E3") is None
+
+
+def test_a_text_block_past_the_end_of_the_score_is_dropped(build_score):
+    """The bare A21 closes the score at 4.0s, and M7 is written after it.
+
+    A marker labelled "end" already stops the score dead; the closing bar
+    marker has to mean the same thing, or M7 stays addressable and resolves
+    to a span with nothing in it.
+    """
+    score = build_score("pastend")
+
+    assert [block.name for block in score.textblocks] == ["M4"]
+    assert [block.name for block in score.outside] == ["M7"]
+    assert score.address("M7") is None
+
+
+def test_a_text_block_on_the_end_of_the_score_is_kept(write_markers):
+    """It names the same point as END, which a span may still end on."""
+    path = write_markers("""
+0:00:10.000000 Marker (measure): "A1"
+0:00:10.500000 Marker (beat): ""
+0:00:11.000000 Marker (beat): ""
+0:00:11.500000 Marker (beat): ""
+0:00:12.000000 Marker (measure): "A2"
+0:00:12.000000 Textblock (yellow):
+STOP
+""")
+    score = Score.build(parse_markers(path), 3.0)
+
+    assert [block.name for block in score.textblocks] == ["STOP"]
+    assert score.outside == []
+    assert score.address("STOP") == pytest.approx(2.0)
+
+
+def test_report_names_the_text_blocks_it_dropped(build_score, capsys):
+    report(build_score("pastend"))
+    printed = capsys.readouterr().out
+
+    assert "Text blocks: M4" in printed
+    assert "M7 at 4.500s" in printed
+    assert "past the end of the score at 4.000s" in printed
+
+
+def test_the_score_as_read_shows_a_dropped_text_block_after_the_end(build_score):
+    """Otherwise the report names M7 and the dump it points at does not."""
+    lines = describe(build_score("pastend"))
+
+    assert lines[-2].strip().startswith("[A21] [END]")
+    assert "[M7] 4.500" in lines[-1]
 
 
 def test_jackson5_has_five_beats_in_a3(build_score):

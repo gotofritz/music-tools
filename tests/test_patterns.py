@@ -190,6 +190,19 @@ def test_a_span_starting_at_the_end_has_nothing_left_to_play(build_score):
     assert "already the end of the snippet" in message
 
 
+def test_a_text_block_past_the_end_says_where_it_is(build_score):
+    """Saying no such block is a lie when the file plainly has one."""
+    message = fails(build_score("pastend"), "[M7]")
+
+    assert "M7 is at 4.500s, past the end of the score at 4.000s" in message
+
+
+def test_a_span_ending_on_a_dropped_text_block_says_the_same(build_score):
+    message = fails(build_score("pastend"), "[A20-M7]")
+
+    assert "M7 is at 4.500s, past the end of the score at 4.000s" in message
+
+
 def test_curly_brackets_point_at_square_ones(d51):
     message = fails(d51, "{JOHN}")
 
