@@ -569,9 +569,11 @@ Four rules cover the rest:
   of nothing, because the first is closed by the second. `[1-2][1-2]` is bar 1
   played twice.
 - **`END` always means the end of the snippet**, wherever you write it.
-- **Nothing past the end of the score counts.** A text block you dropped
-  after the last barline is not part of the passage, so it cannot open or
-  close a span. The tool lists what it dropped, and where.
+- **A mark past the end of the snippet can close a span, but not open one.**
+  Cut a loop on a barline and the hit just after it is still in the marker
+  file. `[M6-M7]` is fine — it stops where the audio does. `[M7]` on its own
+  has no audio in front of it, so it is skipped, with a warning naming it,
+  and the rest of the pattern plays as written.
 
 A trailing `x` silences a span — unless a bar really is *called* `D51x`, in
 which case `[D51x]` plays it. Names win.
@@ -653,9 +655,10 @@ The messages are meant to be read. A few common ones:
 - **"has nowhere to run"** — a span is closed by the one after it, and the one
   after it starts earlier. Either put the spans in time order, or give this
   one an end of its own.
-- **"M7 is at 4.500s, past the end of the score at 4.000s"** — the text block
-  is written after the passage ends, so there is nothing there to play. Use a
-  block inside the passage, or `END` if you meant the end of it.
+- **"Skipped [M7]: past the end of the score"** — a warning, not an error. The
+  block is written after the snippet stops, so that one span is dropped and
+  everything else plays. Re-export the snippet a little longer if you meant to
+  include it. Where a pattern has nothing else in it, it is an error instead.
 - **"Markers run past the end of the snippet"** — the marker file and the
   audio are not the same passage.
 - **"beats has 16 characters but the markers define 15 beats"** — count them

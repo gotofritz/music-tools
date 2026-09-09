@@ -526,10 +526,12 @@ loud:
 - **A trailing bar marker with no beats under it closes the score** rather than
   opening a bar. It lands in `score.end_marker`, is addressable, and is never
   played.
-- **Nothing past the end of the score is part of it.** A marker labelled `end`
-  drops the rest of the file outright; a text block written past a score closed
-  any other way lands in `score.outside`, out of `by_name` and reported as
-  dropped. Either way an address there would open a span with no audio in it.
+- **A marker past the end of the score still names a point.** A text block
+  written after the snippet stops stays addressable, so a span may end on it,
+  and `parse_pattern` clamps that end to the score. A span *opening* there has
+  no audio in front of it and is skipped, once per point in time
+  (`score.warned`), which keeps a drill's dozens of sections from repeating
+  the same warning. A pattern with nothing left after that is an error.
 - **A short first bar is a pickup**, numbered 0 the way MuseScore numbers one,
   so `[1]` stays the first full bar. `modal_beats` breaks a tie toward the
   longer count, so a 2+4+4+2 loop reads as two full bars between two partial

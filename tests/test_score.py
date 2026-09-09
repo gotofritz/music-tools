@@ -110,18 +110,18 @@ def test_a_marker_labelled_end_truncates_the_score(build_score):
     assert score.address("E3") is None
 
 
-def test_a_text_block_past_the_end_of_the_score_is_dropped(build_score):
+def test_a_text_block_past_the_end_is_named_but_still_addressable(build_score):
     """The bare A21 closes the score at 4.0s, and M7 is written after it.
 
-    A marker labelled "end" already stops the score dead; the closing bar
-    marker has to mean the same thing, or M7 stays addressable and resolves
-    to a span with nothing in it.
+    The snippet stops before the marker does, which is what an export cut
+    on a barline does to the hit after it. The block is still a point in
+    time a span can end on, so it is kept, and named as being out there.
     """
     score = build_score("pastend")
 
-    assert [block.name for block in score.textblocks] == ["M4"]
-    assert [block.name for block in score.outside] == ["M7"]
-    assert score.address("M7") is None
+    assert [block.name for block in score.textblocks] == ["M4", "M7"]
+    assert [block.name for block in score.past_the_end] == ["M7"]
+    assert score.address("M7") == pytest.approx(4.5)
 
 
 def test_a_text_block_on_the_end_of_the_score_is_kept(write_markers):
@@ -138,25 +138,25 @@ STOP
     score = Score.build(parse_markers(path), 3.0)
 
     assert [block.name for block in score.textblocks] == ["STOP"]
-    assert score.outside == []
+    assert score.past_the_end == []
     assert score.address("STOP") == pytest.approx(2.0)
 
 
-def test_report_names_the_text_blocks_it_dropped(build_score, capsys):
+def test_report_names_the_text_blocks_past_the_end(build_score, capsys):
     report(build_score("pastend"))
     printed = capsys.readouterr().out
 
-    assert "Text blocks: M4" in printed
-    assert "M7 at 4.500s" in printed
-    assert "past the end of the score at 4.000s" in printed
+    assert "Text blocks: M4 M7" in printed
+    assert "M7 at 4.500s: past the end of the score at 4.000s" in printed
 
 
-def test_the_score_as_read_shows_a_dropped_text_block_after_the_end(build_score):
+def test_the_score_as_read_shows_a_text_block_after_the_end(build_score):
     """Otherwise the report names M7 and the dump it points at does not."""
     lines = describe(build_score("pastend"))
 
     assert lines[-2].strip().startswith("[A21] [END]")
     assert "[M7] 4.500" in lines[-1]
+    assert "past the end of the score" in lines[-1]
 
 
 def test_jackson5_has_five_beats_in_a3(build_score):

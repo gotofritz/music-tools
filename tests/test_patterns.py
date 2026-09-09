@@ -190,17 +190,42 @@ def test_a_span_starting_at_the_end_has_nothing_left_to_play(build_score):
     assert "already the end of the snippet" in message
 
 
-def test_a_text_block_past_the_end_says_where_it_is(build_score):
-    """Saying no such block is a lie when the file plainly has one."""
+def test_a_span_ending_past_the_end_stops_at_the_end(build_score):
+    """M7 is 0.5s past the snippet, so [A20-M7] is bar A20 to the end."""
+    score = build_score("pastend")
+
+    assert spans(score, "[A20-M7]") == [(2.0, 4.0, False)]
+    assert spans(score, "[A20-M7]") == spans(score, "[A20-END]")
+
+
+def test_a_span_opening_past_the_end_is_skipped_not_fatal(build_score, capsys):
+    """The rest of the pattern is playable, and that is what it is for."""
+    score = build_score("pastend")
+
+    assert spans(score, "[M4][A20][M7]") == [
+        (0.25, 2.0, False),
+        (2.0, 4.0, False),
+    ]
+
+    printed = capsys.readouterr().out
+    assert "Skipped [M7]" in printed
+    assert "past the end of the score at 4.000s" in printed
+
+
+def test_a_span_past_the_end_is_warned_about_once_per_run(build_score, capsys):
+    """A drill stands for dozens of sections, all with the same span in."""
+    score = build_score("pastend")
+    score.parse_pattern("[M4][M7]", "1/2: all")
+    score.parse_pattern("[M4x][M7]", "2/2: without M4")
+
+    assert capsys.readouterr().out.count("Skipped [M7]") == 1
+
+
+def test_a_pattern_of_nothing_but_a_span_past_the_end_is_an_error(build_score):
+    """Skipping every span would leave a section of no audio at all."""
     message = fails(build_score("pastend"), "[M7]")
 
-    assert "M7 is at 4.500s, past the end of the score at 4.000s" in message
-
-
-def test_a_span_ending_on_a_dropped_text_block_says_the_same(build_score):
-    message = fails(build_score("pastend"), "[A20-M7]")
-
-    assert "M7 is at 4.500s, past the end of the score at 4.000s" in message
+    assert "already the end of the snippet" in message
 
 
 def test_curly_brackets_point_at_square_ones(d51):
