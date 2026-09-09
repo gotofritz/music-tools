@@ -30,9 +30,9 @@ DURATIONS = {
     "jackson5": 9.0,
     "pickup": 7.0,
     "endmarker": 6.0,
-    # longer than the score: the bare 93 marker closes it at 6.0
+    # a second past the bare 93 marker, which is a barline, not the end
     "twoway": 7.0,
-    # longer again: the bare A21 closes the score at 4.0, and M7 is past it
+    # half a second past the bare A21, and M7 is half a second past that
     "pastend": 4.5,
 }
 

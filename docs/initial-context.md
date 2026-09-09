@@ -523,9 +523,12 @@ loud:
   nothing follows it. Repeating or reordering therefore needs explicit ends.
 - **`END` is reserved** and always names the end of the score. A marker labelled
   `end` truncates the score there — and so names the same point anyway.
-- **A trailing bar marker with no beats under it closes the score** rather than
-  opening a bar. It lands in `score.end_marker`, is addressable, and is never
-  played.
+- **A trailing bar marker with no beats under it closes the last bar** rather
+  than opening one. It lands in `score.end_marker` as the `Bar` it was parsed
+  as, is addressable at its own timestamp, and is never played. It does not
+  shorten the score: hand-dropped markers sit short of the audio, so the tail
+  after it is the last bar's, and `END` stays the end of the snippet. `report`
+  states the tail, and warns when it runs longer than `beat_length`.
 - **A marker past the end of the score still names a point.** A text block
   written after the snippet stops stays addressable, so a span may end on it,
   and `parse_pattern` clamps that end to the score. A span *opening* there has

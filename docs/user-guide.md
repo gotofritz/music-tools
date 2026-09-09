@@ -461,9 +461,13 @@ Three things are worth knowing:
   **0**. Bar **1** is still the first full bar. Beat markers before your first
   barline count as that pickup too, so a snippet that starts mid-bar needs no
   barline of its own on the upbeat.
-- **A last marker with nothing under it ends the passage.** If you dropped a
-  marker on the closing barline, that marker is where the music stops. It is
-  never played.
+- **A last marker with nothing under it is a barline, not the end.** If you
+  dropped a marker on the closing barline, it closes the last bar and is never
+  played, and you can end a span on it. It does not cut the snippet short: a
+  marker dropped by hand sits a little before the audio stops, and that tail
+  is played as the end of the last bar. The tool says how long it is, and
+  warns when it is longer than a beat — that means your markers cover less
+  than your audio.
 
 You can name markers whatever you like — `A1`, `D51`, `CHORUS`. Those names
 become the names you use below.
@@ -556,6 +560,7 @@ Each `[...]` is one span. What can go inside:
 | `[1-3]` | from bar 1 up to where bar 3 starts |
 | `[1.4-3]` | from bar 1 beat 4 up to bar 3 |
 | `[4-END]` | bar 4 through to the end of the snippet |
+| `[4-93]` | bar 4 up to the closing barline, stopping short of its tail |
 | `[4x]` | bar 4, silent |
 
 Four rules cover the rest:
