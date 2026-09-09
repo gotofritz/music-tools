@@ -1,0 +1,14 @@
+0:00:30.000000 Marker (measure): "A19"
+0:00:30.250000 Textblock (yellow):
+M4
+
+0:00:30.500000 Marker (beat): ""
+0:00:31.000000 Marker (beat): ""
+0:00:31.500000 Marker (beat): ""
+0:00:32.000000 Marker (measure): "A20"
+0:00:32.500000 Marker (beat): ""
+0:00:33.000000 Marker (beat): ""
+0:00:33.500000 Marker (beat): ""
+0:00:34.000000 Marker (measure): "A21"
+0:00:35.000000 Textblock (yellow):
+M7

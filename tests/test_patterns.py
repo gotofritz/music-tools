@@ -109,12 +109,13 @@ def test_a_bare_span_covers_its_range_only_because_of_what_follows(d51):
 # --- the end of a two-way marked passage -----------------------------------
 
 
-def test_the_closing_bar_marker_names_the_end(build_score):
+def test_the_closing_bar_marker_names_its_own_barline(build_score):
+    """It is a point in the score, and the audio runs a second past it."""
     twoway = build_score("twoway")
 
     assert spans(twoway, "[92-93]") == [(4.0, 6.0, False)]
-    assert spans(twoway, "[92]") == spans(twoway, "[92-93]")
-    assert spans(twoway, "[92-END]") == spans(twoway, "[92-93]")
+    assert spans(twoway, "[92-END]") == [(4.0, 7.0, False)]
+    assert spans(twoway, "[92]") == spans(twoway, "[92-END]")
 
 
 def test_naming_the_end_marker_works_anywhere_in_a_pattern(build_score):
@@ -185,7 +186,50 @@ def test_an_out_of_order_run_without_ends_is_rejected(d51):
 
 
 def test_a_span_starting_at_the_end_has_nothing_left_to_play(build_score):
-    message = fails(build_score("twoway"), "[93]")
+    message = fails(build_score("twoway"), "[END]")
+
+    assert "already the end of the snippet" in message
+
+
+def test_a_span_from_the_last_barline_plays_the_tail_after_it(build_score):
+    """The audio past 93 is the end of bar 92, not something to drop."""
+    assert spans(build_score("twoway"), "[93]") == [(6.0, 7.0, False)]
+
+
+def test_a_span_ending_past_the_end_stops_at_the_end(build_score):
+    """M7 is 0.5s past the snippet, so [A20-M7] is bar A20 to the end."""
+    score = build_score("pastend")
+
+    assert spans(score, "[A20-M7]") == [(2.0, 4.5, False)]
+    assert spans(score, "[A20-M7]") == spans(score, "[A20-END]")
+
+
+def test_a_span_opening_past_the_end_is_skipped_not_fatal(build_score, capsys):
+    """The rest of the pattern is playable, and that is what it is for."""
+    score = build_score("pastend")
+
+    assert spans(score, "[M4][A20][M7]") == [
+        (0.25, 2.0, False),
+        (2.0, 4.5, False),
+    ]
+
+    printed = capsys.readouterr().out
+    assert "Skipped [M7]" in printed
+    assert "past the end of the score at 4.500s" in printed
+
+
+def test_a_span_past_the_end_is_warned_about_once_per_run(build_score, capsys):
+    """A drill stands for dozens of sections, all with the same span in."""
+    score = build_score("pastend")
+    score.parse_pattern("[M4][M7]", "1/2: all")
+    score.parse_pattern("[M4x][M7]", "2/2: without M4")
+
+    assert capsys.readouterr().out.count("Skipped [M7]") == 1
+
+
+def test_a_pattern_of_nothing_but_a_span_past_the_end_is_an_error(build_score):
+    """Skipping every span would leave a section of no audio at all."""
+    message = fails(build_score("pastend"), "[M7]")
 
     assert "already the end of the snippet" in message
 

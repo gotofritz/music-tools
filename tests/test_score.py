@@ -7,7 +7,15 @@ changes it says so. See docs/plans/01-foundations.md, "Honest caveat".
 import click
 import pytest
 
-from music_tools.loop import Bar, Beat, Score, modal_beats, parse_markers, report
+from music_tools.loop import (
+    Bar,
+    Beat,
+    Score,
+    describe,
+    modal_beats,
+    parse_markers,
+    report,
+)
 
 
 def bar_named(score, name):
@@ -78,19 +86,46 @@ def test_beats_tile_the_snippet_too(build_score):
         assert end == pytest.approx(start)
 
 
-def test_a_bar_marker_with_no_beats_closes_the_score(build_score):
+def test_a_bar_marker_with_no_beats_closes_the_last_bar(build_score):
     """twoway.txt was marked up by dropping a marker on every barline.
 
-    The final one is where the passage ends, not a bar to play.
+    The final one is a barline to end a span on, not a bar to play.
     """
     score = build_score("twoway")
 
     assert [bar.name for bar in score.bars] == ["90", "91", "92"]
-    assert score.end_marker == "93"
-    # the score stops at 93 even though the audio runs on for another second
-    assert score.duration == pytest.approx(6.0)
+    assert score.end_marker.name == "93"
     assert score.address("93") == pytest.approx(6.0)
-    assert score.address("END") == pytest.approx(6.0)
+
+
+def test_the_last_barline_does_not_shorten_the_snippet(build_score):
+    """A marker is dropped by hand, so the audio runs a little past it.
+
+    Cutting the score there chops that tail off the loop, which is heard.
+    """
+    score = build_score("twoway")
+
+    assert score.duration == pytest.approx(7.0)
+    assert score.address("END") == pytest.approx(7.0)
+    assert bar_named(score, "92").end == pytest.approx(7.0)
+
+
+def test_the_report_names_the_tail_past_the_last_barline(build_score, capsys):
+    report(build_score("twoway"))
+    printed = capsys.readouterr().out
+
+    assert "93 is the last barline, at 6.000s" in printed
+    # a whole second is more than a beat, so it is worth a warning
+    assert "!  The snippet runs 1.000s past it, to 7.000s" in printed
+
+
+def test_a_tail_shorter_than_a_beat_is_stated_but_not_warned_about(build_score, capsys):
+    """0.5s past A21, against a half-second beat: a hand-dropped marker."""
+    report(build_score("pastend"))
+    printed = capsys.readouterr().out
+
+    assert "   The snippet runs 0.500s past it, to 4.500s" in printed
+    assert "!  The snippet runs" not in printed
 
 
 def test_a_marker_labelled_end_truncates_the_score(build_score):
@@ -100,6 +135,56 @@ def test_a_marker_labelled_end_truncates_the_score(build_score):
     assert [bar.name for bar in score.bars] == ["E1", "E2"]
     assert score.duration == pytest.approx(4.0)
     assert score.address("E3") is None
+
+
+def test_a_text_block_past_the_end_is_named_but_still_addressable(build_score):
+    """The bare A21 closes the score at 4.0s, and M7 is written after it.
+
+    The snippet stops before the marker does, which is what an export cut
+    on a barline does to the hit after it. The block is still a point in
+    time a span can end on, so it is kept, and named as being out there.
+    """
+    score = build_score("pastend")
+
+    assert [block.name for block in score.textblocks] == ["M4", "M7"]
+    assert [block.name for block in score.past_the_end] == ["M7"]
+    assert score.address("M7") == pytest.approx(5.0)
+
+
+def test_a_text_block_on_the_end_of_the_score_is_kept(write_markers):
+    """It names the same point as END, which a span may still end on."""
+    path = write_markers("""
+0:00:10.000000 Marker (measure): "A1"
+0:00:10.500000 Marker (beat): ""
+0:00:11.000000 Marker (beat): ""
+0:00:11.500000 Marker (beat): ""
+0:00:12.000000 Marker (measure): "A2"
+0:00:12.000000 Textblock (yellow):
+STOP
+""")
+    score = Score.build(parse_markers(path), 3.0)
+
+    assert [block.name for block in score.textblocks] == ["STOP"]
+    assert score.past_the_end == []
+    assert score.address("STOP") == pytest.approx(2.0)
+
+
+def test_report_names_the_text_blocks_past_the_end(build_score, capsys):
+    report(build_score("pastend"))
+    printed = capsys.readouterr().out
+
+    assert "Text blocks: M4 M7" in printed
+    assert "M7 at 5.000s: past the end of the score at 4.500s" in printed
+
+
+def test_the_score_as_read_shows_a_text_block_after_the_end(build_score):
+    """Otherwise the report names M7 and the dump it points at does not."""
+    lines = describe(build_score("pastend"))
+
+    assert lines[-3].strip() == "[A21] 4.000   (last barline)"
+    assert lines[-2].strip() == "[END]   4.500"
+    assert "[M7] 5.000" in lines[-1]
+    assert "past the end of the score" in lines[-1]
 
 
 def test_jackson5_has_five_beats_in_a3(build_score):

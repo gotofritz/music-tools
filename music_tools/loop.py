@@ -93,6 +93,18 @@ def modal_beats(bars: "list[Bar]") -> int:
     return max(counts, key=lambda beats: (counts[beats], beats))
 
 
+def beat_length(beats: "list[Beat]") -> float:
+    """The typical gap between beats, for judging a stray length against.
+
+    The median gap, so one bar of double time or a missed tap moves it by
+    nothing much. Beat ends are no use here: the last beat of the score
+    runs to wherever the audio stops.
+    """
+    starts = [beat.start for beat in beats]
+    gaps = sorted(later - earlier for earlier, later in zip(starts, starts[1:]))
+    return gaps[len(gaps) // 2] if gaps else 0.0
+
+
 def first_wins(pairs) -> dict:
     """Build a dict in which the earliest of any repeated key survives."""
     names: dict = {}
@@ -155,7 +167,7 @@ class Score:
         bars: list[Bar],
         textblocks: list[TextBlock],
         duration: float,
-        end_marker: str | None = None,
+        end_marker: "Bar | None" = None,
         ignored: "Counter[str] | None" = None,
     ):
         self.bars = bars
@@ -163,6 +175,10 @@ class Score:
         self.duration = duration  # of the score, which may stop short of the audio
         self.end_marker = end_marker
         self.ignored = ignored if ignored is not None else Counter()
+        # a drill turns one pattern into dozens of sections, so a span past
+        # the end would warn dozens of times. Once per point in time is the
+        # useful number, and the score is what outlives the sections
+        self.warned: set[float] = set()
 
         # A snippet cut from a recording usually starts on an upbeat, giving a
         # short first bar. That is an anacrusis, not a bar of its own, so it is
@@ -178,7 +194,7 @@ class Score:
         # text blocks, then beats, then bars, and within a kind the earliest
         # wins. So a bar called "3" is bar 3, not the third bar
         named = {
-            **({end_marker.lower(): duration} if end_marker else {}),
+            **({end_marker.name.lower(): end_marker.start} if end_marker else {}),
             **first_wins((block.name.lower(), block.start) for block in textblocks),
             **first_wins(
                 (beat.label.lower(), beat.start) for beat in self.beats if beat.label
@@ -255,11 +271,14 @@ class Score:
         # A bar marker with no beats under it closes the bar before it rather
         # than opening one of its own: the passage was marked up by dropping a
         # marker at each barline, including the one the passage ends on. That
-        # last one is the end of the audio, not a bar to play.
+        # last one is a barline to end a span on, never a bar to play.
+        #
+        # It does not shorten the snippet, though. A marker is dropped by hand
+        # and the audio usually runs a little past it; that tail is the end of
+        # the last bar, and throwing it away chops the loop
         end_marker = None
         if len(bars) > 1 and len(bars[-1].beats) == 1:
             end_marker = bars.pop()
-            end = min(end, end_marker.start)
 
         if bars[-1].start >= duration:
             raise click.ClickException(
@@ -269,14 +288,24 @@ class Score:
             )
 
         end = min(end, duration)
+
         for i, bar in enumerate(bars):
             bar.end = bars[i + 1].start if i + 1 < len(bars) else end
             for j, beat in enumerate(bar.beats):
                 beat.end = bar.beats[j + 1].start if j + 1 < len(bar.beats) else bar.end
 
-        return cls(
-            bars, textblocks, end, end_marker.name if end_marker else None, ignored
-        )
+        return cls(bars, textblocks, end, end_marker, ignored)
+
+    @property
+    def past_the_end(self) -> list[TextBlock]:
+        """Text blocks written past the end of the score.
+
+        They are still addressable, because a span may end on one, but a
+        span opening there has no audio in front of it.
+        """
+        return [
+            block for block in self.textblocks if block.start > self.duration + EPSILON
+        ]
 
     def bar_slices(self) -> list[tuple[float, float]]:
         """Start and end of every bar."""
@@ -391,17 +420,43 @@ class Score:
             raise click.ClickException(f"{name}: markers may not be empty.")
 
         spans = []
+        skipped = []
         for index, (start, end, is_silent, shown) in enumerate(opened):
             given = end is not None
             after = opened[index + 1] if index + 1 < len(opened) else None
             if not given:
                 end = after[0] if after else self.duration
+            end = min(end, self.duration)
+
+            # A span opening at or past the end of the score has no audio in
+            # front of it, whatever closes it: it names a marker the snippet
+            # stops before. Dropping that one span keeps the rest of the
+            # pattern playable, which is what a marker 90ms out deserves
+            if start >= self.duration - EPSILON:
+                if start not in self.warned:
+                    skipped.append(shown)
+                    self.warned.add(start)
+                continue
 
             if end <= start + EPSILON:
                 raise click.ClickException(
                     f"{name}: {self.backwards(shown, start, end, given, after)}"
                 )
             spans.append((start, end, is_silent))
+
+        # unless there is nothing left, in which case the section is silence
+        # dressed up as audio, and saying so is the whole point
+        if not spans:
+            start, _, _, shown = opened[0]
+            raise click.ClickException(
+                f"{name}: {self.backwards(shown, start, self.duration, False, None)}"
+            )
+
+        if skipped:
+            click.echo(
+                f"!  Skipped {', '.join(skipped)}: past the end of the score at "
+                f"{self.duration:.3f}s, so there is no audio there to play."
+            )
 
         return spans
 
@@ -432,12 +487,32 @@ def report(score: Score) -> None:
     """Print what was found, warning about bars with an odd number of beats."""
     click.echo(f"Bars: {len(score.bars)} ({' '.join(bar.name for bar in score.bars)})")
     if score.end_marker:
+        last = score.bars[-1]
         click.echo(
-            f"{score.end_marker} closes the last bar. It is not played, but a "
-            f"span may end on it, as [{score.bars[-1].name}-{score.end_marker}]."
+            f"{score.end_marker.name} is the last barline, at "
+            f"{score.end_marker.start:.3f}s. It opens no bar of its own, but a "
+            f"span may end on it, as [{last.name}-{score.end_marker.name}]."
         )
+        tail = score.duration - score.end_marker.start
+        if tail > EPSILON:
+            # a hand-dropped marker sits a few ms short of the audio; a tail
+            # longer than a beat means the markers cover less than the snippet
+            flag = "!  " if tail > beat_length(score.beats) else "   "
+            click.echo(
+                f"{flag}The snippet runs {tail:.3f}s past it, to "
+                f"{score.duration:.3f}s. That tail is the end of {last.name}, "
+                "and END."
+            )
     if score.textblocks:
         click.echo(f"Text blocks: {' '.join(block.name for block in score.textblocks)}")
+    if score.past_the_end:
+        beyond = ", ".join(
+            f"{block.name} at {block.start:.3f}s" for block in score.past_the_end
+        )
+        click.echo(
+            f"!  {beyond}: past the end of the score at {score.duration:.3f}s. "
+            "A span may end there, but one opening there plays nothing."
+        )
     if score.ignored:
         kinds = ", ".join(
             f"{count} × {kind}" for kind, count in sorted(score.ignored.items())
@@ -502,8 +577,16 @@ def describe(score: Score) -> list[str]:
             if bar.start <= block.start < bar.end
         )
 
-    closing = f"[{score.end_marker}] " if score.end_marker else ""
-    lines.append(f"    {closing}[END]   {score.duration:.3f}")
+    if score.end_marker:
+        lines.append(
+            f"    [{score.end_marker.name}] {score.end_marker.start:.3f}"
+            "   (last barline)"
+        )
+    lines.append(f"    [END]   {score.duration:.3f}")
+    lines.extend(
+        f"    [{block.name}] {block.start:.3f}   (past the end of the score)"
+        for block in score.past_the_end
+    )
     return lines
 
 
@@ -775,12 +858,23 @@ END is reserved and always means the end of the snippet, so a span can
 reach the end without being written last: [4-END] is the 4th bar in
 full, wherever it appears in the pattern.
 
-Two things in a marker file name that same point, so all three agree.
-A marker labelled "end" stops the score there, and everything after it
-is ignored. And markers exported by dropping one on every barline finish
-with a bar marker that has no beats under it, which closes the passage
-rather than opening a bar: it is never played, but given bars 92 and 93,
-[92-93] and [92-END] are the same span.
+A marker labelled "end" stops the score there, so END means that point
+and everything after it is ignored. Markers exported by dropping one on
+every barline instead finish with a bar marker that has no beats under
+it. That one closes the last bar rather than opening one of its own: it
+is never played, and a span may end on it, as [92-93].
+
+It does not shorten the snippet, though. A marker is dropped by hand and
+the audio usually runs a little past it, so that tail is the end of bar
+92, and [92-END] reaches it where [92-93] stops short. The report says
+how long the tail is, and warns if it is longer than a beat, which means
+the markers cover less than the audio.
+
+A text block may be written past the end of the snippet, where the audio
+stops before the marker does. The report names it, and a span may still
+end on it, which means the end of the snippet. A span *opening* there
+has no audio in front of it, so it is skipped with a warning and the
+rest of the pattern plays; a pattern with nothing else in it is an error.
 
 A trailing x means silence, but a label always wins: if a bar really is
 called "D51x" then [D51x] plays it.
