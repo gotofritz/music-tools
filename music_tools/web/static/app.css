@@ -261,6 +261,22 @@ button.remove {
   font: inherit;
 }
 
+/* Notes: on a line of their own, as wide as the cell allows, and as tall as
+   the text (app.js grows the box); two lines at least. */
+.cell-text.wide {
+  display: block;
+  white-space: pre-wrap;
+}
+
+textarea.cell {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 2lh;
+  overflow: hidden;
+  resize: vertical;
+}
+
 .problem {
   color: var(--overdue);
   margin: 0 0 1rem;

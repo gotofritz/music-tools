@@ -12,7 +12,19 @@ function openCell(cell) {
   box.focus();
   const end = box.value.length;
   box.setSelectionRange(end, end);
+  grow(box);
 }
+
+// A notes box is as tall as its text, and never shorter than its two rows.
+function grow(box) {
+  if (box.tagName !== "TEXTAREA") {
+    return;
+  }
+  box.style.height = "auto";
+  box.style.height = `${box.scrollHeight}px`;
+}
+
+document.addEventListener("input", (event) => grow(event.target));
 
 document.addEventListener("focusin", (event) => {
   const cell = event.target.closest && event.target.closest(".cell-text");

@@ -8,8 +8,8 @@
 
    The id on the box is what keeps the focus: the day is redrawn after a save,
    and HTMX puts the cursor back in the element with the same id. #}
-{% macro editable(text, placeholder="") -%}
-<span class="cell-text" tabindex="0" title="click to edit"><span class="cell-value"
+{% macro editable(text, placeholder="", wide=False) -%}
+<span class="cell-text{% if wide %} wide{% endif %}" tabindex="0" title="click to edit"><span class="cell-value"
   data-placeholder="{{ placeholder }}">{{ text }}</span><template>{{ caller() }}</template></span>
 {%- endmacro %}
 
@@ -23,8 +23,8 @@
 {%- endmacro %}
 
 {% macro note(entry, target) -%}
-{% call editable(entry.notes or "", "notes") -%}
-<textarea class="cell" id="entry-{{ entry.id }}-notes" name="notes" rows="1" cols="14"
+{% call editable(entry.notes or "", "notes", wide=True) -%}
+<textarea class="cell" id="entry-{{ entry.id }}-notes" name="notes" rows="2"
           aria-label="notes" placeholder="notes" hx-patch="/entries/{{ entry.id }}"
           hx-trigger="change" hx-target="{{ target }}"
           hx-swap="outerHTML">{{ entry.notes or "" }}</textarea>

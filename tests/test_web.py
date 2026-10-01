@@ -1889,3 +1889,16 @@ def test_a_track_shows_text_until_a_click(client, conn, le_freak, loop_wav):
 
     assert 'name="gain"' not in drawn
     assert 'name="muted"' in drawn  # a checkbox is already a click
+
+
+def test_notes_open_as_a_wide_box_of_at_least_two_lines(
+    client, sample_block, songs, le_freak
+):
+    log = client.get("/").text
+    row = client.get("/modules/songs").text
+    row = row[row.index('<tbody id="queue">') : row.index("</tbody>")]
+
+    for page in (log, row):
+        assert 'class="cell-text wide"' in page
+        assert re.search(r'<textarea class="cell"[^>]*rows="2"', page)
+        assert 'cols="' not in " ".join(re.findall(r"<textarea.*?>", page, re.S))
