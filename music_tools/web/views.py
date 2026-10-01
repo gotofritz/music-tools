@@ -11,7 +11,7 @@ from typing import Any
 
 from music_tools.db import repository as repo
 from music_tools.domain import media
-from music_tools.domain.models import Module, PracticeEntry
+from music_tools.domain.models import Exercise, Module, PracticeEntry
 from music_tools.domain.session import (
     current_entry,
     day_summary,
@@ -32,6 +32,21 @@ def running_entry(conn: sqlite3.Connection, *, now: datetime) -> PracticeEntry |
     invented moment.
     """
     return current_entry(conn, now=now)
+
+
+def running_first(
+    exercises: list[Exercise], *, conn: sqlite3.Connection, now: datetime
+) -> list[Exercise]:
+    """The exercise being practised at the top of its queue; the order is kept.
+
+    The queue is ordered by due date, and starting a row does not move it, so
+    the one being played would stay wherever it happened to be.
+    """
+    running = running_entry(conn, now=now)
+    if running is None or running.exercise_id is None:
+        return exercises
+    active = [row for row in exercises if row.id == running.exercise_id]
+    return active + [row for row in exercises if row.id != running.exercise_id]
 
 
 def chrome(conn: sqlite3.Connection, *, now: datetime) -> dict[str, Any]:

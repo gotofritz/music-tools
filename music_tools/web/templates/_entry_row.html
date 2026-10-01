@@ -31,8 +31,8 @@
   <td>
     <input type="text" name="description" value="{{ entry.description }}" size="24"
            aria-label="what" placeholder="what you played" form="{{ edit_form }}">
-    <input type="text" name="notes" value="{{ entry.notes or "" }}" size="14"
-           aria-label="notes" placeholder="notes" form="{{ edit_form }}">
+    <textarea name="notes" rows="1" cols="14" aria-label="notes"
+              placeholder="notes" form="{{ edit_form }}">{{ entry.notes or "" }}</textarea>
   </td>
   <td>
     <input type="text" name="speed" value="{{ entry.speed or "" }}" size="7"
