@@ -305,15 +305,18 @@ and a wrong correction costs a wrong number about a tune:
   nothing to correct. The day itself stays, empty totals and all.
 
 **Editing is in place, a cell at a time.** Every finished line is a row of
-inputs (`_cells.html`), each its own `hx-patch` on `change` — the browser's
-"committed", which fires on blur and on Enter and not on a keystroke — so there
-is no edit mode, no save button and no `/days/{day}/edit`. Only the changed
+cells (`_cells.html`) that are plain text until clicked or tabbed to: the
+server renders the real input inside an inert `<template>` beside the text and
+`static/app.js` swaps the two, so the markup, `hx-patch` and ids are the
+server's. Each box is its own `hx-patch` on `change` — the browser's
+"committed", which fires on blur and on Enter and not on a keystroke — and one
+left unchanged goes back to text, so there is no edit mode, no save button and no `/days/{day}/edit`. Only the changed
 field is sent; `PATCH /entries/{id}` reads the raw form, because a declared
 `Form` field cannot tell an emptied box (clear it) from one that was not sent
 (leave it). An emptied description is the exception and changes nothing: a line
 cannot go nameless. The response redraws the whole day, and every box carries a
-stable id so HTMX puts the cursor back where it was and Tab goes on to the next
-cell; `static/app.js` makes Esc restore a cell. The same pattern covers the
+stable id, and after a redraw `app.js` reopens the box that had the cursor, so
+Tab goes on to the next cell; `static/app.js` makes Esc restore a cell. The same pattern covers the
 exercise row (its form listens to `change, submit`) and the media rows and set
 labels. The cost is that editing needs JavaScript; reading and the buttons do
 not. Removal is `DELETE /entries/{id}`, with `POST /entries/{id}/delete` as the

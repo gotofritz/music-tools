@@ -8,6 +8,7 @@ The clock and the rng are dependencies, overridden here the way `cli.py`
 injects them, so a test can pin "now" without `freezegun`.
 """
 
+import re
 from datetime import date, datetime, time
 
 import pytest
@@ -1848,3 +1849,43 @@ def test_a_track_saves_on_change_with_no_save_button(client, conn, le_freak, loo
     assert f'hx-patch="/media/{source.id}"' in page
     assert ">save<" not in page
     assert "name the set" not in page
+
+
+def outside_templates(page: str) -> str:
+    """The page as the browser first draws it: `<template>` is inert markup."""
+    return re.sub(r"<template>.*?</template>", "", page, flags=re.S)
+
+
+def test_the_log_shows_text_and_keeps_the_boxes_in_templates_until_a_click(
+    client, sample_block
+):
+    page = client.get("/").text
+    drawn = outside_templates(page)
+
+    assert "<input" not in drawn
+    assert "<textarea" not in drawn
+    assert "019 Tempo Builder" in drawn  # plain text
+    assert "<template>" in page  # and the box that replaces it
+    assert 'class="cell-text" tabindex="0"' in page  # reachable by keyboard
+
+
+def test_exercise_rows_show_text_until_a_click(client, songs, le_freak):
+    page = client.get("/modules/songs").text
+    drawn = outside_templates(
+        page[page.index('<tbody id="queue">') : page.index("</tbody>")]
+    )
+
+    assert 'name="speed"' not in drawn
+    assert 'name="notes"' not in drawn
+    assert "le freak" in drawn
+
+
+def test_a_track_shows_text_until_a_click(client, conn, le_freak, loop_wav):
+    media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+
+    drawn = outside_templates(client.get(f"/exercises/{le_freak.id}/media").text)
+
+    assert 'name="gain"' not in drawn
+    assert 'name="muted"' in drawn  # a checkbox is already a click

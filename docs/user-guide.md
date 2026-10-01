@@ -137,7 +137,7 @@ starts it without opening a window.
   played, its subtotals and its total. **load more** adds the next five. There
   is no date picker and no search: it is a log, and you read it backwards.
 - **Every line is editable where it is.** Click a time, the name, the notes,
-  the speed or the group, change it, and move away — Tab, Enter or a click
+  the speed or the group — it turns into a box — change it, and move away — Tab, Enter or a click
   elsewhere saves it, and the day redraws with its totals worked out again.
   **Esc** puts back what was there and saves nothing. There is no edit mode and
   no save button. Use it for the clock you left running through supper, or a

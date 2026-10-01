@@ -237,23 +237,28 @@ button.remove {
   color: var(--overdue);
 }
 
-/* A cell that is an input in disguise: plain until it is hovered or focused. */
-.cell {
-  font: inherit;
-  color: inherit;
-  background: transparent;
-  border: 1px solid transparent;
+/* A cell is plain text until it is clicked; then it is a box (see app.js). */
+.cell-text {
+  display: inline-block;
+  min-width: 1.5rem;
   border-radius: 3px;
   padding: 0.1rem 0.25rem;
+  cursor: text;
 }
 
-.cell:hover {
-  border-color: var(--line);
+.cell-text:hover,
+.cell-text:focus {
+  background: rgba(0, 0, 0, 0.05);
+  outline: none;
 }
 
-.cell:focus {
-  background: #fff;
-  border-color: var(--ink);
+.cell-value:empty::before {
+  content: attr(data-placeholder);
+  color: var(--muted);
+}
+
+.cell {
+  font: inherit;
 }
 
 .problem {
