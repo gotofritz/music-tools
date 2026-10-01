@@ -9,7 +9,6 @@ injects them, so a test can pin "now" without `freezegun`.
 """
 
 from datetime import date, datetime, time
-from html.parser import HTMLParser
 
 import pytest
 from fastapi.testclient import TestClient
@@ -672,102 +671,92 @@ def test_a_day_with_no_history_behind_it_offers_nothing_to_load(client):
     assert "load more" not in client.get("/").text
 
 
-# --- correcting a line of the log -------------------------------------------
+# --- correcting a line of the log, in place -------------------------------------------
 
 
-def test_the_log_is_read_only_until_you_ask_to_edit_it(client, sample_block, conn):
+def test_every_finished_line_is_editable_in_place_with_no_edit_mode(
+    client, sample_block, conn
+):
     entry = repo.entries_for_day(conn, sample_block.id)[0]
 
     page = client.get("/").text
 
-    assert f'action="/entries/{entry.id}"' not in page  # no forms lying around
-    assert "<input" not in page
-    assert "019 Tempo Builder" in page  # just the day, as written
-    assert 'href="/days/2026-07-05/edit"' in page  # and a way in
+    assert 'value="019 Tempo Builder"' in page
+    assert f'hx-patch="/entries/{entry.id}"' in page
+    assert "/edit" not in page  # no mode to ask for
+    assert ">save<" not in page  # and no row to save
 
 
-def test_the_edit_button_opens_that_day_and_nothing_else(client, earlier_days):
+def test_a_cell_saves_when_it_changes_and_keeps_its_id_to_keep_the_focus(
+    client, sample_block, conn
+):
+    entry = repo.entries_for_day(conn, sample_block.id)[0]
+
     page = client.get("/").text
 
-    assert 'href="/days/2026-06-06/edit"' in page
-    assert 'href="/days/2026-06-05/edit"' in page  # one per day, not one for all
+    for field in (
+        "started_at",
+        "ended_at",
+        "description",
+        "notes",
+        "speed",
+        "log_group",
+    ):
+        assert f'id="entry-{entry.id}-{field}"' in page
+    assert page.count('hx-trigger="change"') >= 6
 
 
-def test_editing_a_day_puts_boxes_round_its_lines(client, earlier_days):
-    response = client.get("/days/2026-06-06/edit", headers=hx())
+def test_the_running_line_has_no_boxes(client, conn, le_freak):
+    start(client, le_freak.id)
+    entry = running(conn)
+    assert entry is not None
 
-    assert response.status_code == 200
-    assert 'id="day-2026-06-06"' in response.text  # the same block, swapped
-    assert 'value="day 6"' in response.text
-    assert 'value="20:00"' in response.text
-    assert 'href="/days/2026-06-06"' in response.text  # and a way back out
+    page = client.get("/").text
 
-
-def controls(page: str) -> list[dict[str, str]]:
-    """The boxes and buttons on a page, with the attributes they carry.
-
-    A form cannot span table cells — the browser closes it at the first
-    `</td>` — so a box in a later cell reaches its form only through the
-    `form` attribute. Reading that attribute back is as close as a
-    server-side test gets to the parse the browser will do.
-    """
-    found: list[dict[str, str]] = []
-
-    class Reader(HTMLParser):
-        def handle_starttag(self, tag, attrs):
-            if tag in {"input", "button", "select", "textarea"}:
-                found.append({"tag": tag, **{key: value or "" for key, value in attrs}})
-
-    Reader().feed(page)
-    return found
+    assert f'hx-patch="/entries/{entry.id}"' not in page
 
 
-def test_every_box_on_an_edit_row_names_the_form_it_belongs_to(
-    client, conn, sample_block
-):
-    page = client.get("/days/2026-07-05/edit", headers=hx()).text
-    boxes = controls(page)
+def test_earlier_days_are_editable_in_place_too(client, earlier_days):
+    page = client.get("/").text
 
-    for entry in repo.entries_for_day(conn, sample_block.id):
-        form_id = f"entry-{entry.id}-edit"
-        assert f'id="{form_id}"' in page
-        mine = [box for box in boxes if box.get("form") == form_id]
-        assert {box["name"] for box in mine if box["tag"] in {"input", "textarea"}} == {
-            "started_at",
-            "ended_at",
-            "description",
-            "notes",
-            "speed",
-            "log_group",
-        }
-        # the button too: it sits in the last cell, outside the form's element
-        assert [box for box in mine if box["tag"] == "button"]
+    assert 'value="day 6"' in page
+    assert "/edit" not in page
 
 
-def test_leaving_edit_mode_gives_the_plain_day_back(client, earlier_days):
-    response = client.get("/days/2026-06-06", headers=hx())
-
-    assert "<input" not in response.text
-    assert "day 6" in response.text
-    assert 'href="/days/2026-06-06/edit"' in response.text
+def test_the_old_edit_page_is_gone(client, earlier_days):
+    assert client.get("/days/2026-06-06/edit").status_code == 404
 
 
-def test_todays_own_log_is_editable_the_same_way(client, sample_block):
-    response = client.get("/days/2026-07-05/edit", headers=hx())
-
-    assert '<section id="day-log"' in response.text  # today is the log, not a block
-    assert 'value="019 Tempo Builder"' in response.text
-
-
-def test_a_day_nothing_was_logged_on_is_404(client):
-    assert client.get("/days/2020-01-01/edit").status_code == 404
-
-
-def test_the_edit_link_is_a_whole_page_without_htmx(client, earlier_days):
-    response = client.get("/days/2026-06-06/edit")
+def test_a_day_is_a_whole_page_without_htmx(client, earlier_days):
+    response = client.get("/days/2026-06-06")
 
     assert "<html" in response.text
     assert 'value="day 6"' in response.text
+
+
+def test_emptying_a_box_clears_the_field(client, conn, sample_block):
+    entry = repo.entries_for_day(conn, sample_block.id)[0]
+    client.patch(f"/entries/{entry.id}", data={"notes": "left hand"}, headers=hx())
+
+    client.patch(f"/entries/{entry.id}", data={"notes": ""}, headers=hx())
+
+    after = repo.get_entry(conn, entry.id)
+    assert after is not None
+    assert not after.notes
+
+
+def test_emptying_the_description_leaves_the_line_named(client, conn, sample_block):
+    entry = repo.entries_for_day(conn, sample_block.id)[0]
+
+    client.patch(f"/entries/{entry.id}", data={"description": ""}, headers=hx())
+
+    after = repo.get_entry(conn, entry.id)
+    assert after is not None
+    assert after.description == "019 Tempo Builder"
+
+
+def test_a_day_nothing_was_logged_on_is_404(client):
+    assert client.get("/days/2020-01-01").status_code == 404
 
 
 def test_amending_a_past_entry_redraws_that_day_with_its_new_total(
@@ -787,7 +776,7 @@ def test_amending_a_past_entry_redraws_that_day_with_its_new_total(
     assert 'id="day-2026-06-06"' in response.text  # the block that was edited
     assert "00:45" in response.text  # 20:00 to the new 20:45
     assert 'value="day 6, longer than I thought"' in response.text
-    assert "<input" in response.text  # still editing: the next line may be wrong too
+    assert "<input" in response.text  # the next line may be wrong too
     after = repo.get_entry(conn, entry.id)
     assert after is not None
     assert after.ended_at == datetime(2026, 6, 6, 20, 45)
@@ -853,9 +842,7 @@ def test_amending_an_entry_that_is_not_there_is_404(client):
 # --- taking a line out of the log -------------------------------------------
 
 
-def test_a_line_can_be_removed_while_the_day_is_open_for_editing(
-    client, conn, sample_block
-):
+def test_a_line_can_be_removed(client, conn, sample_block):
     entry = repo.entries_for_day(conn, sample_block.id)[0]  # 22:27-22:34, 00:07
 
     response = client.delete(f"/entries/{entry.id}", headers=hx())
@@ -880,19 +867,17 @@ def test_removing_a_line_from_an_earlier_day_redraws_that_day(
     assert repo.get_entry(conn, entry.id) is None
 
 
-def test_the_remove_button_is_only_there_in_edit_mode_and_asks_first(
+def test_the_remove_button_is_on_every_finished_line_and_asks_first(
     client, conn, earlier_days
 ):
     day = repo.get_day(conn, date(2026, 6, 6))
     assert day is not None
     entry = repo.entries_for_day(conn, day.id)[0]
 
-    plain = client.get("/days/2026-06-06", headers=hx()).text
-    editing = client.get("/days/2026-06-06/edit", headers=hx()).text
+    page = client.get("/days/2026-06-06", headers=hx()).text
 
-    assert f"/entries/{entry.id}/delete" not in plain
-    assert f'action="/entries/{entry.id}/delete"' in editing
-    assert "hx-confirm" in editing  # one click from gone is one click too few
+    assert f'action="/entries/{entry.id}/delete"' in page
+    assert "hx-confirm" in page  # one click from gone is one click too few
 
 
 def test_a_plain_form_post_removes_a_line_too(client, conn, sample_block):
@@ -1790,7 +1775,7 @@ def test_the_target_bpm_boxes_ask_the_browser_for_a_number(client, songs, le_fre
 def test_notes_are_a_textarea_on_the_row_and_on_the_add_form(client, songs, le_freak):
     page = client.get("/modules/songs").text
 
-    assert page.count('<textarea name="notes"') == 2
+    assert page.count("<textarea") == 2
     assert 'input type="text" name="notes"' not in page
 
 
@@ -1834,3 +1819,32 @@ def test_starting_from_a_module_page_answers_with_the_running_row_first(
     assert response.text.index(f'id="exercise-{espresso.id}"') < response.text.index(
         f'id="exercise-{le_freak.id}"'
     )
+
+
+def test_an_exercise_row_saves_on_change_with_no_save_button(client, songs, le_freak):
+    page = client.get("/modules/songs").text
+
+    assert 'hx-trigger="change, submit"' in page
+    assert ">save<" not in page
+    assert f'id="exercise-{le_freak.id}-notes"' in page
+
+
+def test_clearing_the_notes_on_a_row_clears_them(client, conn, le_freak):
+    client.patch(f"/exercises/{le_freak.id}", data={"notes": "hi"}, headers=hx())
+
+    client.patch(f"/exercises/{le_freak.id}", data={"notes": ""}, headers=hx())
+
+    after = repo.get_exercise(conn, le_freak.id)
+    assert after is not None
+    assert not after.notes
+
+
+def test_a_track_saves_on_change_with_no_save_button(client, conn, le_freak, loop_wav):
+    source = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+    page = client.get(f"/exercises/{le_freak.id}/media").text
+
+    assert f'hx-patch="/media/{source.id}"' in page
+    assert ">save<" not in page
+    assert "name the set" not in page

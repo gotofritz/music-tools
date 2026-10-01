@@ -237,15 +237,23 @@ button.remove {
   color: var(--overdue);
 }
 
-.edit-day {
-  font-size: 0.8rem;
-  font-weight: 400;
-  color: var(--muted);
+/* A cell that is an input in disguise: plain until it is hovered or focused. */
+.cell {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  padding: 0.1rem 0.25rem;
 }
 
-.edit-day:hover,
-.edit-day:focus {
-  color: var(--ink);
+.cell:hover {
+  border-color: var(--line);
+}
+
+.cell:focus {
+  background: #fff;
+  border-color: var(--ink);
 }
 
 .problem {

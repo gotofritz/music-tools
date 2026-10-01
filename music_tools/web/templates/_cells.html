@@ -1,0 +1,20 @@
+{# One cell of the log that is its own form: it looks like text, and saves
+   when it is left. `change` is the browser's own "committed" — it fires on
+   blur and on Enter, and not on a keystroke — so there is nothing to press.
+
+   The id is what keeps the focus: the day is redrawn after a save, and HTMX
+   puts the cursor back in the element with the same id, so Tab goes on to
+   the next cell instead of falling out of the page. #}
+{% macro cell(entry, target, field, value, size, label, placeholder="") -%}
+<input type="text" class="cell" id="entry-{{ entry.id }}-{{ field }}" name="{{ field }}"
+       value="{{ value }}" size="{{ size }}" aria-label="{{ label }}"
+       placeholder="{{ placeholder }}" hx-patch="/entries/{{ entry.id }}"
+       hx-trigger="change" hx-target="{{ target }}" hx-swap="outerHTML">
+{%- endmacro %}
+
+{% macro note(entry, target) -%}
+<textarea class="cell" id="entry-{{ entry.id }}-notes" name="notes" rows="1" cols="14"
+          aria-label="notes" placeholder="notes" hx-patch="/entries/{{ entry.id }}"
+          hx-trigger="change" hx-target="{{ target }}"
+          hx-swap="outerHTML">{{ entry.notes or "" }}</textarea>
+{%- endmacro %}
