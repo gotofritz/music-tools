@@ -8,8 +8,10 @@ Every write here answers with the row it changed, except a move: that one
 takes rows off the page, so it answers with the queue they left.
 """
 
+import math
 import sqlite3
 from datetime import datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
@@ -24,6 +26,9 @@ from music_tools.web.deps import fragment_or_redirect, get_conn, get_now, render
 
 router = APIRouter()
 
+#: What an edit may change. Anything else in the form is ignored.
+EDITABLE = ("name", "speed", "target_bpm", "style", "notes")
+
 
 @router.get("/modules/{slug}", response_class=HTMLResponse)
 def module_page(
@@ -37,9 +42,8 @@ def module_page(
         render(
             "module.html",
             module=module,
-            exercises=repo.exercises_due(conn, module_id=module.id),
             modules_by_id=views.modules_by_id(conn),
-            **views.chrome(conn, now=now),
+            **_queue_context(conn, module_id=module.id, now=now),
         )
     )
 
@@ -76,20 +80,21 @@ def move_rows(
 
 
 @router.api_route("/exercises/{exercise_id}", methods=["PATCH", "POST"])
-def edit_exercise(
+async def edit_exercise(
     request: Request,
     exercise_id: int,
-    name: str | None = Form(None),
-    speed: str | None = Form(None),
-    target_bpm: str | None = Form(None),
-    style: str | None = Form(None),
-    notes: str | None = Form(None),
     conn: sqlite3.Connection = Depends(get_conn),
     now: datetime = Depends(get_now),
 ) -> Response:
-    """Edit a row in place, and hand back the row as it now reads."""
+    """Edit a row in place, and hand back the row as it now reads.
+
+    The form is read raw: a declared `Form` field cannot tell a box that was
+    left empty from one that was not sent, and a box left empty is how a value
+    is cleared. A field that is not in the form is left alone.
+    """
+    form = await request.form()
     fields = _fields(
-        name=name, speed=speed, target_bpm=target_bpm, style=style, notes=notes
+        **{key: str(form[key]) for key in EDITABLE if key in form},
     )
     try:
         exercise = catalogue.update_exercise(conn, exercise_id, **fields)
@@ -200,10 +205,21 @@ def _queue(conn: sqlite3.Connection, module: Module, *, now: datetime) -> str:
     """The module's rows as they now stand — the tbody, not one row of it."""
     return render(
         "_queue.html",
-        exercises=repo.exercises_due(conn, module_id=module.id),
         modules_by_id=views.modules_by_id(conn),
-        **views.chrome(conn, now=now),
+        **_queue_context(conn, module_id=module.id, now=now),
     )
+
+
+def _queue_context(
+    conn: sqlite3.Connection, *, module_id: int, now: datetime
+) -> dict[str, Any]:
+    """The page chrome and the module's rows, the running one first."""
+    return {
+        **views.chrome(conn, now=now),
+        "exercises": views.running_first(
+            repo.exercises_due(conn, module_id=module_id), conn=conn, now=now
+        ),
+    }
 
 
 def _row(conn: sqlite3.Connection, exercise: Exercise, *, now: datetime) -> str:
@@ -219,16 +235,32 @@ def _row(conn: sqlite3.Connection, exercise: Exercise, *, now: datetime) -> str:
 def _fields(**posted: str | None) -> dict[str, object]:
     """What the form actually sent. A field left out is left alone.
 
-    An empty string is a field cleared, except for `target_bpm`, which is a
-    number: it is either given or absent.
+    An empty string is a field cleared. `target_bpm` is a number, so blank
+    clears it to null and anything that is not a number is the player's typo,
+    a 400 with a sentence rather than a crash.
     """
     fields: dict[str, object] = {}
     for key, value in posted.items():
         if value is None:
             continue
         if key == "target_bpm":
-            if value.strip():
-                fields[key] = float(value)
+            fields[key] = _bpm(value)
             continue
         fields[key] = value
     return fields
+
+
+def _bpm(written: str) -> float | None:
+    """A target tempo as typed: blank is none, and a non-number is a 400."""
+    if not written.strip():
+        return None
+    try:
+        bpm = float(written)
+    except ValueError:
+        bpm = math.nan
+    if not math.isfinite(bpm) or bpm <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"target BPM must be a positive number, not {written!r}",
+        )
+    return bpm

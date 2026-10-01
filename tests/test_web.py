@@ -169,9 +169,8 @@ def test_two_apps_do_not_share_a_database(tmp_path, le_freak, db_path):
 # --- Step 2: today ----------------------------------------------------------
 
 
-def test_with_nothing_running_the_page_says_so(client):
+def test_with_nothing_running_there_are_no_entries_and_no_clock_to_stop(client):
     page = client.get("/").text
-    assert "Nothing running" in page
     assert 'id="entry-' not in page
     assert "stop the clock" not in page  # there is no clock to stop any more
 
@@ -716,7 +715,7 @@ def controls(page: str) -> list[dict[str, str]]:
 
     class Reader(HTMLParser):
         def handle_starttag(self, tag, attrs):
-            if tag in {"input", "button", "select"}:
+            if tag in {"input", "button", "select", "textarea"}:
                 found.append({"tag": tag, **{key: value or "" for key, value in attrs}})
 
     Reader().feed(page)
@@ -733,7 +732,7 @@ def test_every_box_on_an_edit_row_names_the_form_it_belongs_to(
         form_id = f"entry-{entry.id}-edit"
         assert f'id="{form_id}"' in page
         mine = [box for box in boxes if box.get("form") == form_id]
-        assert {box["name"] for box in mine if box["tag"] == "input"} == {
+        assert {box["name"] for box in mine if box["tag"] in {"input", "textarea"}} == {
             "started_at",
             "ended_at",
             "description",
@@ -1743,3 +1742,95 @@ def test_an_archived_module_is_not_offered_as_a_target(
     page = client.get("/modules/songs").text
 
     assert 'id="move"' not in page
+
+
+# --- Issues 34-38: form fixes, the start button, the running row ------------
+
+
+def test_a_target_bpm_that_is_not_a_number_is_a_400_not_a_crash(client, conn, le_freak):
+    response = client.patch(
+        f"/exercises/{le_freak.id}", data={"target_bpm": "---"}, headers=hx()
+    )
+
+    assert response.status_code == 400
+    assert "---" in response.text
+    after = repo.get_exercise(conn, le_freak.id)
+    assert after is not None
+    assert after.target_bpm == 133.0
+
+
+def test_adding_a_row_with_a_target_bpm_that_is_not_a_number_is_a_400(client, songs):
+    response = client.post(
+        "/exercises",
+        data={"module_id": songs.id, "name": "x", "target_bpm": "fast"},
+        headers=hx(),
+    )
+
+    assert response.status_code == 400
+
+
+def test_a_blank_target_bpm_clears_it(client, conn, le_freak):
+    response = client.patch(
+        f"/exercises/{le_freak.id}", data={"target_bpm": ""}, headers=hx()
+    )
+
+    assert response.status_code == 200
+    after = repo.get_exercise(conn, le_freak.id)
+    assert after is not None
+    assert after.target_bpm is None
+
+
+def test_the_target_bpm_boxes_ask_the_browser_for_a_number(client, songs, le_freak):
+    page = client.get("/modules/songs").text
+
+    assert page.count('name="target_bpm"') == 2
+    assert page.count('name="target_bpm" inputmode="decimal"') == 2
+
+
+def test_notes_are_a_textarea_on_the_row_and_on_the_add_form(client, songs, le_freak):
+    page = client.get("/modules/songs").text
+
+    assert page.count('<textarea name="notes"') == 2
+    assert 'input type="text" name="notes"' not in page
+
+
+def test_with_nothing_running_there_is_a_start_button(client):
+    page = client.get("/").text
+
+    assert "Nothing running" not in page
+    assert 'action="/entries"' in page
+    assert ">START<" in page
+
+
+def test_start_with_no_description_logs_a_practice_line(client, conn):
+    response = client.post("/entries", headers=hx())
+
+    assert response.status_code == 200
+    entry = running(conn)
+    assert entry is not None
+    assert (entry.description, entry.exercise_id) == ("Practice", None)
+    assert entry.ended_at is None
+
+
+def test_the_running_exercise_is_first_in_its_queue_and_marked(
+    client, conn, songs, le_freak, espresso
+):
+    start(client, espresso.id)
+
+    page = client.get("/modules/songs").text
+
+    assert page.index(f'id="exercise-{espresso.id}"') < page.index(
+        f'id="exercise-{le_freak.id}"'
+    )
+    assert f'id="exercise-{espresso.id}"\n    class="active' in page
+    assert f'id="exercise-{le_freak.id}"\n    class="active' not in page
+
+
+def test_starting_from_a_module_page_answers_with_the_running_row_first(
+    client, songs, le_freak, espresso
+):
+    response = start(client, espresso.id, Referer="http://testserver/modules/songs")
+
+    assert response.text.index(f'id="exercise-{espresso.id}"') < response.text.index(
+        f'id="exercise-{le_freak.id}"'
+    )

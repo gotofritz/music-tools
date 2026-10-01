@@ -8,7 +8,7 @@
    a form cannot wrap rows that already contain forms — so it says which one it
    is in with `form="move"`, which both the browser and HTMX read. #}
 <tr id="exercise-{{ exercise.id }}"
-    class="{% if exercise.next_due and exercise.next_due <= today %}overdue{% endif %}">
+    class="{% if running and running.exercise_id == exercise.id %}active{% elif exercise.next_due and exercise.next_due <= today %}overdue{% endif %}">
   <td class="pick">
     <input type="checkbox" name="exercise_id" value="{{ exercise.id }}" form="move"
            aria-label="move {{ exercise.name }}">
@@ -26,14 +26,15 @@
              hx-trigger="keyup changed delay:300ms"
              hx-params="speed,target_bpm"
              hx-target="#tempo-{{ exercise.id }}">
-      <input type="text" name="target_bpm" value="{{ exercise.target_bpm or "" }}"
+      <input type="text" name="target_bpm" inputmode="decimal"
+             pattern="[0-9]*\.?[0-9]*" value="{{ exercise.target_bpm or "" }}"
              size="9" aria-label="target BPM" placeholder="target BPM"
              hx-get="/exercises/{{ exercise.id }}/tempo"
              hx-trigger="keyup changed delay:300ms"
              hx-params="speed,target_bpm"
              hx-target="#tempo-{{ exercise.id }}">
-      <input type="text" name="notes" value="{{ exercise.notes or "" }}" size="16"
-             aria-label="notes" placeholder="notes">
+      <textarea name="notes" rows="1" cols="16" aria-label="notes"
+                placeholder="notes">{{ exercise.notes or "" }}</textarea>
       <button type="submit">save</button>
     </form>
     <a class="media-link" href="/exercises/{{ exercise.id }}/media">media</a>

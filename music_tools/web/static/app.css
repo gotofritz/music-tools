@@ -78,6 +78,11 @@ tr.running {
   background: #fff6d8;
 }
 
+/* The exercise being practised, first in its queue and easy to find. */
+tr.active {
+  background: #dff5c4;
+}
+
 /* What is being practised right now, and the material to play it from. */
 .now-playing {
   border: 1px solid var(--line);

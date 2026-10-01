@@ -36,6 +36,12 @@
     <button type="submit" class="remove">discard</button>
   </form>
   {% else %}
-  <p class="muted">Nothing running. Start something from a module page.</p>
+  {# Nothing running: START opens a line from now, for anything, and the
+     exercise can be named afterwards. A module page is still where a row's
+     material comes with it. #}
+  <form action="/entries" method="post" hx-post="/entries" hx-target="#day-log"
+        hx-swap="outerHTML">
+    <button type="submit">START</button>
+  </form>
   {% endif %}
 </div>

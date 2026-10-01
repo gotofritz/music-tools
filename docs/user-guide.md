@@ -151,12 +151,15 @@ starts it without opening a window.
 - The line that is **running** gets no boxes even in edit mode: that one is
   what you are playing, and **done** and **discard** on the card are what move
   it. It becomes editable once it is closed, like every other line.
-- There is no clock to start and none to stop. Nothing is running until you
-  start something, and when you are finished for the evening you close the
-  window.
+- With nothing running, the card holds a **START** button. It opens a line
+  called `Practice` from now, for when you want the clock going before you have
+  decided what to play; **done** closes it, and **edit** names it afterwards.
+  There is no clock to stop beyond that, and when you are finished for the
+  evening you close the window.
 
 **Each module has its own page**, reached from the links at the top: the whole
-queue, most overdue first, and every field editable in place. **start** and
+queue, most overdue first, and every field editable in place. The row being
+practised moves to the top and is highlighted green. **start** and
 **stop** are the buttons at the end of every row — the same two things as
 `practice start` and `practice done`, so you can finish from the module page as
 well as from the card. They stay where they are whatever is running, and the
@@ -194,7 +197,8 @@ the totals all update where they are; the page does not reload.
 
 Change the name, the speed, the target or the notes and press **save** — the row re-reads itself
 with the speed worked out, so typing `85%` shows you `113 BPM (85%)` as you go.
-A row with no target is flagged in red, because a percentage of nothing cannot
+Clear the target and save to take it away again; a target that is not a number
+is refused with a message. A row with no target is flagged in red, because a percentage of nothing cannot
 be resolved and cannot move the schedule; filling those in as you meet them is
 the tidiest way to close the gap the spreadsheet left behind.
 

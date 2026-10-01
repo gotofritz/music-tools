@@ -199,7 +199,7 @@ def discard(
 @router.post("/entries")
 def add_entry(
     request: Request,
-    description: str = Form(...),
+    description: str = Form("Practice"),
     log_group: str | None = Form(None),
     speed: str | None = Form(None),
     notes: str | None = Form(None),
@@ -207,11 +207,16 @@ def add_entry(
     now: datetime = Depends(get_now),
     rng: random.Random = Depends(get_rng),
 ) -> Response:
-    """Start something the catalogue does not know about: a warm-up, a jam."""
+    """Start something the catalogue does not know about: a warm-up, a jam.
+
+    With no description it is just `Practice`: the START button on a day with
+    nothing running, for when the clock should begin before anyone has said
+    what is being played.
+    """
     session.start_ad_hoc(
         conn,
         rng=rng,
-        description=description,
+        description=description.strip() or "Practice",
         log_group=log_group or None,
         speed=speed or None,
         notes=notes or None,
@@ -313,7 +318,9 @@ def _redraw(
     if row is not None and not _is_today_page(request):
         return render(
             "_queue.html",
-            exercises=repo.exercises_due(conn, module_id=row.module_id),
+            exercises=views.running_first(
+                repo.exercises_due(conn, module_id=row.module_id), conn=conn, now=now
+            ),
             modules_by_id=context["modules_by_id"],
             today=context["today"],
             running=context["running"],
