@@ -187,7 +187,7 @@ def discard(
 @router.post("/entries")
 def add_entry(
     request: Request,
-    description: str = Form("Practice"),
+    description: str = Form(session.DEFAULT_DESCRIPTION),
     log_group: str | None = Form(None),
     speed: str | None = Form(None),
     notes: str | None = Form(None),
@@ -204,7 +204,7 @@ def add_entry(
     session.start_ad_hoc(
         conn,
         rng=rng,
-        description=description.strip() or "Practice",
+        description=description.strip() or session.DEFAULT_DESCRIPTION,
         log_group=log_group or None,
         speed=speed or None,
         notes=notes or None,

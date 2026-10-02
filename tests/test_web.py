@@ -1902,3 +1902,17 @@ def test_notes_open_as_a_wide_box_of_at_least_two_lines(
         assert 'class="cell-text wide"' in page
         assert re.search(r'<textarea class="cell"[^>]*rows="2"', page)
         assert 'cols="' not in " ".join(re.findall(r"<textarea.*?>", page, re.S))
+
+
+def test_stop_on_a_row_closes_the_start_button_line_and_schedules_the_row(
+    client, conn, le_freak
+):
+    client.post("/entries", headers=hx())
+
+    response = stop(client, le_freak.id)
+
+    assert response.status_code == 200
+    assert running(conn) is None
+    after = repo.get_exercise(conn, le_freak.id)
+    assert after is not None
+    assert after.practiced_count == 9

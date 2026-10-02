@@ -174,6 +174,7 @@ What a click means depends on what is running:
 | nothing | **start** here | this one starts |
 | this row | **start** here | nothing — the line keeps the time it began at |
 | another row | **stop** here | nothing |
+| a **START** line, no row | **stop** here | the line becomes this row's — it keeps its start time — and closes |
 | nothing | **stop** here | the line is written backwards, from the last line's end to now |
 | this row | **stop** here | the line closes and the schedule moves |
 

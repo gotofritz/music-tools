@@ -366,6 +366,45 @@ def test_stop_addressed_to_another_exercise_does_nothing(db, slap, stomp, steady
     assert loaded(repo.get_exercise(db, stomp.id)).practiced_count == 8
 
 
+def test_stop_on_an_exercise_claims_the_unnamed_line_that_is_running(
+    db, slap, stomp, steady_rng
+):
+    began = datetime(2026, 7, 5, 22, 20)
+    start_ad_hoc(db, description="Practice", now=began, rng=RNG)
+
+    result = stop_exercise(
+        db,
+        exercise_id=stomp.id,
+        algorithm=Algorithm.NORMAL,
+        now=NOW,
+        rng=steady_rng,
+    )
+
+    closed = loaded(loaded(result).closed)
+    assert (closed.exercise_id, closed.description) == (stomp.id, "Stomp!")
+    assert (closed.started_at, closed.ended_at) == (began, NOW)
+    assert (closed.speed, closed.log_group) == ("80%", slap.log_group)
+    assert loaded(loaded(result).exercise).practiced_count == 9
+    assert current_entry(db, now=NOW) is None
+
+
+def test_a_line_you_named_keeps_its_name_when_an_exercise_claims_it(
+    db, stomp, steady_rng
+):
+    start_ad_hoc(db, description="warm-up", now=datetime(2026, 7, 5, 22, 20), rng=RNG)
+
+    result = stop_exercise(
+        db,
+        exercise_id=stomp.id,
+        algorithm=Algorithm.NORMAL,
+        now=NOW,
+        rng=steady_rng,
+    )
+
+    closed = loaded(loaded(result).closed)
+    assert (closed.exercise_id, closed.description) == (stomp.id, "warm-up")
+
+
 def test_stop_with_nothing_running_does_nothing(db, stomp, steady_rng):
     result = stop_exercise(
         db,
