@@ -234,7 +234,7 @@ select {
 }
 
 /* The stop box: one border round a column of buttons, 10px off them, with
-   the label sitting on the border. A subtle gradient on each button. */
+   the label sitting on the border. */
 .stop-box {
   display: inline-flex;
   flex-direction: column;
@@ -253,13 +253,17 @@ select {
   color: var(--muted);
 }
 
-.stop-box button {
-  background: linear-gradient(to bottom, #ffffff, #e6e6e6);
-}
+/* Each button is one flat colour; stacked, the five step down in tone, so the
+   column reads as a single gradient. */
+.stop-box button:nth-of-type(1) { background: #f7f7f7; }
+.stop-box button:nth-of-type(2) { background: #efefef; }
+.stop-box button:nth-of-type(3) { background: #e7e7e7; }
+.stop-box button:nth-of-type(4) { background: #dfdfdf; }
+.stop-box button:nth-of-type(5) { background: #d7d7d7; }
 
 .stop-box button:hover,
 .stop-box button:focus {
-  background: linear-gradient(to bottom, #fafafa, #d6d6d6);
+  filter: brightness(0.94);
 }
 
 button.remove {

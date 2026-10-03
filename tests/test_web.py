@@ -10,6 +10,7 @@ injects them, so a test can pin "now" without `freezegun`.
 
 import re
 from datetime import date, datetime, time
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -1941,3 +1942,15 @@ def test_a_stop_button_carries_its_algorithm_to_the_server(client, conn, le_frea
 
     assert response.status_code == 200
     assert running(conn) is None
+
+
+def test_the_stop_buttons_are_flat_colours_that_step_down_as_a_column():
+    css = (Path(deps.__file__).parent / "static" / "app.css").read_text()
+
+    steps = re.findall(
+        r"\.stop-box button:nth-of-type\((\d)\) \{ background: (#\w+); \}", css
+    )
+    assert [n for n, _ in steps] == ["1", "2", "3", "4", "5"]
+    tones = [int(colour[1:3], 16) for _, colour in steps]
+    assert tones == sorted(tones, reverse=True) and len(set(tones)) == 5
+    assert "linear-gradient" not in css[css.index(".stop-box") :]
