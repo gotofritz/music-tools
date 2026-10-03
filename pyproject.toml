@@ -30,6 +30,7 @@ loop="music_tools.loop:main"
 [dependency-groups]
 dev = [
     "httpx>=0.28.1",
+    "poethepoet>=0.32",
     "pytest>=8.3.4",
     "pytest-cov>=6.0",
     "ruff>=0.9.0",
@@ -42,6 +43,19 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["music_tools"]
+
+[tool.poe.tasks]
+test = { cmd = "pytest --cov --cov-report=term-missing", help = "Run the test suite, with coverage" }
+types = { cmd = "ty check", help = "Type check" }
+"db:dump" = { cmd = "practice db dump", help = "Dump the practice database to backups/practice.sql" }
+
+[tool.poe.tasks.lint]
+help = "Lint and check formatting"
+sequence = [{ cmd = "ruff check ." }, { cmd = "ruff format --check ." }]
+
+[tool.poe.tasks.qa]
+help = "Everything CI runs"
+sequence = [{ ref = "lint" }, { ref = "types" }, { ref = "test" }]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

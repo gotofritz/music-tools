@@ -233,7 +233,7 @@ schema is eight tables by the end and the queries are all
 Adding SQLAlchemy would be more new surface than the app it holds.
 
 **Backups.** The spreadsheet gave version history for free and a local SQLite
-file does not. `task db:dump` writes `practice.sql` (`sqlite3 .dump`, stable
+file does not. `uv run poe db:dump` writes `practice.sql` (`sqlite3 .dump`, stable
 line ordering) into a backup directory, so the practice history can live in a
 git repo and diff row by row. Run it from the app on shutdown too.
 
@@ -328,7 +328,7 @@ steps as its phase starts, and is expected to bend on contact with reality.
 
 **Phase 1 — Foundations.** `loop.py` is a PEP 723 single-file script, so nothing
 can import `Score` or `parse_markers` from it, and there is no suite at all.
-Move it into the package, add `pytest`/`ruff`/`ty`, a `Taskfile.yml` and a
+Move it into the package, add `pytest`/`ruff`/`ty`, a `poe` task set and a
 workflow — AGENTS.md already assumes both `task` and CI exist. Then pin the
 marker, pattern and drill behaviour with characterisation tests, so the later
 refactors have something to break loudly.
