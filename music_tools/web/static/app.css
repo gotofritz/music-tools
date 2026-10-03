@@ -233,19 +233,81 @@ select {
   border-color: var(--ink);
 }
 
+/* The stop box: one border round a column of buttons, 10px off them, with
+   the label sitting on the border. */
+.stop-box {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin: 0.4rem 0 0.2rem;
+  padding: 10px;
+  border: 1px solid var(--muted);
+  border-radius: 6px;
+}
+
+.stop-box legend {
+  padding: 0 0.4rem;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: lowercase;
+  color: var(--muted);
+}
+
+/* Each button is one flat colour; stacked, the five step down in tone, so the
+   column reads as a single gradient. */
+.stop-box button:nth-of-type(1) { background: #f7f7f7; }
+.stop-box button:nth-of-type(2) { background: #efefef; }
+.stop-box button:nth-of-type(3) { background: #e7e7e7; }
+.stop-box button:nth-of-type(4) { background: #dfdfdf; }
+.stop-box button:nth-of-type(5) { background: #d7d7d7; }
+
+.stop-box button:hover,
+.stop-box button:focus {
+  filter: brightness(0.94);
+}
+
 button.remove {
   color: var(--overdue);
 }
 
-.edit-day {
-  font-size: 0.8rem;
-  font-weight: 400;
+/* A cell is plain text until it is clicked; then it is a box (see app.js). */
+.cell-text {
+  display: inline-block;
+  min-width: 1.5rem;
+  border-radius: 3px;
+  padding: 0.1rem 0.25rem;
+  cursor: text;
+}
+
+.cell-text:hover,
+.cell-text:focus {
+  background: rgba(0, 0, 0, 0.05);
+  outline: none;
+}
+
+.cell-value:empty::before {
+  content: attr(data-placeholder);
   color: var(--muted);
 }
 
-.edit-day:hover,
-.edit-day:focus {
-  color: var(--ink);
+.cell {
+  font: inherit;
+}
+
+/* Notes: on a line of their own, as wide as the cell allows, and as tall as
+   the text (app.js grows the box); two lines at least. */
+.cell-text.wide {
+  display: block;
+  white-space: pre-wrap;
+}
+
+textarea.cell {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 2lh;
+  overflow: hidden;
+  resize: vertical;
 }
 
 .problem {

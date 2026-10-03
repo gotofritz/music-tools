@@ -304,13 +304,23 @@ and a wrong correction costs a wrong number about a tune:
   entirely. Correcting it is the usual move; removing it is for when there is
   nothing to correct. The day itself stays, empty totals and all.
 
-**Editing is per day and asked for.** `GET /days/{day}/edit` redraws that one
-day with boxes round its lines and a **remove** button on each, `GET /days/{day}`
-puts it back, and both are real links so the toggle survives the JavaScript
-being off. The default is read-only because the log is mostly read: a page of
-input boxes reads like a form rather than a record of practice. Removal is
-`DELETE /entries/{id}`, with `POST /entries/{id}/delete` as the same handler
-for a form, and `hx-confirm` in front of it.
+**Editing is in place, a cell at a time.** Every finished line is a row of
+cells (`_cells.html`) that are plain text until clicked or tabbed to: the
+server renders the real input inside an inert `<template>` beside the text and
+`static/app.js` swaps the two, so the markup, `hx-patch` and ids are the
+server's. Each box is its own `hx-patch` on `change` — the browser's
+"committed", which fires on blur and on Enter and not on a keystroke — and one
+left unchanged goes back to text, so there is no edit mode, no save button and no `/days/{day}/edit`. Only the changed
+field is sent; `PATCH /entries/{id}` reads the raw form, because a declared
+`Form` field cannot tell an emptied box (clear it) from one that was not sent
+(leave it). An emptied description is the exception and changes nothing: a line
+cannot go nameless. The response redraws the whole day, and every box carries a
+stable id, and after a redraw `app.js` reopens the box that had the cursor, so
+Tab goes on to the next cell; `static/app.js` makes Esc restore a cell. The same pattern covers the
+exercise row (its form listens to `change, submit`) and the media rows and set
+labels. The cost is that editing needs JavaScript; reading and the buttons do
+not. Removal is `DELETE /entries/{id}`, with `POST /entries/{id}/delete` as the
+same handler for a form, and `hx-confirm` in front of it.
 
 `description`, `speed`, `bpm` and `log_group` on an entry are **snapshots**: the
 log is a record and must not change when an exercise is renamed, retuned or
@@ -434,13 +444,10 @@ Three rules hold this shape, and the tests in `tests/test_web.py` enforce them:
   the `HX-Request` header gets a 303 back to the page it came from instead of a
   fragment. A broken `htmx.min.js` costs page reloads, not the app.
 - **A form never spans table cells.** The parser closes it at the first
-  `</td>`, and every box after that belongs to no form at all: it is left out
-  of the submit, and a save button beyond the cell submits nothing. Both edit
-  rows keep the `<form>` element inside one cell — the exercise row puts its
-  boxes there with it, the log's row spreads its boxes over the columns they
-  belong to and binds each one, and the save button, with `form="…"`. That
-  attribute is ordinary form ownership, so a plain submit carries the whole
-  row as well.
+  `</td>`, and every box after that belongs to no form at all. The exercise row
+  keeps its `<form>` inside one cell with its boxes. The log's row has no form
+  for its cells at all: each cell is its own `hx-patch` input, which sends only
+  itself, so nothing needs to be gathered across columns.
 - **A refusal is a message on the page.** The domain writes a sentence, the
   route turns it into a status code, and `create_app`'s handler renders that
   sentence: HTMX gets it retargeted to the `#problem` slot `base.html` carries

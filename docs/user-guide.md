@@ -136,19 +136,20 @@ starts it without opening a window.
 - **Earlier** is the five days before it, newest first, each with what you
   played, its subtotals and its total. **load more** adds the next five. There
   is no date picker and no search: it is a log, and you read it backwards.
-- **edit**, beside a day, puts boxes round that day's lines — and only that
-  day's. Change the times, what you played, the speed, the group or the notes,
-  press **save**, and the day redraws with its totals worked out again. Fix as
-  many lines as you like; **done** puts the day back to plain reading. Use it
-  for the clock you left running through supper, or a name typed in a hurry.
-- **remove**, at the end of a line in edit mode, takes that line out of the log
-  for good — for the block that should not be there at all, rather than one
-  that needs correcting. It asks first, and the day's totals are worked out
-  again without it.
+- **Every line is editable where it is.** Click a time, the name, the notes,
+  the speed or the group — it turns into a box — change it, and move away — Tab, Enter or a click
+  elsewhere saves it, and the day redraws with its totals worked out again.
+  **Esc** puts back what was there and saves nothing. There is no edit mode and
+  no save button. Use it for the clock you left running through supper, or a
+  name typed in a hurry.
+- **remove**, at the end of a line, takes that line out of the log for good —
+  for the block that should not be there at all, rather than one that needs
+  correcting. It asks first, and the day's totals are worked out again
+  without it.
 - What is **due** is not here — it lives on the module pages, one click away in
   the bar at the top, because a queue belongs to the module it is scheduled
   in.
-- The line that is **running** gets no boxes even in edit mode: that one is
+- The line that is **running** gets no boxes: that one is
   what you are playing, and **done** and **discard** on the card are what move
   it. It becomes editable once it is closed, like every other line.
 - With nothing running, the card holds a **START** button. It opens a line
@@ -173,13 +174,14 @@ What a click means depends on what is running:
 | nothing | **start** here | this one starts |
 | this row | **start** here | nothing — the line keeps the time it began at |
 | another row | **stop** here | nothing |
+| a **START** line, no row | **stop** here | the line becomes this row's — it keeps its start time — and closes |
 | nothing | **stop** here | the line is written backwards, from the last line's end to now |
 | this row | **stop** here | the line closes and the schedule moves |
 
 Starting one row while another is running is the old chained log: the row you
 leave is closed there and scheduled on the **normal** interval, because you
 have gone on to the next thing and nothing else would ever move it. Use **stop**
-when you want to say how it comes back — the drop-down beside it — and
+when you want to say how it comes back — the box of buttons — and
 **discard** when the time should not be logged at all.
 
 **Stop works even when you forgot to start.** Stop one tune, play the next
@@ -189,13 +191,14 @@ usual way. It is the stretch you were playing in, so it is yours. Nothing is
 written when there is no line to follow on from — a day with nothing logged in
 it yet has no stretch to attribute, so start that one first.
 
-The drop-down beside **stop** is the choice the flags give you on the command
+The box of buttons under **stop** is the choice the flags give you on the command
 line: `normal`, `short` (this one
 is not sticking), `long` (this one is solid), `rotate` (to the back of the
 module's queue), `hold` (to the front). Click it and the row, today's log and
 the totals all update where they are; the page does not reload.
 
-Change the name, the speed, the target or the notes and press **save** — the row re-reads itself
+Change the name, the speed, the target or the notes and move away from the box
+(Tab, Enter or a click elsewhere) — the row saves and re-reads itself
 with the speed worked out, so typing `85%` shows you `113 BPM (85%)` as you go.
 Clear the target and save to take it away again; a target that is not a number
 is refused with a message. A row with no target is flagged in red, because a percentage of nothing cannot
