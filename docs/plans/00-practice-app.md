@@ -392,9 +392,6 @@ Recorded so they do not creep in:
 - **`rearrange` and its nested step DSL** (`music_tools/main.py`,
   `music_tools/configs/`). Unifying it with `loop.py` is wanted eventually and
   is not this plan.
-- **`triads.py`, `intervals.py`, `generate_exercise.py`** and their JSON state
-  files. They are generators of exercises rather than trackers of them; they
-  could become a module type later.
 - **Merging `Score` with `markers.MarkerFile`**, and the third copy of
   `parse_timestamp` in `main.py`. They answer different questions; consolidating
   belongs to the unify step.

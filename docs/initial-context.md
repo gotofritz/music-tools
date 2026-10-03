@@ -78,9 +78,6 @@ docs/
     plans/               the active plan, one document per phase
     archive/             completed plans
     raw/                 the spreadsheet being replaced, and its scripts
-triads.py                standalone practice generators, unrelated to the above
-intervals.py
-generate_exercise.py
 config/, tunes/          hand-kept example inputs and shell wrappers
 ```
 
@@ -639,6 +636,5 @@ rebuild the loop output from the markers by pointing at the page, replacing
 Transcribe! piece by piece. The YAML loop editor is parked at the back of the
 queue (`docs/plans/08-loop-editor.md`).
 
-Out of scope throughout: `rearrange` and its step DSL, the standalone
-`triads.py` / `intervals.py` / `generate_exercise.py` generators, merging
+Out of scope throughout: `rearrange` and its step DSL, merging
 `Score` with `markers.MarkerFile`, and anything multi-user or remote.
