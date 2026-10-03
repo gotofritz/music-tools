@@ -65,7 +65,7 @@ Everything below is for developers.
 ### Setup
 
 Requires Python 3.12+, [uv](https://docs.astral.sh/uv/) **0.11 or newer**,
-[Task](https://taskfile.dev/), and `ffmpeg` on `PATH` (pydub shells out to it
+and `ffmpeg` on `PATH` (pydub shells out to it
 for anything that is not a `.wav`). `uv self update` if yours is older: the
 project sets `exclude-newer = "7 days"` in `pyproject.toml`, and relative
 values are only understood from 0.11 on.
@@ -90,8 +90,12 @@ uv run practice serve               # the same thing as a page on 127.0.0.1:8567
 uv run loop practice.yml            # build the practice file
 uv run loop --expand practice.yml   # print what a drill stands for, and stop
 uv run loop --help                  # the full pattern grammar
-uv run rearrange --help
+uv run rearrange -c job.yml         # cut a backing track into practice files (older tool)
 ```
+
+Three commands are installed — `practice`, `loop` and `rearrange` — and the
+dev tasks run through [poethepoet](https://poethepoet.natn.io/): `uv run poe`
+lists them. There are no other scripts.
 
 The practice database lives at `~/.local/share/music-tools/practice.db`.
 `MUSIC_TOOLS_DB` moves it, and `--db` overrides both — which is how the tests
@@ -133,14 +137,14 @@ works, and saying so in the commit.
 ### Workflow
 
 ```bash
-task qa       # lint, types, tests — run this before opening a PR
-task test     # pytest, with a coverage report
-task lint     # ruff check + ruff format --check
-task types    # ty check
-task db:dump  # back the practice database up to backups/practice.sql
+uv run poe qa       # lint, types, tests — run this before opening a PR
+uv run poe test     # pytest, with a coverage report
+uv run poe lint     # ruff check + ruff format --check
+uv run poe types    # ty check
+uv run poe db:dump  # back the practice database up to backups/practice.sql
 ```
 
-CI runs `task qa` on every push to `main` and every pull request
+CI runs `uv run poe qa` on every push to `main` and every pull request
 (`.github/workflows/qa.yml`). A push to `main` also uploads `.coverage` and
 regenerates the coverage badge onto the `badges` branch — generated output,
 kept off `main`. Coverage measures `music_tools/` less the `rearrange`

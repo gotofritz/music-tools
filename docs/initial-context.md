@@ -78,9 +78,6 @@ docs/
     plans/               the active plan, one document per phase
     archive/             completed plans
     raw/                 the spreadsheet being replaced, and its scripts
-triads.py                standalone practice generators, unrelated to the above
-intervals.py
-generate_exercise.py
 config/, tunes/          hand-kept example inputs and shell wrappers
 ```
 
@@ -390,7 +387,7 @@ by a partial unique index, and `(day, started_at)` for entries, which is a
 lookup rather than a constraint because two exercises marked done in the same
 second share an instant.
 
-`practice db dump` (and `task db:dump`) writes `backups/practice.sql` through
+`practice db dump` (and `uv run poe db:dump`) writes `backups/practice.sql` through
 `sqlite3.iterdump`, so no `sqlite3` binary is needed and the practice history
 can live in a git repository and diff row by row. The spreadsheet gave version history
 for free and a local file does not.
@@ -604,7 +601,7 @@ layer can catch them without depending on click.
 
 ## Testing
 
-`task qa` runs lint, types and tests. The Phase 1 suite is
+`uv run poe qa` runs lint, types and tests. The Phase 1 suite is
 **characterisation** — it pins `loop` behaviour that already existed so later
 refactors break loudly. Everything from Phase 2 on is red-first
 (`.claude/skills/tdd.md`): a failing test, watched failing, then the minimal
@@ -633,7 +630,7 @@ spreadsheet is no longer used, so this repo is now the only record of what was
 practised and when. The importer, and the sheet exports it was tested against,
 have been deleted now that the backfill is complete — a one-off job that had
 been done, and git history has it if it is ever needed again. Two things follow
-from being the only record. `task db:dump` and a committed
+from being the only record. `uv run poe db:dump` and a committed
 `backups/practice.sql` are the whole of the version history a spreadsheet used
 to give away. And `target_bpm` is still missing on the rows the import could not
 fill; the module view flags them, and they get filled in by use.
@@ -646,6 +643,5 @@ rebuild the loop output from the markers by pointing at the page, replacing
 Transcribe! piece by piece. The YAML loop editor is parked at the back of the
 queue (`docs/plans/08-loop-editor.md`).
 
-Out of scope throughout: `rearrange` and its step DSL, the standalone
-`triads.py` / `intervals.py` / `generate_exercise.py` generators, merging
+Out of scope throughout: `rearrange` and its step DSL, merging
 `Score` with `markers.MarkerFile`, and anything multi-user or remote.

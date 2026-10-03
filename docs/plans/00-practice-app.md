@@ -233,7 +233,7 @@ schema is eight tables by the end and the queries are all
 Adding SQLAlchemy would be more new surface than the app it holds.
 
 **Backups.** The spreadsheet gave version history for free and a local SQLite
-file does not. `task db:dump` writes `practice.sql` (`sqlite3 .dump`, stable
+file does not. `uv run poe db:dump` writes `practice.sql` (`sqlite3 .dump`, stable
 line ordering) into a backup directory, so the practice history can live in a
 git repo and diff row by row. Run it from the app on shutdown too.
 
@@ -328,7 +328,7 @@ steps as its phase starts, and is expected to bend on contact with reality.
 
 **Phase 1 — Foundations.** `loop.py` is a PEP 723 single-file script, so nothing
 can import `Score` or `parse_markers` from it, and there is no suite at all.
-Move it into the package, add `pytest`/`ruff`/`ty`, a `Taskfile.yml` and a
+Move it into the package, add `pytest`/`ruff`/`ty`, a `poe` task set and a
 workflow — AGENTS.md already assumes both `task` and CI exist. Then pin the
 marker, pattern and drill behaviour with characterisation tests, so the later
 refactors have something to break loudly.
@@ -392,9 +392,6 @@ Recorded so they do not creep in:
 - **`rearrange` and its nested step DSL** (`music_tools/main.py`,
   `music_tools/configs/`). Unifying it with `loop.py` is wanted eventually and
   is not this plan.
-- **`triads.py`, `intervals.py`, `generate_exercise.py`** and their JSON state
-  files. They are generators of exercises rather than trackers of them; they
-  could become a module type later.
 - **Merging `Score` with `markers.MarkerFile`**, and the third copy of
   `parse_timestamp` in `main.py`. They answer different questions; consolidating
   belongs to the unify step.

@@ -418,7 +418,7 @@ not:
 uv run practice db dump    # writes backups/practice.sql
 ```
 
-(or `task db:dump`, which is the same thing)
+(or `uv run poe db:dump`, which is the same thing)
 
 That is plain text, one line per row, so it can live in a git repository and be
 read in a diff.
