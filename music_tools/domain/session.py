@@ -62,6 +62,10 @@ class EntryClosed(RuntimeError):
     """The entry is already finished, so there is nothing to close or drop."""
 
 
+#: What a line is called when it was started with nothing said about it.
+DEFAULT_DESCRIPTION = "Practice"
+
+
 def practice_day_for(now: datetime) -> date:
     """Which practice day an instant falls in, at the 4am boundary."""
     return (now - timedelta(hours=END_OF_DAY_HOUR)).date()
@@ -254,7 +258,9 @@ def stop_exercise(
     """`finish_entry` addressed to an exercise rather than to a line of the log.
 
     Every row carries a stop button, so a stop while something else is running
-    is a click on the wrong row: nothing happens. With **nothing** running it
+    is a click on the wrong row: nothing happens. The exception is a line that
+    belongs to no exercise — the START button's — which the row stopped is
+    claimed by: that is what was being practised. With **nothing** running it
     is the start that was never clicked — the player went on playing after
     stopping the last thing — so the line is written backwards from the stop:
     it opens a microsecond after the last line of the day closed, and closes
@@ -264,6 +270,16 @@ def stop_exercise(
     """
     running = _running_for(conn, now=now)
     if running is not None:
+        if running.exercise_id is None:
+            return _claim_and_finish(
+                conn,
+                running,
+                exercise_id=exercise_id,
+                algorithm=algorithm,
+                now=now,
+                rng=rng,
+                notes=notes,
+            )
         if running.exercise_id != exercise_id:
             return None
         return finish_entry(
@@ -282,6 +298,47 @@ def stop_exercise(
         rng=rng,
         notes=notes,
     )
+
+
+def _claim_and_finish(
+    conn: sqlite3.Connection,
+    entry: PracticeEntry,
+    *,
+    exercise_id: int,
+    algorithm: Algorithm,
+    now: datetime,
+    rng: random.Random,
+    notes: str | None = None,
+) -> DoneResult:
+    """Give an unattached running line to the exercise, then close it as its own.
+
+    The START button opens a line before anyone has said what is being played;
+    stopping a row says it. The line keeps the time it began at and a name the
+    player typed, and takes the rest — speed, tempo, group — from the exercise
+    as `start_exercise` would have, so what is scheduled is what was logged.
+    """
+    with transaction(conn):
+        exercise = repo.get_exercise(conn, exercise_id)
+        if exercise is None:
+            raise UnknownExercise(exercise_id)
+        module = repo.get_module(conn, exercise.module_id)
+        tempo = parse_tempo(exercise.speed or "", target_bpm=exercise.target_bpm)
+        claimed = repo.update_entry(
+            conn,
+            entry.id,
+            exercise_id=exercise.id,
+            description=(
+                exercise.name
+                if entry.description == DEFAULT_DESCRIPTION
+                else entry.description
+            ),
+            speed=exercise.speed,
+            bpm=tempo.bpm,
+            log_group=module.log_group if module else None,
+        )
+        return _finish(
+            conn, claimed, algorithm=algorithm, now=now, rng=rng, notes=notes
+        )
 
 
 def _backfill(

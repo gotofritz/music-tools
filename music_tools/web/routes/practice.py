@@ -30,6 +30,9 @@ from music_tools.web.deps import (
 
 router = APIRouter()
 
+#: What an amend may change. Anything else in the form is ignored.
+AMENDABLE = ("started_at", "ended_at", "description", "speed", "log_group", "notes")
+
 
 @router.get("/", response_class=HTMLResponse)
 def today(
@@ -68,23 +71,8 @@ def one_day(
     conn: sqlite3.Connection = Depends(get_conn),
     now: datetime = Depends(get_now),
 ) -> HTMLResponse:
-    """One day, as written. The way back out of edit mode."""
-    return _day_view(request, conn, day=day, now=now, editing=False)
-
-
-@router.get("/days/{day}/edit", response_class=HTMLResponse)
-def edit_one_day(
-    request: Request,
-    day: date,
-    conn: sqlite3.Connection = Depends(get_conn),
-    now: datetime = Depends(get_now),
-) -> HTMLResponse:
-    """The same day with boxes round its lines, one day at a time.
-
-    Editing is per day and asked for: the log is read by default, and a page
-    of input boxes reads like a form rather than a record of practice.
-    """
-    return _day_view(request, conn, day=day, now=now, editing=True)
+    """One day, as a page of its own. Its lines are editable where they are."""
+    return _day_view(request, conn, day=day, now=now)
 
 
 @router.post("/exercises/{exercise_id}/start")
@@ -199,7 +187,7 @@ def discard(
 @router.post("/entries")
 def add_entry(
     request: Request,
-    description: str = Form("Practice"),
+    description: str = Form(session.DEFAULT_DESCRIPTION),
     log_group: str | None = Form(None),
     speed: str | None = Form(None),
     notes: str | None = Form(None),
@@ -216,7 +204,7 @@ def add_entry(
     session.start_ad_hoc(
         conn,
         rng=rng,
-        description=description.strip() or "Practice",
+        description=description.strip() or session.DEFAULT_DESCRIPTION,
         log_group=log_group or None,
         speed=speed or None,
         notes=notes or None,
@@ -226,15 +214,9 @@ def add_entry(
 
 
 @router.api_route("/entries/{entry_id}", methods=["PATCH", "POST"])
-def amend_entry(
+async def amend_entry(
     request: Request,
     entry_id: int,
-    started_at: str | None = Form(None),
-    ended_at: str | None = Form(None),
-    description: str | None = Form(None),
-    speed: str | None = Form(None),
-    log_group: str | None = Form(None),
-    notes: str | None = Form(None),
     conn: sqlite3.Connection = Depends(get_conn),
     now: datetime = Depends(get_now),
 ) -> Response:
@@ -242,7 +224,15 @@ def amend_entry(
 
     Registered for POST as well as PATCH, like the exercise edit: HTML forms
     send neither PATCH nor anything else HTMX might prefer.
+
+    A cell sends only itself, so a field that is not in the form is left
+    alone, and one that is there but empty is cleared — which is why the form
+    is read raw: a declared `Form` field cannot tell the two apart. A line
+    cannot be left without a name, so an emptied description changes nothing.
     """
+    form = await request.form()
+    posted = {key: str(form[key]) for key in AMENDABLE if key in form}
+    description = posted.get("description", "").strip() or None
     entry = repo.get_entry(conn, entry_id)
     if entry is None:
         raise HTTPException(status_code=404, detail="no entry with that id")
@@ -250,12 +240,12 @@ def amend_entry(
         amended = session.amend_entry(
             conn,
             entry_id=entry_id,
-            started_at=_at(started_at, entry.started_at),
-            ended_at=_at(ended_at, entry.ended_at),
+            started_at=_at(posted.get("started_at"), entry.started_at),
+            ended_at=_at(posted.get("ended_at"), entry.ended_at),
             description=description,
-            speed=speed,
-            log_group=log_group,
-            notes=notes,
+            speed=posted.get("speed"),
+            log_group=posted.get("log_group"),
+            notes=posted.get("notes"),
         )
     except session.EntryRunning:
         raise HTTPException(
@@ -264,7 +254,6 @@ def amend_entry(
     except ValueError as unreadable:
         raise HTTPException(status_code=400, detail=str(unreadable)) from None
 
-    # Still editing afterwards: the line below this one may be wrong too.
     day = practice_day_for(amended.started_at)
     return fragment_or_redirect(request, _amended_day(conn, day=day, now=now))
 
@@ -331,12 +320,10 @@ def _redraw(
 
 
 def _amended_day(conn: sqlite3.Connection, *, day: date, now: datetime) -> str:
-    """The day a correction landed on, still open for the next one."""
+    """The day a correction landed on, as it now reads."""
     if day == practice_day_for(now):
-        return _log_fragments(conn, now=now, editing=True)
-    return render(
-        "_day_block.html", **views.day_context(conn, now=now, day=day, editing=True)
-    )
+        return _log_fragments(conn, now=now)
+    return render("_day_block.html", **views.day_context(conn, now=now, day=day))
 
 
 def _day_view(
@@ -345,12 +332,11 @@ def _day_view(
     *,
     day: date,
     now: datetime,
-    editing: bool,
 ) -> HTMLResponse:
     """One day as a fragment for HTMX, and as a page for a plain browser."""
     if repo.get_day(conn, day) is None:
         raise HTTPException(status_code=404, detail=f"nothing logged on {day}")
-    context = views.day_context(conn, now=now, day=day, editing=editing)
+    context = views.day_context(conn, now=now, day=day)
     if not is_htmx(request):
         return HTMLResponse(render("day.html", **context))
     fragment = "_day_log.html" if context["is_today"] else "_day_block.html"
@@ -371,11 +357,9 @@ def _at(written: str | None, current: datetime | None) -> datetime | None:
         raise ValueError(f"cannot read the time {written!r}") from None
 
 
-def _log_fragments(
-    conn: sqlite3.Connection, *, now: datetime, editing: bool = False
-) -> str:
+def _log_fragments(conn: sqlite3.Connection, *, now: datetime) -> str:
     """The log itself — card and all — with the totals riding behind it."""
-    context = {**views.today_context(conn, now=now), "editing": editing}
+    context = views.today_context(conn, now=now)
     return render("_day_log.html", **context) + render(
         "_day_totals.html", oob=True, **context
     )

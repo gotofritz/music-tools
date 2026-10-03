@@ -4,6 +4,7 @@
    the material together, not for practising from it. A file card carries its
    members' names and mix state, because a track set is one thing to play and
    those are its channels. #}
+{% from "_cells.html" import editable %}
 <section id="media-list">
   {% if not cards %}
   <p>Nothing attached yet.</p>
@@ -29,11 +30,11 @@
 
     {% if card.group %}
     <form action="/groups/{{ card.group.id }}/label" method="post"
-          hx-post="/groups/{{ card.group.id }}/label"
+          hx-post="/groups/{{ card.group.id }}/label" hx-trigger="change, submit"
           hx-target="#media-list" hx-swap="outerHTML">
-      <input type="text" name="label" value="{{ card.group.label or "" }}" size="14"
-             aria-label="what this set is" placeholder="stems, with click">
-      <button type="submit">name the set</button>
+      {% call editable(card.group.label or "", "stems, with click") %}<input type="text" class="cell" id="group-{{ card.group.id }}-label" name="label"
+             value="{{ card.group.label or "" }}" size="14"
+             aria-label="what this set is" placeholder="stems, with click">{% endcall %}
     </form>
     {% endif %}
 
@@ -53,18 +54,17 @@
           <td>
             {% if source.kind == "file" %}
             <form action="/media/{{ source.id }}" method="post"
-                  hx-patch="/media/{{ source.id }}"
+                  hx-patch="/media/{{ source.id }}" hx-trigger="change, submit"
                   hx-target="#media-list" hx-swap="outerHTML">
-              <input type="text" name="label" value="{{ source.label or "" }}" size="10"
-                     aria-label="track name" placeholder="bass, drums">
-              <input type="text" name="gain" value="{{ source.gain }}" size="4"
-                     aria-label="gain">
-              <input type="text" name="pan" value="{{ source.pan }}" size="4"
-                     aria-label="pan">
+              {% call editable(source.label or "", "bass, drums") %}<input type="text" class="cell" id="media-{{ source.id }}-label" name="label" value="{{ source.label or "" }}" size="10"
+                     aria-label="track name" placeholder="bass, drums">{% endcall %}
+              gain {% call editable(source.gain, "gain") %}<input type="text" class="cell" id="media-{{ source.id }}-gain" name="gain" value="{{ source.gain }}" size="4"
+                     aria-label="gain">{% endcall %}
+              pan {% call editable(source.pan, "pan") %}<input type="text" class="cell" id="media-{{ source.id }}-pan" name="pan" value="{{ source.pan }}" size="4"
+                     aria-label="pan">{% endcall %}
               <label>muted
-                <input type="checkbox" name="muted"{% if source.muted %} checked{% endif %}>
+                <input type="checkbox" id="media-{{ source.id }}-muted" name="muted"{% if source.muted %} checked{% endif %}>
               </label>
-              <button type="submit">save</button>
             </form>
             {% elif source.label %}
             <span class="muted">{{ source.label }}</span>
