@@ -276,7 +276,18 @@ def create_output(
 def main(
     config: str,
 ):
-    """Split and rearrange audio file based on markers."""
+    """Cut a backing track into bars and reassemble them as practice files.
+
+    Reads a YAML config (--config) naming the source audio tracks, a
+    Transcribe! marker file (sections and measures with timestamps) and a list
+    of output files. Each output file has steps that pick sections by regex
+    (e.g. "^A"), slice them into windows of N measures, and copy each slice
+    from a chosen track, repeated a set number of times (e.g. the bass track
+    3 times, then the drums-only track once). A quiet count-in of the first
+    bar is prepended. Each file is exported in the format of its extension.
+
+    Examples: music_tools/configs/*.yml, config/example_config.yml.
+    """
     job_config = Config.load(Path(config))
     markers = MarkerFile.load(job_config.source.markers)
 
