@@ -90,8 +90,12 @@ uv run practice serve               # the same thing as a page on 127.0.0.1:8567
 uv run loop practice.yml            # build the practice file
 uv run loop --expand practice.yml   # print what a drill stands for, and stop
 uv run loop --help                  # the full pattern grammar
-uv run rearrange --help
+uv run rearrange -c job.yml         # cut a backing track into practice files (older tool)
 ```
+
+Three commands are installed — `practice`, `loop` and `rearrange` — and the
+dev tasks run through [poethepoet](https://poethepoet.natn.io/): `uv run poe`
+lists them. There are no other scripts.
 
 The practice database lives at `~/.local/share/music-tools/practice.db`.
 `MUSIC_TOOLS_DB` moves it, and `--db` overrides both — which is how the tests
