@@ -233,6 +233,35 @@ select {
   border-color: var(--ink);
 }
 
+/* The stop box: one border round a column of buttons, 10px off them, with
+   the label sitting on the border. A subtle gradient on each button. */
+.stop-box {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin: 0.4rem 0 0.2rem;
+  padding: 10px;
+  border: 1px solid var(--muted);
+  border-radius: 6px;
+}
+
+.stop-box legend {
+  padding: 0 0.4rem;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: lowercase;
+  color: var(--muted);
+}
+
+.stop-box button {
+  background: linear-gradient(to bottom, #ffffff, #e6e6e6);
+}
+
+.stop-box button:hover,
+.stop-box button:focus {
+  background: linear-gradient(to bottom, #fafafa, #d6d6d6);
+}
+
 button.remove {
   color: var(--overdue);
 }

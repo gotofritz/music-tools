@@ -61,17 +61,18 @@
           hx-target="#queue" hx-swap="outerHTML">
       <button type="submit">start</button>
     </form>
+    {# Stop is a box of buttons, one per way it comes back, like the switches
+       on a studio rack: the legend sits on the border, and the button
+       clicked sends its own `algorithm`. #}
     <form action="/exercises/{{ exercise.id }}/stop" method="post"
           hx-post="/exercises/{{ exercise.id }}/stop"
           hx-target="#queue" hx-swap="outerHTML">
-      <select name="algorithm" aria-label="how it comes back">
-        <option value="normal">normal</option>
-        <option value="short">short</option>
-        <option value="long">long</option>
-        <option value="rotate">rotate</option>
-        <option value="hold">hold</option>
-      </select>
-      <button type="submit">stop</button>
+      <fieldset class="stop-box">
+        <legend>stop</legend>
+        {% for algorithm in ("normal", "short", "long", "rotate", "hold") %}
+        <button type="submit" name="algorithm" value="{{ algorithm }}">{{ algorithm }}</button>
+        {% endfor %}
+      </fieldset>
     </form>
     {% if running and running.exercise_id == exercise.id %}
     {# The one being practised, so a false start can be taken out from here. #}

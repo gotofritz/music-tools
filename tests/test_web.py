@@ -1916,3 +1916,28 @@ def test_stop_on_a_row_closes_the_start_button_line_and_schedules_the_row(
     after = repo.get_exercise(conn, le_freak.id)
     assert after is not None
     assert after.practiced_count == 9
+
+
+def test_stop_is_a_box_of_buttons_one_per_algorithm_not_a_dropdown(
+    client, songs, le_freak
+):
+    page = client.get("/modules/songs").text
+    row = page[page.index('<tbody id="queue">') : page.index("</tbody>")]
+    box = row[row.index('class="stop-box"') : row.index("</fieldset>")]
+
+    assert "<select" not in row
+    assert "<legend>stop</legend>" in box
+    for algorithm in ("normal", "short", "long", "rotate", "hold"):
+        assert f'name="algorithm" value="{algorithm}"' in box
+    assert box.count("<button") == 5
+
+
+def test_a_stop_button_carries_its_algorithm_to_the_server(client, conn, le_freak):
+    start(client, le_freak.id)
+
+    response = client.post(
+        f"/exercises/{le_freak.id}/stop", data={"algorithm": "hold"}, headers=hx()
+    )
+
+    assert response.status_code == 200
+    assert running(conn) is None

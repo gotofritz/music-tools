@@ -181,7 +181,7 @@ What a click means depends on what is running:
 Starting one row while another is running is the old chained log: the row you
 leave is closed there and scheduled on the **normal** interval, because you
 have gone on to the next thing and nothing else would ever move it. Use **stop**
-when you want to say how it comes back — the drop-down beside it — and
+when you want to say how it comes back — the box of buttons — and
 **discard** when the time should not be logged at all.
 
 **Stop works even when you forgot to start.** Stop one tune, play the next
@@ -191,7 +191,7 @@ usual way. It is the stretch you were playing in, so it is yours. Nothing is
 written when there is no line to follow on from — a day with nothing logged in
 it yet has no stretch to attribute, so start that one first.
 
-The drop-down beside **stop** is the choice the flags give you on the command
+The box of buttons under **stop** is the choice the flags give you on the command
 line: `normal`, `short` (this one
 is not sticking), `long` (this one is solid), `rotate` (to the back of the
 module's queue), `hold` (to the front). Click it and the row, today's log and
