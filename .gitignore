@@ -9,7 +9,7 @@ wheels/
 # Virtual environments
 .venv
 
-# Coverage: written by `task test`, uploaded by CI, never committed
+# Coverage: written by `poe test`, uploaded by CI, never committed
 .coverage
 coverage.svg
 badge/

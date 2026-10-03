@@ -380,7 +380,7 @@ by a partial unique index, and `(day, started_at)` for entries, which is a
 lookup rather than a constraint because two exercises marked done in the same
 second share an instant.
 
-`practice db dump` (and `task db:dump`) writes `backups/practice.sql` through
+`practice db dump` (and `uv run poe db:dump`) writes `backups/practice.sql` through
 `sqlite3.iterdump`, so no `sqlite3` binary is needed and the practice history
 can live in a git repository and diff row by row. The spreadsheet gave version history
 for free and a local file does not.
@@ -597,7 +597,7 @@ layer can catch them without depending on click.
 
 ## Testing
 
-`task qa` runs lint, types and tests. The Phase 1 suite is
+`uv run poe qa` runs lint, types and tests. The Phase 1 suite is
 **characterisation** — it pins `loop` behaviour that already existed so later
 refactors break loudly. Everything from Phase 2 on is red-first
 (`.claude/skills/tdd.md`): a failing test, watched failing, then the minimal
@@ -626,7 +626,7 @@ spreadsheet is no longer used, so this repo is now the only record of what was
 practised and when. The importer, and the sheet exports it was tested against,
 have been deleted now that the backfill is complete — a one-off job that had
 been done, and git history has it if it is ever needed again. Two things follow
-from being the only record. `task db:dump` and a committed
+from being the only record. `uv run poe db:dump` and a committed
 `backups/practice.sql` are the whole of the version history a spreadsheet used
 to give away. And `target_bpm` is still missing on the rows the import could not
 fill; the module view flags them, and they get filled in by use.

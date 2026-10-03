@@ -9,7 +9,7 @@
 ## Project Rules
 
 - Use `gh` for all GitHub operations
-- Use `task` for workflow discovery
+- Use `poe` (poethepoet) for workflow discovery: `uv run poe`
 - Run commands from project root
 
 ## Plans
@@ -40,7 +40,7 @@ Required flow:
 2. Confirm correct failure
 3. Implement minimal fix
 4. Refactor with tests green
-5. Run `task qa` before PR
+5. Run `uv run poe qa` before PR
 
 ## Decision Order
 

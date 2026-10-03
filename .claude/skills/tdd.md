@@ -260,7 +260,7 @@ Before marking work complete:
 - [ ] Each test failed for the expected reason (feature missing, not import error)
 - [ ] Wrote minimal code to pass each test
 - [ ] All tests pass: `uv run pytest tests/ -v`
-- [ ] Full QA passes: `task qa`
+- [ ] Full QA passes: `uv run poe qa`
 
 Can't check all boxes? You skipped TDD. Start over.
 
