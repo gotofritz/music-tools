@@ -1,8 +1,11 @@
 {# The material attached to an exercise, one card per thing, in `cards`.
 
-   Minimal on purpose: an audio or video file gets a bare `<audio>` — Phase 5
-   makes it a waveform with speed and pitch — a YouTube URL the embedded
-   player, a score a link that opens it locally, and text is text.
+   A lone audio or video file is the player: a waveform from server-computed
+   peaks, click to seek, a loop toggle, a speed slider bound to the row's
+   ratio and a semitone control. The `<audio controls>` inside is the whole
+   thing with the JavaScript off, and `player.js` takes the controls over
+   when it runs. A YouTube URL is the embedded player, a score a link that
+   opens it locally, and text is text.
 
    A track set renders as stacked players, which is honest about being
    unsynchronised rather than pretending otherwise; Phase 5b is the one
@@ -15,12 +18,47 @@
   <p class="muted">A track set of {{ card.sources | length }}: stacked players
     until they play as one (Phase 5b).</p>
   {% endif %}
-  {% for track in card.sources %}
-  <div class="track">
+  {% if not card.is_set and running_exercise %}
+  {% set track = card.sources[0] %}
+  {% set ratio = exercise_ratio(running_exercise) %}
+  <div class="player" data-peaks-url="/media/{{ track.id }}/peaks"
+       data-audio-url="/media/{{ track.id }}/audio"
+       data-speed-url="/exercises/{{ running_exercise.id }}/speed"
+       data-ratio="{{ "%g" | format(ratio if ratio is not none else 1) }}">
     <span class="track-name">{{ track.label or file_name(track.path) }}</span>
-    <audio controls preload="none" src="/media/{{ track.id }}/file"></audio>
+    <canvas class="wave" height="80" aria-label="waveform: click to seek"></canvas>
+    <audio controls preload="metadata" src="/media/{{ track.id }}/audio"></audio>
+    <div class="player-controls">
+      <button type="button" class="play">play</button>
+      <label class="loop"><input type="checkbox"> loop</label>
+      <label class="speed">speed
+        <input type="range" min="0.5" max="1" step="0.01"
+               {% if ratio is none %}disabled title="set a target BPM to use the slider"{% endif %}>
+        <output>{{ tempo_text(running_exercise) }}</output>
+        {% if ratio is none %}<span class="muted">needs a target BPM</span>{% endif %}
+      </label>
+      <label class="pitch">pitch
+        <select>
+          {% for st in range(-12, 13) %}
+          <option value="{{ st }}"{% if st == 0 %} selected{% endif %}>{{ "%+d" | format(st) if st else "0" }}</option>
+          {% endfor %}
+        </select>
+        semitones
+      </label>
+    </div>
   </div>
-  {% endfor %}
+  {% else %}
+  {# One grid per set: the names are a column and the players are a column, so
+     they line up whatever the names' lengths. #}
+  <div class="tracks">
+    {% for track in card.sources %}
+    <div class="track">
+      <span class="track-name">{{ track.label or file_name(track.path) }}</span>
+      <audio controls preload="none" src="/media/{{ track.id }}/audio"></audio>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
   {% elif card.kind == "youtube" %}
   {% set source = card.sources[0] %}
   {% set embed = youtube_embed(source.url) %}

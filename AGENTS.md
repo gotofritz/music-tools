@@ -56,9 +56,13 @@ Prioritize:
 
 ### Commits
 
+- Always use [Conventional Commits](https://www.conventionalcommits.org/):
+  `<type>: <subject>`, with type one of `feat`, `fix`, `docs`, `test`,
+  `refactor`, `chore`, `ci`, `perf`, `build`
+  (e.g. `feat: add waveform player`, `fix: 409 when a file has gone`)
 - Small, atomic commits
 - Imperative present tense
-- Subject ≤ 72 chars
+- Subject ≤ 72 chars, including the type prefix
 - Reference issues when relevant
 
 ### Branches

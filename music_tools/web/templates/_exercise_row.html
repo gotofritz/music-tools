@@ -22,6 +22,18 @@
           hx-target="#exercise-{{ exercise.id }}" hx-swap="outerHTML">
       {% call editable(exercise.name, "what to practise") %}<input type="text" class="cell" id="exercise-{{ exercise.id }}-name" name="name" value="{{ exercise.name }}" size="22"
              aria-label="name" placeholder="what to practise">{% endcall %}
+      {% call editable(exercise.notes or "", "notes", wide=True) %}<textarea class="cell" id="exercise-{{ exercise.id }}-notes" name="notes" rows="2" aria-label="notes"
+                placeholder="notes">{{ exercise.notes or "" }}</textarea>{% endcall %}
+    </form>
+    <a class="media-link" href="/exercises/{{ exercise.id }}/media"
+       title="attach or play a sound file, a score, a YouTube link or a note">media</a>
+  </td>
+  <td>
+    {# Its own form: one cannot span two cells. The speed is what this column
+       is about, so it is edited here, with the target it resolves against. #}
+    <form action="/exercises/{{ exercise.id }}" method="post"
+          hx-patch="/exercises/{{ exercise.id }}" hx-trigger="change, submit"
+          hx-target="#exercise-{{ exercise.id }}" hx-swap="outerHTML">
       {% call editable(exercise.speed or "", "speed") %}<input type="text" class="cell" id="exercise-{{ exercise.id }}-speed" name="speed" value="{{ exercise.speed or "" }}" size="9"
              aria-label="speed" placeholder="80% or 96"
              hx-get="/exercises/{{ exercise.id }}/tempo"
@@ -35,12 +47,7 @@
              hx-trigger="keyup changed delay:300ms"
              hx-params="speed,target_bpm"
              hx-target="#tempo-{{ exercise.id }}">{% endcall %}
-      {% call editable(exercise.notes or "", "notes", wide=True) %}<textarea class="cell" id="exercise-{{ exercise.id }}-notes" name="notes" rows="2" aria-label="notes"
-                placeholder="notes">{{ exercise.notes or "" }}</textarea>{% endcall %}
     </form>
-    <a class="media-link" href="/exercises/{{ exercise.id }}/media">media</a>
-  </td>
-  <td>
     <span id="tempo-{{ exercise.id }}">{{ tempo_text(exercise) }}</span>
     {% if exercise.target_bpm is none %}
     <span class="no-target" title="a percentage cannot resolve without one">no target</span>

@@ -20,11 +20,12 @@ from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, Response
 
 from music_tools.db import repository as repo
-from music_tools.domain import media
+from music_tools.domain import media, waveform
+from music_tools.domain import render as renders
 from music_tools.domain.models import Exercise, MediaSource
 from music_tools.web import views
 from music_tools.web.deps import fragment_or_redirect, get_conn, get_now, render
@@ -32,14 +33,12 @@ from music_tools.web.deps import fragment_or_redirect, get_conn, get_now, render
 router = APIRouter()
 
 
-@router.get("/media/{source_id}/file")
-def media_file(
-    source_id: int, conn: sqlite3.Connection = Depends(get_conn)
-) -> FileResponse:
-    """The file itself, as it sits on disk. Never copied, only read.
+def _playable_path(conn: sqlite3.Connection, source_id: int) -> Path:
+    """The file a media row points at, guarded the way every path in is.
 
-    `FileResponse` answers range requests on its own, which is what a browser
-    seeking through a track sends.
+    Re-checked against the roots on every request, because the roots can be
+    narrowed after a row was written. A file that has gone is a 409 naming the
+    path rather than a stack trace.
     """
     source = repo.get_media_source(conn, source_id)
     if source is None or source.path is None:
@@ -49,8 +48,59 @@ def media_file(
     except media.OutsideRoots as outside:
         raise HTTPException(status_code=403, detail=str(outside)) from None
     if not path.is_file():
-        raise HTTPException(status_code=404, detail=f"{source.path} is not there")
+        # The row is fine and the world has moved: a collision with what the
+        # database remembers, so 409 with the path to go and look for.
+        raise HTTPException(status_code=409, detail=f"{source.path} is not there")
+    return path
+
+
+@router.get("/media/{source_id}/file")
+def media_file(
+    source_id: int, conn: sqlite3.Connection = Depends(get_conn)
+) -> FileResponse:
+    """The file itself, as it sits on disk. Never copied, only read.
+
+    `FileResponse` answers range requests on its own — `Accept-Ranges: bytes`,
+    206 with `Content-Range`, 416 past the end — which Safari insists on and
+    every browser seeking through a track sends.
+    """
+    path = _playable_path(conn, source_id)
     return FileResponse(path, filename=Path(path).name)
+
+
+@router.get("/media/{source_id}/audio")
+def media_audio(
+    source_id: int,
+    semitones: int = Query(0, ge=-renders.MAX_SEMITONES, le=renders.MAX_SEMITONES),
+    conn: sqlite3.Connection = Depends(get_conn),
+) -> FileResponse:
+    """What the player plays: the file's audio, transposed by `semitones`.
+
+    A video is extracted and a shift is rendered, both through the cache; a
+    plain audio file at zero is served as it sits. Ranges come with
+    `FileResponse`, from the cache as from the roots.
+    """
+    path = _playable_path(conn, source_id)
+    with _rendering(path):
+        audio = renders.playable_audio(
+            path, semitones=semitones, cache=renders.cache_dir()
+        )
+    return FileResponse(audio, filename=audio.name)
+
+
+@router.get("/media/{source_id}/peaks")
+def media_peaks(
+    source_id: int,
+    buckets: int = Query(2000, ge=1, le=10_000),
+    conn: sqlite3.Connection = Depends(get_conn),
+) -> dict[str, object]:
+    """The waveform as `buckets` min/max pairs, and the length in seconds."""
+    path = _playable_path(conn, source_id)
+    with _rendering(path):
+        return {
+            "duration": renders.duration_seconds(path),
+            "peaks": waveform.peaks(path, buckets=buckets, cache=renders.cache_dir()),
+        }
 
 
 @router.get("/exercises/{exercise_id}/media", response_class=HTMLResponse)
@@ -181,6 +231,19 @@ def label_set(
         raise HTTPException(status_code=404, detail="no track set with that id")
     media.label_set(conn, group_id=group_id, label=label or None)
     return fragment_or_redirect(request, _list(conn, group.exercise_id))
+
+
+@contextmanager
+def _rendering(path: Path) -> Iterator[None]:
+    """A file the roots allow and ffmpeg cannot read is a 409 naming it."""
+    try:
+        yield
+    except renders.RenderError as failed:
+        message = str(failed)
+        raise HTTPException(
+            status_code=409,
+            detail=message if str(path) in message else f"{path}: {message}",
+        ) from None
 
 
 @contextmanager

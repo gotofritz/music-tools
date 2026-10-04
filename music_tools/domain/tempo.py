@@ -15,6 +15,7 @@ two dialects comparable. Anything unparseable is kept verbatim and resolves to
 unknown — the column has years of free text in it and nothing here may raise.
 """
 
+import math
 import re
 from dataclasses import dataclass
 
@@ -52,6 +53,30 @@ def format_tempo(tempo: Tempo) -> str:
     if tempo.written.strip() == number:
         return f"{number} BPM"
     return f"{number} BPM ({tempo.written.strip()})"
+
+
+def write_ratio(written: str, /, *, ratio: float, target_bpm: float | None) -> str:
+    """`ratio` of the target, written in the dialect `written` already uses.
+
+    What the speed slider writes back. A percentage stays a percentage and a
+    BPM stays a BPM — `123` is never silently rewritten to `80%` — with a
+    `/divisor` carried over unchanged, since it is the exercise's own
+    arithmetic. Nothing parseable to follow (empty, or free text) gets a
+    percentage, the dialect Transcribe! speaks.
+    """
+    if not target_bpm:
+        raise ValueError("a ratio needs a target BPM to be a speed")
+    if not 0 < ratio <= 1:
+        raise ValueError(f"ratio must be above 0 and at most 1, not {ratio}")
+
+    absolute = _BPM.match(written)
+    if absolute is None:
+        return f"{math.floor(ratio * 100 + 0.5)}%"
+    bpm = ratio * target_bpm
+    if absolute.group(2) is None:
+        return _trim(bpm)
+    divisor = float(absolute.group(2))
+    return f"{_trim(bpm / divisor)}/{absolute.group(2)}"
 
 
 def _resolve_bpm(written: str, target_bpm: float | None) -> float | None:

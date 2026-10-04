@@ -105,21 +105,71 @@ tr.active {
   font-size: 0.9rem;
 }
 
-.track {
-  display: flex;
-  gap: 0.5rem;
+/* A set's names and players are two columns of one grid, so the players line
+   up whatever the names' lengths. Each .track is a row that adds no box of its
+   own (`display: contents`), which is what lets its two children be grid cells. */
+.tracks {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 32rem);
+  gap: 0.3rem 0.75rem;
   align-items: center;
+}
+
+.track {
+  display: contents;
 }
 
 .track-name {
   color: var(--muted);
   font-size: 0.8rem;
-  min-width: 8rem;
+}
+
+.player .track-name {
+  display: block;
 }
 
 .media audio {
   width: 100%;
   max-width: 32rem;
+}
+
+/* The player: the waveform, then one row of controls. Until player.js has run
+   (or with it off) only the native <audio controls> shows. */
+.player {
+  --wave: #5b7a99;
+  --playhead: #d33;
+  max-width: 32rem;
+}
+
+.player:not([data-ready]) canvas,
+.player:not([data-ready]) .player-controls {
+  display: none;
+}
+
+.player[data-ready] audio {
+  display: none;
+}
+
+.player canvas.wave {
+  display: block;
+  width: 100%;
+  height: 80px;
+  margin: 0.2rem 0;
+  background: color-mix(in srgb, var(--muted) 12%, transparent);
+  cursor: pointer;
+}
+
+.player-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1rem;
+  align-items: center;
+  font-size: 0.85rem;
+}
+
+.player-controls output {
+  min-width: 7rem;
+  display: inline-block;
 }
 
 iframe.youtube {
