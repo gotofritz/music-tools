@@ -20,9 +20,15 @@ from music_tools.db import repository as repo
 from music_tools.domain import catalogue
 from music_tools.domain.models import Exercise, Module
 from music_tools.domain.session import practice_day_for
-from music_tools.domain.tempo import format_tempo, parse_tempo
+from music_tools.domain.tempo import format_tempo, parse_tempo, write_ratio
 from music_tools.web import views
-from music_tools.web.deps import fragment_or_redirect, get_conn, get_now, render
+from music_tools.web.deps import (
+    fragment_or_redirect,
+    get_conn,
+    get_now,
+    render,
+    tempo_text,
+)
 
 router = APIRouter()
 
@@ -161,6 +167,31 @@ def archive_row(
             status_code=404, detail="no exercise with that id"
         ) from None
     return fragment_or_redirect(request, "")
+
+
+@router.post("/exercises/{exercise_id}/speed")
+def set_speed(
+    exercise_id: int,
+    ratio: float = Form(...),
+    conn: sqlite3.Connection = Depends(get_conn),
+) -> dict[str, str]:
+    """The player's speed slider: set the row's speed from a ratio of its target.
+
+    Written back in the dialect the row already uses, so the speed the slider
+    shows is the speed the schedule reads. No target means no ratio, and the
+    slider is disabled on the page; a request that arrives anyway is a 400.
+    """
+    exercise = repo.get_exercise(conn, exercise_id)
+    if exercise is None:
+        raise HTTPException(status_code=404, detail="no exercise with that id")
+    try:
+        speed = write_ratio(
+            exercise.speed or "", ratio=ratio, target_bpm=exercise.target_bpm
+        )
+    except ValueError as refused:
+        raise HTTPException(status_code=400, detail=str(refused)) from None
+    exercise = catalogue.update_exercise(conn, exercise_id, speed=speed)
+    return {"speed": speed, "text": tempo_text(exercise)}
 
 
 @router.get("/exercises/{exercise_id}/tempo", response_class=HTMLResponse)

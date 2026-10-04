@@ -7,6 +7,11 @@ red/green detail when the phase starts.
 
 The phase splits in two, and 5a is worth stopping at.
 
+**Status: 5a is built (steps 1–7); 5b (steps 8–12) is not started.** Step 7's
+quality look: `rubberband` is present in the dev ffmpeg and is clean for a
+±3-semitone move on a sine; judge it on real music before relying on it. The
+plan stays active until 5b lands or is cut.
+
 ## Goal
 
 **5a — one file.** The attached file plays in the page the way Transcribe!

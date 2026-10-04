@@ -989,7 +989,7 @@ def test_the_card_plays_the_file_attached_to_the_exercise(
 
     page = client.get("/").text
 
-    assert f'src="/media/{source.id}/file"' in page
+    assert f'src="/media/{source.id}/audio"' in page
     assert "<audio" in page
     assert "loop.wav" in page
 
@@ -1073,13 +1073,77 @@ def test_the_file_route_refuses_a_path_outside_the_roots(
     assert client.get(f"/media/{source.id}/file").status_code == 403
 
 
-def test_the_file_route_is_404_when_the_file_has_gone(client, conn, le_freak, loop_wav):
+def test_the_file_route_is_409_naming_the_path_when_the_file_has_gone(
+    client, conn, le_freak, loop_wav
+):
     source = media.attach(
         conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
     )
     loop_wav.unlink()
 
-    assert client.get(f"/media/{source.id}/file").status_code == 404
+    response = client.get(f"/media/{source.id}/file")
+
+    assert response.status_code == 409
+    assert str(loop_wav) in response.text
+
+
+def test_the_file_route_says_it_accepts_ranges_and_types_the_content(
+    client, conn, le_freak, loop_wav
+):
+    source = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+
+    response = client.get(f"/media/{source.id}/file")
+
+    assert response.headers["accept-ranges"] == "bytes"
+    assert response.headers["content-type"] in ("audio/x-wav", "audio/wav")
+
+
+def test_a_range_request_gets_206_and_a_correct_content_range(
+    client, conn, le_freak, loop_wav
+):
+    source = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+    whole = loop_wav.read_bytes()
+
+    response = client.get(f"/media/{source.id}/file", headers={"Range": "bytes=10-19"})
+
+    assert response.status_code == 206
+    assert response.content == whole[10:20]
+    assert response.headers["content-range"] == f"bytes 10-19/{len(whole)}"
+
+
+def test_an_open_ended_range_runs_to_the_end_of_the_file(
+    client, conn, le_freak, loop_wav
+):
+    source = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+    whole = loop_wav.read_bytes()
+
+    response = client.get(f"/media/{source.id}/file", headers={"Range": "bytes=100-"})
+
+    assert response.status_code == 206
+    assert response.content == whole[100:]
+    assert response.headers["content-range"] == (
+        f"bytes 100-{len(whole) - 1}/{len(whole)}"
+    )
+
+
+def test_a_range_past_the_end_is_416(client, conn, le_freak, loop_wav):
+    source = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+    size = loop_wav.stat().st_size
+
+    response = client.get(
+        f"/media/{source.id}/file", headers={"Range": f"bytes={size + 10}-"}
+    )
+
+    assert response.status_code == 416
+    assert response.headers["content-range"] == f"bytes */{size}"
 
 
 def test_the_file_route_is_404_for_media_that_is_not_there(client):
@@ -1954,3 +2018,372 @@ def test_the_stop_buttons_are_flat_colours_that_step_down_as_a_column():
     tones = [int(colour[1:3], 16) for _, colour in steps]
     assert tones == sorted(tones, reverse=True) and len(set(tones)) == 5
     assert "linear-gradient" not in css[css.index(".stop-box") :]
+
+
+# --- playback: peaks, extracted audio, pitch (docs/plans/05-playback.md) ----
+
+
+@pytest.fixture
+def cache(tmp_path, monkeypatch):
+    """The render cache, kept out of the real data directory."""
+    monkeypatch.setenv("MUSIC_TOOLS_DB", str(tmp_path / "data" / "practice.db"))
+    return tmp_path / "data" / "cache"
+
+
+@pytest.fixture
+def lesson_mp4(roots):
+    import subprocess
+
+    path = roots / "S" / "lesson.mp4"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        [
+            "ffmpeg", "-v", "error", "-y",
+            "-f", "lavfi", "-i", "color=c=black:s=64x64:d=1",
+            "-f", "lavfi", "-i", "sine=frequency=440:duration=1",
+            "-shortest", "-pix_fmt", "yuv420p", str(path),
+        ],
+        check=True,
+    )  # fmt: skip
+    return path
+
+
+def test_peaks_come_back_as_min_max_pairs(client, conn, le_freak, loop_wav, cache):
+    source = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+
+    response = client.get(f"/media/{source.id}/peaks?buckets=50")
+
+    assert response.status_code == 200
+    peaks = response.json()["peaks"]
+    assert len(peaks) == 50
+    assert peaks[0] == [0.0, 0.0]  # four seconds of silence
+    assert response.json()["duration"] == pytest.approx(4.0, abs=0.05)
+
+
+def test_peaks_for_media_that_is_not_there_is_404(client, cache):
+    assert client.get("/media/404/peaks").status_code == 404
+
+
+def test_peaks_refuse_a_path_outside_the_roots(
+    client, conn, le_freak, loop_wav, cache, tmp_path, monkeypatch
+):
+    source = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+    elsewhere = tmp_path / "OTHER"
+    elsewhere.mkdir()
+    monkeypatch.setenv("MUSIC_TOOLS_MEDIA_ROOTS", str(elsewhere))
+
+    assert client.get(f"/media/{source.id}/peaks").status_code == 403
+
+
+def test_a_bucket_count_nobody_could_draw_is_refused(
+    client, conn, le_freak, loop_wav, cache
+):
+    source = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+
+    assert client.get(f"/media/{source.id}/peaks?buckets=0").status_code == 422
+    assert client.get(f"/media/{source.id}/peaks?buckets=999999").status_code == 422
+
+
+def test_the_audio_of_a_plain_file_is_the_file_itself(
+    client, conn, le_freak, loop_wav, cache
+):
+    source = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+
+    response = client.get(f"/media/{source.id}/audio")
+
+    assert response.status_code == 200
+    assert response.content == loop_wav.read_bytes()
+    assert not cache.exists()
+
+
+def test_the_audio_of_a_video_is_extracted_into_the_cache(
+    client, conn, le_freak, lesson_mp4, cache
+):
+    source = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(lesson_mp4), now=NOW
+    )
+
+    response = client.get(f"/media/{source.id}/audio")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] in ("audio/x-wav", "audio/wav")
+    assert len(list(cache.glob("*.wav"))) == 1
+
+
+def test_a_video_has_peaks_too(client, conn, le_freak, lesson_mp4, cache):
+    source = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(lesson_mp4), now=NOW
+    )
+
+    peaks = client.get(f"/media/{source.id}/peaks?buckets=10").json()["peaks"]
+
+    assert len(peaks) == 10
+    assert max(high for _, high in peaks) > 0.1  # the sine, not silence
+
+
+def test_a_pitch_shifted_audio_is_a_render_in_the_cache(
+    client, conn, le_freak, loop_wav, cache
+):
+    source = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+
+    response = client.get(f"/media/{source.id}/audio?semitones=3")
+
+    assert response.status_code == 200
+    assert response.content != loop_wav.read_bytes()
+    assert len(list(cache.glob("*.wav"))) == 1
+
+
+def test_a_shift_beyond_an_octave_is_refused(client, conn, le_freak, loop_wav, cache):
+    source = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+
+    assert client.get(f"/media/{source.id}/audio?semitones=13").status_code == 422
+
+
+def test_audio_answers_ranges_like_the_file_route(
+    client, conn, le_freak, lesson_mp4, cache
+):
+    source = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(lesson_mp4), now=NOW
+    )
+
+    response = client.get(f"/media/{source.id}/audio", headers={"Range": "bytes=0-9"})
+
+    assert response.status_code == 206
+
+
+def test_audio_of_a_file_that_has_gone_is_409(client, conn, le_freak, loop_wav, cache):
+    source = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+    loop_wav.unlink()
+
+    assert client.get(f"/media/{source.id}/audio").status_code == 409
+
+
+def test_a_file_ffmpeg_cannot_read_is_a_409_naming_it(
+    client, conn, le_freak, roots, cache
+):
+    junk = roots / "junk.mp4"
+    junk.write_bytes(b"not a video")
+    source = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(junk), now=NOW
+    )
+
+    response = client.get(f"/media/{source.id}/audio")
+
+    assert response.status_code == 409
+    assert "junk.mp4" in response.text
+
+
+# --- the speed slider writes back (Phase 5a step 6) --------------------------
+
+
+def speed_of(conn, exercise_id: int) -> str | None:
+    exercise = repo.get_exercise(conn, exercise_id)
+    assert exercise is not None
+    return exercise.speed
+
+
+def test_the_slider_writes_the_speed_in_the_exercises_own_dialect(client, conn, songs):
+    row = repo.create_exercise(
+        conn, module_id=songs.id, name="percent", speed="66%", target_bpm=120
+    )
+    bare = repo.create_exercise(
+        conn, module_id=songs.id, name="bare", speed="88", target_bpm=120
+    )
+
+    one = client.post(f"/exercises/{row.id}/speed", data={"ratio": "0.8"})
+    two = client.post(f"/exercises/{bare.id}/speed", data={"ratio": "0.8"})
+
+    assert one.status_code == two.status_code == 200
+    assert one.json()["speed"] == "80%"
+    assert two.json()["speed"] == "96"
+    assert speed_of(conn, row.id) == "80%"
+    assert speed_of(conn, bare.id) == "96"
+
+
+def test_the_slider_answers_with_the_text_the_page_shows(client, conn, songs):
+    row = repo.create_exercise(
+        conn, module_id=songs.id, name="percent", speed="66%", target_bpm=120
+    )
+
+    answer = client.post(f"/exercises/{row.id}/speed", data={"ratio": "0.8"}).json()
+
+    assert answer["text"] == "96 BPM (80%)"
+
+
+def test_without_a_target_there_is_no_ratio_to_write(client, conn, songs):
+    row = repo.create_exercise(conn, module_id=songs.id, name="x", speed="66%")
+
+    response = client.post(f"/exercises/{row.id}/speed", data={"ratio": "0.8"})
+
+    assert response.status_code == 400
+    assert speed_of(conn, row.id) == "66%"
+
+
+def test_a_ratio_the_slider_could_not_send_is_refused(client, conn, songs):
+    row = repo.create_exercise(
+        conn, module_id=songs.id, name="x", speed="66%", target_bpm=120
+    )
+
+    assert (
+        client.post(f"/exercises/{row.id}/speed", data={"ratio": "1.5"}).status_code
+        == 400
+    )
+
+
+def test_the_slider_on_a_missing_exercise_is_404(client):
+    assert client.post("/exercises/404/speed", data={"ratio": "0.8"}).status_code == 404
+
+
+def test_a_lone_file_gets_a_player_wired_to_its_urls(client, conn, le_freak, loop_wav):
+    source = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+    start(client, le_freak.id)
+
+    page = client.get("/").text
+
+    assert 'class="player"' in page
+    assert f'data-peaks-url="/media/{source.id}/peaks"' in page
+    assert f'data-audio-url="/media/{source.id}/audio"' in page
+    assert f'data-speed-url="/exercises/{le_freak.id}/speed"' in page
+    assert "/static/player.js" in page
+
+
+def test_the_slider_starts_at_the_exercises_ratio(client, conn, songs, loop_wav):
+    row = repo.create_exercise(
+        conn, module_id=songs.id, name="x", speed="75%", target_bpm=120
+    )
+    media.attach(conn, exercise_id=row.id, kind="file", path=str(loop_wav), now=NOW)
+    start(client, row.id)
+
+    page = client.get("/").text
+
+    assert 'data-ratio="0.75"' in page
+    assert "disabled" not in page.split('class="speed"')[1].split("</label>")[0]
+
+
+def test_with_no_target_the_slider_sits_at_one_and_is_disabled(
+    client, conn, songs, loop_wav
+):
+    row = repo.create_exercise(conn, module_id=songs.id, name="x", speed="75%")
+    media.attach(conn, exercise_id=row.id, kind="file", path=str(loop_wav), now=NOW)
+    start(client, row.id)
+
+    page = client.get("/").text
+    slider = page.split('class="speed"')[1].split("</label>")[0]
+
+    assert 'data-ratio="1"' in page
+    assert "disabled" in slider
+    assert "target" in slider  # says why
+
+
+def test_a_track_set_keeps_its_stacked_players_until_5b(
+    client, conn, le_freak, loop_wav, roots
+):
+    from pydub import AudioSegment
+
+    drums = roots / "S" / "le freak" / "drums.wav"
+    AudioSegment.silent(duration=4000).export(drums, format="wav")
+    first = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+    media.attach(
+        conn,
+        exercise_id=le_freak.id,
+        kind="file",
+        path=str(drums),
+        group_id=first.group_id,
+        now=NOW,
+    )
+    start(client, le_freak.id)
+
+    page = client.get("/").text
+
+    assert page.count("<audio") == 2
+    assert 'class="player"' not in page
+
+
+def test_the_media_page_says_how_to_add_a_sound_file(client, le_freak, roots):
+    page = client.get(f"/exercises/{le_freak.id}/media").text
+
+    assert 'id="how-to-attach"' in page
+    assert "absolute path" in page  # what to type
+    assert "Finder" in page  # and how to get one
+    assert "start" in page  # and where it plays afterwards
+    assert "semitones" in page or "pitch" in page
+
+
+def test_an_empty_media_page_points_at_the_instructions(client, le_freak, roots):
+    page = client.get(f"/exercises/{le_freak.id}/media").text
+
+    assert 'href="#how-to-attach"' in page
+
+
+def test_the_media_link_on_a_row_says_what_it_is_for(client, le_freak):
+    page = client.get("/modules/songs").text
+
+    assert "attach or play a sound file" in page  # the link's tooltip
+
+
+def test_the_speed_and_target_are_edited_in_the_speed_column(client, le_freak):
+    """The column headed speed is where a player goes to change the speed."""
+    page = client.get("/modules/songs").text
+    row = page.split(f'id="exercise-{le_freak.id}"')[1].split("</tr>")[0]
+    cells = row.split("<td")
+    speed_cell = next(c for c in cells if f'id="tempo-{le_freak.id}"' in c)
+    name_cell = next(c for c in cells if 'name="name"' in c)
+
+    for field in ("speed", "target_bpm"):
+        assert f'id="exercise-{le_freak.id}-{field}"' in speed_cell
+        assert f'id="exercise-{le_freak.id}-{field}"' not in name_cell
+
+
+def test_speed_still_saves_from_its_own_form(client, conn, le_freak):
+    response = client.patch(
+        f"/exercises/{le_freak.id}", data={"speed": "70%"}, headers=hx()
+    )
+
+    assert response.status_code == 200
+    assert speed_of(conn, le_freak.id) == "70%"
+
+
+def test_a_track_sets_labels_and_players_sit_in_one_grid(
+    client, conn, le_freak, loop_wav, roots
+):
+    from pydub import AudioSegment
+
+    drums = roots / "S" / "le freak" / "drums.wav"
+    AudioSegment.silent(duration=4000).export(drums, format="wav")
+    first = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+    media.attach(
+        conn,
+        exercise_id=le_freak.id,
+        kind="file",
+        path=str(drums),
+        group_id=first.group_id,
+        now=NOW,
+    )
+    start(client, le_freak.id)
+
+    page = client.get("/").text
+    grid = page.split('class="tracks"')[1].split("</article>")[0]
+
+    assert grid.count('class="track"') == 2
+    assert grid.count("<audio") == 2
+    assert grid.count('class="track-name"') == 2

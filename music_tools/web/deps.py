@@ -62,6 +62,13 @@ def tempo_text(exercise: Exercise) -> str:
     )
 
 
+def exercise_ratio(exercise: Exercise | None) -> float | None:
+    """What the speed slider starts at: the row's ratio, or `None` without one."""
+    if exercise is None:
+        return None
+    return parse_tempo(exercise.speed or "", target_bpm=exercise.target_bpm).ratio
+
+
 def duration_text(entry: PracticeEntry, now: datetime | None) -> str:
     """How long an entry has lasted; a running one counts up to `now`."""
     return format_duration(entry_duration(entry, now=now))
@@ -91,6 +98,7 @@ def _environment() -> Environment:
         "format_duration": format_duration,
         "format_when": format_when,
         "tempo_text": tempo_text,
+        "exercise_ratio": exercise_ratio,
         "duration_text": duration_text,
         "file_name": file_name,
         "youtube_embed": youtube_embed,

@@ -251,6 +251,36 @@ machine's own files, not to tidy yours. The media page lists them; set `MUSIC_TO
 `:`-separated list, like `PATH`) to change them. Anything outside is refused
 with a message rather than quietly read.
 
+### Adding a sound file, step by step
+
+1. On the module page, press **media** beside the row.
+2. Copy the file's **absolute path** — the one starting with `/`. On a Mac,
+   select it in Finder and press ⌥⌘C; on Linux use your file manager's "Copy
+   path", or `realpath file.wav` in a terminal.
+3. Paste it into the first box on the media page and press **attach audio or
+   video**. A path outside the allowed folders, or to a file that is not there,
+   is refused with a message.
+4. Back on the module page, press **start** on the row. The card on today's
+   page now has the player.
+
+### The player
+
+For a single file the card shows the **waveform** with a red playhead. Click
+anywhere on it to jump there. **play**/**pause** and **loop** (the whole file)
+sit underneath, then:
+
+- **speed** — a slider from 50% to 100% of the row's target BPM. It plays the
+  file slower **without changing its pitch**, and writes the new speed back to
+  the row in the notation the row already uses: `66%` stays a percentage, `88`
+  stays a BPM. With no target BPM on the row the slider is greyed out; fill the
+  target in first.
+- **pitch** — up or down by up to 12 semitones, at the same speed. The first
+  time you pick one the app renders it, which takes a few seconds; the result is
+  kept and reused. Playing resumes where it was.
+
+Video files play as sound only. If the file has moved since it was attached, the
+player says which path it could not find.
+
 **up**, **down** and **remove** order the list and take things off it. Removing
 an attachment never touches the file on disk.
 
@@ -274,7 +304,9 @@ set here — the names, the gains, the mutes — is what that will read.
 ## How fast you are playing it
 
 The speed column understands two dialects, because Transcribe! counts in
-percentages and metronomes count in BPM:
+percentages and metronomes count in BPM. Click the speed, or the target BPM
+beside it, on a row's own line to change it; what it resolves to (`106 BPM
+(80%)`) is shown next to the boxes and updates as you type:
 
 | You type | It means | At a target of 133 |
 | --- | --- | --- |

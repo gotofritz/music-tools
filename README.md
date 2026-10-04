@@ -26,6 +26,15 @@ audio files can be one **track set** (stems, a click beside a backing track).
 Files are referenced by absolute path, never copied, and every path in is
 confined to the configured roots.
 
+To play a sound file: open the module page, press **media** beside the row,
+paste the file's absolute path (it must be inside your home directory, or
+`MUSIC_TOOLS_MEDIA_ROOTS`) and press **attach audio or video**; then press
+**start** on the row. The card on today's page plays it as a waveform you can
+click to seek, with loop, a speed slider that sets the row's speed without
+changing pitch, and a pitch control in semitones. The media page repeats these
+steps. Needs `ffmpeg` on the `PATH` for video, pitch shifts and anything that
+is not a wav.
+
 `practice serve` opens the same thing as a page on `127.0.0.1`: what is due, a
 card carrying the material for whatever is being practised right now, and a day
 log that fills itself in. Every row of a module carries a **start** and a

@@ -5,6 +5,33 @@
 <p><a href="/modules/{{ module.slug }}">back to {{ module.name }}</a></p>
 
 {% include "_media_list.html" %}
+{% if not cards %}
+<p><a href="#how-to-attach">How to add a sound file ↓</a></p>
+{% endif %}
+
+<section id="how-to-attach">
+  <h2>How to add a sound file</h2>
+  <ol>
+    <li>Find the file on your computer — an audio file (<code>.wav</code>,
+      <code>.mp3</code>, <code>.flac</code>, <code>.m4a</code>…) or a video
+      (<code>.mp4</code>, <code>.mov</code>…; only its sound is used).</li>
+    <li>Copy its <strong>absolute path</strong>, the one that starts with
+      <code>/</code>. On a Mac, select the file in Finder and press
+      <kbd>⌥⌘C</kbd>; on Linux, most file managers have “Copy path”, or run
+      <code>realpath file.wav</code> in a terminal.</li>
+    <li>Paste it into the first box below and press <em>attach audio or
+      video</em>. The file stays where it is — it is never copied, and the
+      path must be inside the folders listed below.</li>
+    <li>Go back to <a href="/modules/{{ module.slug }}">{{ module.name }}</a> and
+      press <em>start</em> on this row. Today's page then shows a player for
+      the file: a waveform (click it to jump), play, loop, a speed slider
+      that sets this row's speed, and a pitch control in semitones.</li>
+  </ol>
+  <p class="muted">Several files can be one tune — stems, or a backing track
+    beside a click: attach the first, then add the others to its set from the
+    card above (up to eight, all the same length). For now a set plays as
+    separate players; one shared transport is still to come.</p>
+</section>
 
 <section id="attach">
   <h2>Attach something</h2>

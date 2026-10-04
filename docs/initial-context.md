@@ -4,7 +4,7 @@ Architecture, boundaries and constraints. Read this before changing anything;
 update it in the same PR as any change to the architecture, the boundaries or
 the core patterns (`AGENTS.md`).
 
-Describing the repo as it stands at the end of Phase 4 of
+Describing the repo as it stands at the end of Phase 5a of
 `docs/plans/00-practice-app.md`, not as that plan leaves it.
 
 ## What this repo is
@@ -51,6 +51,9 @@ music_tools/
         catalogue.py     modules and their rows: CRUD, moving, and what may
                          be deleted
         media.py         attachments: kinds, the roots guard, track sets
+        render.py        the render cache and the ffmpeg work behind it:
+                         extraction, pitch shift, keyed by content
+        waveform.py      peaks as min/max pairs, cached through render.py
         session.py       start an exercise, finish it, discard it, day totals
     web/
         app.py           create_app(db_path), and the `practice serve` launcher
@@ -59,7 +62,8 @@ music_tools/
         routes/          practice.py (the day), modules.py (the catalogue),
                          media.py (attachments, and serving a file)
         templates/       base, today, module, and one fragment per swappable thing
-        static/          htmx.min.js (vendored via pnpm, 2.0.4) and app.css
+        static/          htmx.min.js (vendored via pnpm, 2.0.4), app.css,
+                         player.js (the waveform player, no DOM beyond its card)
     loop.py              the loop tool: model, parsing, rendering, CLI
     main.py              rearrange: the CLI and the step interpreter
     config.py            rearrange: pydantic config models
@@ -361,6 +365,40 @@ Phase 5b reads. Solo is not stored: it is a view over the mute state, and which
 track is soloed does not deserve to outlive the page. Ordering is two sequences
 in one namespace — a card's place in the exercise is its group's `position`, or
 its own when it has no group, and a member's `position` is its place in the set.
+
+### Playback (Phase 5a)
+
+A lone audio or video file plays in the page as a waveform with a playhead,
+click to seek, a loop toggle, a speed slider and a semitone control
+(`static/player.js`, the app's first JS beyond htmx; A1 still holds — no
+framework, no Node). Track sets still render as stacked `<audio>` elements
+until Phase 5b. Four decisions are load-bearing:
+
+- **The browser plays a URL, the server prepares it.** `GET /media/{id}/audio`
+  returns the file's audio: a plain file untouched, a video extracted to wav, and
+  `?semitones=N` (±12) transposed — the last two through the render cache.
+  `GET /media/{id}/peaks` returns the waveform as `buckets` min/max pairs plus
+  the duration. Both go through the same roots guard as `/file`, re-checked on
+  every request; a file that has gone, or one ffmpeg cannot read, is a 409
+  naming it. Ranges (206, 416) come from `FileResponse`.
+- **The render cache is disposable.** `domain/render.py` keys every derived file
+  by a hash of the source's *content* and the render's parameters, under
+  `<db dir>/cache`. Writes go to a partial file renamed into place, a deleted
+  entry is simply rendered again, and `evict` drops least-recently-used files
+  without consulting the database, which holds no reference to any of them.
+  `rubberband` where the ffmpeg build has it, the `asetrate`/`aresample`/`atempo`
+  chain where not.
+- **Speed is `playbackRate` with `preservesPitch`, and it is the exercise's
+  speed.** The slider is bound to the row's ratio and `POST /exercises/{id}/speed`
+  writes it back through `tempo.write_ratio`, in the dialect the row already
+  uses: `66%` stays a percentage, `88` stays a BPM, a `/divisor` is carried over,
+  and free text becomes a percentage. No `target_bpm` means no ratio: the slider
+  sits at 1.0, disabled. The log entry's own `speed` is a snapshot and does not
+  follow the slider. Speed as a server render is 5b's problem, where Web Audio
+  has no `preservesPitch`.
+- **The JS has no suite.** There is no Node toolchain to run one; the Python
+  side (routes, cache, tempo write-back, markup) is tested and the player is
+  checked by hand.
 
 ### Storage
 
