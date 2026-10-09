@@ -126,15 +126,27 @@ starts it without opening a window.
 
 **The first page is today.**
 
-- **The card at the top of the log** is what you are practising right now: what
-  it is, how long you have been on it, the material attached to it — the audio,
-  the video, the YouTube player, the score, your own notes — and the two
-  buttons that end it, **done** and **discard**.
+- **The card at the top of the log** is what you are practising right now:
+  what it is, how long you have been on it, its name, speed, target BPM and
+  notes — editable where they are — and its material: the audio, the video, the
+  YouTube player, the score, your own notes. Its media is editable in the card
+  too (names, order, remove, mix, add to a set, and **attach something**), so a
+  whole session never leaves this page. Under it are the five **stop** buttons
+  — `normal`, `short`, `long`, `rotate`, `hold` — and **discard**. Typing in
+  the card never restarts the player.
+- **START** opens no line. It shows one button per module; click one and its
+  rows appear in a panel under the buttons, due ones first. Click a row to
+  start it; click the module again, or **close**, to hide the list. Any stop
+  (and discard) puts you back on the module buttons, so the next tune is one
+  click away.
 - **Log** is today, line by line, with the entry that is running now counting
   up. **Totals** underneath is the subtotal per log group and the total for the
   day — the same numbers as `practice log`.
-- **Earlier** is the five days before it, newest first, each with what you
-  played, its subtotals and its total. **load more** adds the next five. There
+- **Earlier** is the five days before it, newest first. Each is one line — the
+  date, its total and its subtotals — that opens to show what you played;
+  **expand all** / **collapse all** at the top flips them all, and **load more**
+  adds the next five in whatever mode the button is in. Every load starts
+  collapsed. There
   is no date picker and no search: it is a log, and you read it backwards.
 - **Every line is editable where it is.** Click a time, the name, the notes,
   the speed or the group — it turns into a box — change it, and move away — Tab, Enter or a click
@@ -152,13 +164,13 @@ starts it without opening a window.
 - The line that is **running** gets no boxes: that one is
   what you are playing, and **done** and **discard** on the card are what move
   it. It becomes editable once it is closed, like every other line.
-- With nothing running, the card holds a **START** button. It opens a line
-  called `Practice` from now, for when you want the clock going before you have
-  decided what to play; **done** closes it, and **edit** names it afterwards.
-  There is no clock to stop beyond that, and when you are finished for the
-  evening you close the window.
+- With nothing running, the card holds a **START** button (see above). There is
+  no clock to stop, and when you are finished for the evening you close the
+  window.
 
-**Each module has its own page**, reached from the links at the top: the whole
+**Each module has its own page**, reached from the links at the top. It is
+where the module is *set up* — adding, editing, moving and archiving rows — but
+start and stop stay, because they are still useful. The whole
 queue, most overdue first, and every field editable in place. The row being
 practised moves to the top and is highlighted green. **start** and
 **stop** are the buttons at the end of every row — the same two things as
@@ -174,7 +186,7 @@ What a click means depends on what is running:
 | nothing | **start** here | this one starts |
 | this row | **start** here | nothing — the line keeps the time it began at |
 | another row | **stop** here | nothing |
-| a **START** line, no row | **stop** here | the line becomes this row's — it keeps its start time — and closes |
+| a line with no row (from `practice start --ad-hoc`) | **stop** here | the line becomes this row's — it keeps its start time — and closes |
 | nothing | **stop** here | the line is written backwards, from the last line's end to now |
 | this row | **stop** here | the line closes and the schedule moves |
 

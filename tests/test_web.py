@@ -712,7 +712,9 @@ def test_a_day_page_is_open_and_its_edits_redraw_it_open(client, conn, earlier_d
     assert _details(page)
     assert all(" open" in tag for tag in _details(page))
 
-    entry = repo.entries_for_day(conn, repo.get_day(conn, date(2026, 6, 6)).id)[0]
+    day = repo.get_day(conn, date(2026, 6, 6))
+    assert day is not None
+    entry = repo.entries_for_day(conn, day.id)[0]
     amended = client.patch(
         f"/entries/{entry.id}", data={"notes": "x"}, headers=hx()
     ).text
@@ -1107,6 +1109,17 @@ def test_a_refused_attach_from_the_card_is_a_message(
 
     assert response.status_code == 400
     assert media.exercise_media(conn, exercise_id=le_freak.id) == []
+
+
+# --- the tabs read as configuration (Phase 10, step 7) -------------------------------
+
+
+def test_a_module_page_says_where_a_session_is_run(client, songs, le_freak):
+    page = client.get("/modules/songs").text
+
+    assert 'class="config-note muted"' in page
+    assert 'href="/"' in page[page.index('class="config-note muted"') :][:300]
+    assert "start" in page and "stop" in page  # still useful, still there
 
 
 # --- correcting a line of the log, in place -------------------------------------------

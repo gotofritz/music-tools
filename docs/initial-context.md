@@ -5,7 +5,8 @@ update it in the same PR as any change to the architecture, the boundaries or
 the core patterns (`AGENTS.md`).
 
 Describing the repo as it stands at the end of Phase 5a of
-`docs/plans/00-practice-app.md`, not as that plan leaves it.
+`docs/plans/00-practice-app.md` plus Phase 10 (`docs/plans/10-today-panel.md`),
+not as that plan leaves it.
 
 ## What this repo is
 
@@ -62,6 +63,7 @@ music_tools/
         routes/          practice.py (the day), modules.py (the catalogue),
                          media.py (attachments, and serving a file)
         templates/       base, today, module, and one fragment per swappable thing
+                         (_now_playing, _picker, _picker_list, _day_block, ...)
         static/          htmx.min.js (vendored via pnpm, 2.0.4), app.css,
                          player.js (the waveform player, no DOM beyond its card)
     loop.py              the loop tool: model, parsing, rendering, CLI
@@ -509,8 +511,38 @@ and a speed typed into the row resolves live through
 `GET /exercises/{id}/tempo`, which answers a quiet `?` rather than an error
 because it is reading a keystroke, not a submission.
 
+**Today is where a session is run** (Phase 10). Everything below lives on `/`;
+the module pages are where the catalogue is *configured*, and keep start and
+stop because they are still useful.
+
+- **START opens no line.** It swaps in the picker (`GET /picker`): one button
+  per live module, in tab order. `GET /picker/{slug}` is the same block with
+  that module's live rows, read-only, under the buttons; a row posts the
+  ordinary `/exercises/{id}/start`. A line opens when a row is picked, so a
+  false start leaves nothing behind. `POST /entries` is gone; `start_ad_hoc`
+  stays for the CLI.
+- **Any stop is a start for the next one.** The running card carries the five
+  stop buttons, each posting its `algorithm` to `/entries/{id}/done`; stop,
+  done and discard answer from the today page with the log redrawn and the
+  picker open (`picker_open`). A start answers with the running state and no
+  picker. From a module page the same writes still answer with the queue.
+- **The running card is the tab row plus its media.** The exercise's cells are
+  the same macros as the row (`_exercise_cells.html`), aimed at `#now-exercise`;
+  `PATCH /exercises/{id}` reads `HX-Target` and answers with that block alone,
+  so a text edit never rebuilds the player. The player lives in
+  `#media-players`, and the media list and the four attach forms are embedded
+  as `#now-media-list`; a media write aimed at it (`HX-Target`) answers with the
+  list, plus `#media-players` out of band only when the source set changed
+  (attach, remove, move) — a label or gain leaves the audio playing. The media
+  page keeps `#media-list` and is unchanged. Known gap: a typed speed does not
+  move the player's slider until the card is next drawn.
+- **Earlier days are `<details>`**, collapsed on every load; today's log is
+  never collapsible. A day shown on its own, or redrawn after an edit, is
+  open. `app.js` owns the collapse-all / expand-all button and applies its mode
+  to days that arrive by load more.
+
 **The running entry is a card**, at the top of the day log: what is being
-practised, since when, its media, and the two buttons that end it. `chrome`
+practised, since when, its media, and the buttons that end it. `chrome`
 reads the running entry, its exercise and that exercise's cards, so every page
 can draw it. A module row carries **start** and **stop** at all times — the
 buttons do not move about as rows change state, and the server decides what a
