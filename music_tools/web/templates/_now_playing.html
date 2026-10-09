@@ -49,10 +49,19 @@
   {# A stop or a discard has just left nothing running: the same state START
      reveals. #}
   {% include "_picker.html" %}
+  {% if day_has_entries %}{% include "_end_day.html" %}{% endif %}
+  {% elif day_ended %}
+  {# Ended by hand: its log is in Earlier. START is what brings it back. #}
+  <form class="start" action="/day/reopen" method="post" hx-post="/day/reopen"
+        hx-target="#day-log" hx-swap="outerHTML">
+    <button type="submit">START</button>
+  </form>
   {% else %}
   {# Nothing running: START only reveals the module picker. A line opens when
-     a row is picked, so a false start leaves nothing behind. #}
+     a row is picked, so a false start leaves nothing behind. END, once there
+     is something to end, moves the day's log into Earlier. #}
   <a class="start" href="/picker" hx-get="/picker" hx-target="this"
      hx-swap="outerHTML" role="button">START</a>
+  {% if day_has_entries %}{% include "_end_day.html" %}{% endif %}
   {% endif %}
 </div>

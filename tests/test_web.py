@@ -1277,6 +1277,164 @@ def test_the_summary_has_no_disclosure_triangle(client):
     assert "::-webkit-details-marker" in css
 
 
+# --- END: the day's log moves into Earlier, START brings it back ------------------
+
+
+def _ended_at(conn):
+    day = repo.get_day(conn, TODAY)
+    assert day is not None
+    return day.ended_at
+
+
+def _idle(page: str) -> str:
+    return page[page.index('id="now-playing"') : page.index("<h2>Log</h2>")]
+
+
+def test_end_sits_next_to_start_once_there_is_something_to_end(client, sample_block):
+    idle = _idle(client.get("/").text)
+
+    assert ">START<" in idle
+    assert 'hx-post="/day/end"' in idle
+    assert 'action="/day/end"' in idle
+    assert ">END<" in idle
+
+
+def test_there_is_no_end_for_a_day_with_nothing_in_it(client):
+    assert ">END<" not in client.get("/").text
+
+
+def test_there_is_no_end_while_something_is_running(client, conn, le_freak):
+    start(client, le_freak.id)
+
+    assert ">END<" not in client.get("/").text
+
+
+def test_end_is_offered_beside_the_picker_after_a_stop_too(
+    client, conn, songs, le_freak
+):
+    start(client, le_freak.id)
+    stopped = client.post(
+        f"/entries/{running(conn).id}/done", headers=hx(referer="http://localhost/")
+    )
+
+    assert 'id="picker"' in stopped.text
+    assert ">END<" in stopped.text
+
+
+def test_ending_the_day_moves_its_log_into_earlier(client, conn, sample_block):
+    response = client.post("/day/end", headers=hx(referer="http://localhost/"))
+
+    assert response.status_code == 200
+    assert '<section id="day-log"' in response.text
+    assert "Nothing logged yet today" in response.text
+    assert '<section id="history" hx-swap-oob="true"' in response.text
+    assert '<section id="day-totals" hx-swap-oob="true"' in response.text
+    history = response.text[response.text.index('id="history"') :]
+    assert 'id="day-2026-07-05"' in history
+    assert "le freak" in history
+    assert _ended_at(conn) == NOW
+
+
+def test_after_ending_the_page_starts_blank_with_the_day_in_earlier(
+    client, sample_block
+):
+    client.post("/day/end", headers=hx())
+
+    page = client.get("/").text
+    log = page[page.index('id="day-log"') : page.index('id="history"')]
+    history = page[page.index('id="history"') :]
+
+    assert "le freak" not in log
+    assert "Nothing logged yet today" in log
+    assert (
+        "00:53" not in page[page.index('id="day-totals"') : page.index('id="history"')]
+    )
+    assert 'id="day-2026-07-05"' in history  # the first of Earlier
+    assert "00:53" in history
+    assert 'hx-post="/day/reopen"' in _idle(page)
+    assert ">END<" not in page
+
+
+def test_ending_with_something_running_is_a_409(client, conn, le_freak):
+    start(client, le_freak.id)
+
+    response = client.post("/day/end", headers=hx())
+
+    assert response.status_code == 409
+    assert _ended_at(conn) is None
+
+
+def test_ending_a_day_with_nothing_in_it_changes_nothing(client, conn):
+    response = client.post("/day/end", headers=hx())
+
+    assert response.status_code == 200
+    assert repo.get_day(conn, TODAY) is None
+
+
+def test_start_after_end_brings_the_day_back_and_opens_the_picker(
+    client, conn, songs, sample_block
+):
+    client.post("/day/end", headers=hx())
+
+    response = client.post("/day/reopen", headers=hx(referer="http://localhost/"))
+
+    assert response.status_code == 200
+    assert _ended_at(conn) is None
+    assert "le freak" in response.text.split('id="history"')[0]  # the log is back
+    assert 'id="picker"' in response.text
+    history = response.text[response.text.index('id="history"') :]
+    assert 'id="day-2026-07-05"' not in history  # no longer an earlier day
+    page = client.get("/").text
+    assert "00:53" in page[page.index('id="day-totals"') :]
+
+
+def test_starting_a_row_on_an_ended_day_reopens_it_and_refreshes_earlier(
+    client, conn, songs, le_freak, sample_block
+):
+    client.post("/day/end", headers=hx())
+
+    response = client.post(
+        f"/exercises/{le_freak.id}/start", headers=hx(referer="http://localhost/")
+    )
+
+    assert _ended_at(conn) is None
+    assert '<section id="history" hx-swap-oob="true"' in response.text
+    assert (
+        'id="day-2026-07-05"'
+        not in response.text[response.text.index('id="history"') :]
+    )
+
+
+def test_a_correction_to_an_ended_day_redraws_it_as_an_earlier_block(
+    client, conn, sample_block
+):
+    client.post("/day/end", headers=hx())
+    entry = repo.entries_for_day(conn, sample_block.id)[0]
+
+    response = client.patch(f"/entries/{entry.id}", data={"notes": "x"}, headers=hx())
+
+    assert 'id="day-2026-07-05"' in response.text
+    assert "<details" in response.text
+    assert 'id="day-log"' not in response.text
+
+
+def test_an_ended_day_is_a_block_on_its_own_page_not_the_live_log(client, sample_block):
+    client.post("/day/end", headers=hx())
+
+    page = client.get("/days/2026-07-05").text
+
+    assert "<details" in page
+    assert 'id="day-log"' not in page
+
+
+def test_end_and_reopen_without_htmx_redirect_back(client, sample_block):
+    ended = client.post("/day/end", follow_redirects=False)
+    reopened = client.post("/day/reopen", follow_redirects=False)
+
+    assert (ended.status_code, ended.headers["location"]) == (303, "/")
+    assert (reopened.status_code, reopened.headers["location"]) == (303, "/")
+
+
 # --- correcting a line of the log, in place -------------------------------------------
 
 

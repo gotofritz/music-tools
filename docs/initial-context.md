@@ -539,6 +539,14 @@ stop because they are still useful.
   (attach, remove, move) — a label or gain leaves the audio playing. The media
   page keeps `#media-list` and is unchanged. Known gap: a typed speed does not
   move the player's slider until the card is next drawn.
+- **END ends the day, START reopens it.** `practice_day.ended_at` (migration
+  004) is a stamp, not a deletion: `session.end_day` sets it (refused with a line
+  running; a day with nothing in it has nothing to end) and `_start_day` — so any
+  start, from either front end — clears it. An ended day is the first of Earlier
+  and today's log and totals render blank; `POST /day/end` and `POST /day/reopen`
+  redraw the log and swap `#history` out of band, which is the only time that
+  list is redrawn, since doing it on every start would close the days the
+  player has opened.
 - **Earlier days are `<details>`**, collapsed on every load; today's log is
   never collapsible. A day shown on its own, or redrawn after an edit, is
   open. `app.js` owns the collapse-all / expand-all button and applies its mode

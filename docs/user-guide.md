@@ -165,9 +165,12 @@ starts it without opening a window.
 - The line that is **running** gets no boxes: that one is
   what you are playing, and **done** and **discard** on the card are what move
   it. It becomes editable once it is closed, like every other line.
-- With nothing running, the card holds a **START** button (see above). There is
-  no clock to stop, and when you are finished for the evening you close the
-  window.
+- With nothing running, the card holds a **START** button (see above), and,
+  once the day has something in it, **END**. END is "done for the day": its
+  log, totals and all, moves to the top of **Earlier**, and today starts blank.
+  Nothing is deleted. Click **START** again — or start anything, here or from
+  the terminal — and the day is today's again, log and totals back. END is
+  refused while something is running: stop or discard that first.
 
 **Each module has its own page**, reached from the links at the top. It is
 where the module is *set up* — adding, editing, moving and archiving rows — but

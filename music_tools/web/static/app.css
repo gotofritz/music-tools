@@ -534,3 +534,10 @@ details.day > summary {
   height: 6px;
   background: var(--c);
 }
+
+/* START and END side by side when nothing is running. */
+.now-playing form.start,
+.now-playing form.end {
+  display: inline-block;
+  margin: 0 0.4rem 0 0;
+}

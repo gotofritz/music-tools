@@ -434,6 +434,18 @@ def get_day(conn: sqlite3.Connection, day: date) -> PracticeDay | None:
     return PracticeDay.model_validate(dict(row)) if row else None
 
 
+def set_day_ended(
+    conn: sqlite3.Connection, day_id: int, ended_at: datetime | None
+) -> PracticeDay:
+    """Stamp a day as ended, or clear the stamp to open it again."""
+    conn.execute(
+        "UPDATE practice_day SET ended_at = ? WHERE id = ?",
+        (_encode(ended_at), day_id),
+    )
+    row = conn.execute("SELECT * FROM practice_day WHERE id = ?", (day_id,)).fetchone()
+    return PracticeDay.model_validate(dict(row))
+
+
 def list_days(conn: sqlite3.Connection) -> list[PracticeDay]:
     rows = conn.execute("SELECT * FROM practice_day ORDER BY day").fetchall()
     return [PracticeDay.model_validate(dict(row)) for row in rows]

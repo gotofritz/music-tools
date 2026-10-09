@@ -6,13 +6,5 @@
 {% include "_day_log.html" %}
 {% include "_day_totals.html" %}
 
-<section id="history">
-  <h2>Earlier</h2>
-  {% if history %}
-  <button type="button" id="toggle-days" data-state="collapsed">expand all</button>
-  {% include "_history_page.html" %}
-  {% else %}
-  <p>Nothing logged before today.</p>
-  {% endif %}
-</section>
+{% include "_history.html" %}
 {% endblock %}

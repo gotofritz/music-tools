@@ -1,0 +1,11 @@
+{# Earlier: the finished days, and what flips them. Swapped out of band when
+   ending or reopening the day changes which days are in it. #}
+<section id="history"{% if oob %} hx-swap-oob="true"{% endif %}>
+  <h2>Earlier</h2>
+  {% if history %}
+  <button type="button" id="toggle-days" data-state="collapsed">expand all</button>
+  {% include "_history_page.html" %}
+  {% else %}
+  <p>Nothing logged before today.</p>
+  {% endif %}
+</section>

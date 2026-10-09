@@ -99,6 +99,40 @@ def one_day(
     return _day_view(request, conn, day=day, now=now)
 
 
+@router.post("/day/end")
+def end_the_day(
+    request: Request,
+    conn: sqlite3.Connection = Depends(get_conn),
+    now: datetime = Depends(get_now),
+) -> Response:
+    """Done for the day: its log goes into Earlier and today starts blank.
+
+    Nothing is deleted, and starting again brings the log back. With a line
+    still running it is a 409: finish or discard that first. A day with nothing
+    in it has nothing to end, and the page is simply redrawn.
+    """
+    try:
+        session.end_day(conn, now=now)
+    except session.EntryRunning:
+        raise HTTPException(
+            status_code=409, detail="finish or discard what is running first"
+        ) from None
+    return fragment_or_redirect(request, _redraw(request, conn, now=now, history=True))
+
+
+@router.post("/day/reopen")
+def reopen_the_day(
+    request: Request,
+    conn: sqlite3.Connection = Depends(get_conn),
+    now: datetime = Depends(get_now),
+) -> Response:
+    """START on an ended day: the log is today's again, and the picker is open."""
+    session.reopen_day(conn, now=now)
+    return fragment_or_redirect(
+        request, _redraw(request, conn, now=now, picker=True, history=True)
+    )
+
+
 @router.post("/exercises/{exercise_id}/start")
 def start(
     request: Request,
@@ -115,6 +149,7 @@ def start(
     the row that is already running is nothing at all; it keeps the time it
     began at.
     """
+    was_ended = views.day_ended(conn, now=now)
     try:
         result = session.start_exercise(conn, exercise_id=exercise_id, now=now, rng=rng)
     except session.UnknownExercise:
@@ -122,7 +157,10 @@ def start(
             status_code=404, detail="no exercise with that id"
         ) from None
     exercise = repo.get_exercise(conn, result.entry.exercise_id or exercise_id)
-    return fragment_or_redirect(request, _redraw(request, conn, now=now, row=exercise))
+    return fragment_or_redirect(
+        request,
+        _redraw(request, conn, now=now, row=exercise, history=was_ended),
+    )
 
 
 @router.post("/exercises/{exercise_id}/stop")
@@ -307,6 +345,7 @@ def _redraw(
     now: datetime,
     row: Exercise | None = None,
     picker: bool = False,
+    history: bool = False,
 ) -> str:
     """The piece that was clicked, and whatever else the write changed.
 
@@ -322,6 +361,10 @@ def _redraw(
     `picker` is for the writes that leave nothing running — a stop, a discard:
     on the today page the log comes back with the module picker open, because
     a stop is a start for the next one.
+
+    `history` is for the writes that change which days are Earlier — ending the
+    day, or starting on one that was ended — and adds that list out of band.
+    Not every time: redrawing it would close the days the player has opened.
     """
     context = views.today_context(conn, now=now)
     if picker and context["running"] is None:
@@ -336,14 +379,17 @@ def _redraw(
             today=context["today"],
             running=context["running"],
         ) + render("_day_totals.html", oob=True, **context)
-    return render("_day_log.html", **context) + render(
+    html = render("_day_log.html", **context) + render(
         "_day_totals.html", oob=True, **context
     )
+    if history:
+        html += render("_history.html", oob=True, **context)
+    return html
 
 
 def _amended_day(conn: sqlite3.Connection, *, day: date, now: datetime) -> str:
     """The day a correction landed on, as it now reads."""
-    if day == practice_day_for(now):
+    if views.is_live_day(conn, day=day, now=now):
         return _log_fragments(conn, now=now)
     return render("_day_block.html", **views.day_context(conn, now=now, day=day))
 

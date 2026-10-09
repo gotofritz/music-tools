@@ -6,12 +6,12 @@ and the fragment it re-renders after a write cannot disagree about it.
 """
 
 import sqlite3
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from music_tools.db import repository as repo
 from music_tools.domain import media
-from music_tools.domain.models import Exercise, Module, PracticeEntry
+from music_tools.domain.models import DaySummary, Exercise, Module, PracticeEntry
 from music_tools.domain.session import (
     current_entry,
     day_summary,
@@ -75,16 +75,38 @@ def chrome(conn: sqlite3.Connection, *, now: datetime) -> dict[str, Any]:
     }
 
 
+def day_ended(conn: sqlite3.Connection, *, now: datetime) -> bool:
+    """Whether the player has said they are done for today."""
+    record = repo.get_day(conn, practice_day_for(now))
+    return record is not None and record.ended_at is not None
+
+
+def is_live_day(conn: sqlite3.Connection, *, day: date, now: datetime) -> bool:
+    """Today's log as it is being practised: today, and not ended by hand."""
+    return day == practice_day_for(now) and not day_ended(conn, now=now)
+
+
 def today_context(conn: sqlite3.Connection, *, now: datetime) -> dict[str, Any]:
-    """Today's block and totals, and the days behind it — the whole of `GET /`."""
+    """Today's block and totals, and the days behind it — the whole of `GET /`.
+
+    A day that has been ended is no longer today's: it is the first of the days
+    behind it, and today's log and totals start blank until something is
+    started on it again.
+    """
     today = practice_day_for(now)
+    ended = day_ended(conn, now=now)
+    summary = DaySummary(day=today) if ended else day_summary(conn, day=today, now=now)
     return {
         **chrome(conn, now=now),
         "day": today,
-        "summary": day_summary(conn, day=today, now=now),
+        "summary": summary,
+        "day_ended": ended,
+        "day_has_entries": bool(summary.entries),
         "live": now,
         "modules_by_id": modules_by_id(conn),
-        **history_context(conn, now=now, before=today),
+        **history_context(
+            conn, now=now, before=today + timedelta(days=1) if ended else today
+        ),
     }
 
 
@@ -92,7 +114,7 @@ def day_context(
     conn: sqlite3.Connection, *, now: datetime, day: date
 ) -> dict[str, Any]:
     """One day on its own — today's log, or a finished block, shown open."""
-    is_today = day == practice_day_for(now)
+    is_today = is_live_day(conn, day=day, now=now)
     return {
         **chrome(conn, now=now),
         "day": day,

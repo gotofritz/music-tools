@@ -24,11 +24,13 @@ from music_tools.domain.session import (
     day_summary,
     delete_entry,
     discard_entry,
+    end_day,
     entry_duration,
     finish_entry,
     format_duration,
     practice_day_for,
     recent_days,
+    reopen_day,
     start_ad_hoc,
     start_day,
     start_exercise,
@@ -206,6 +208,79 @@ def test_starting_an_exercise_opens_the_day_it_falls_in(db, stomp):
     start_exercise(db, exercise_id=stomp.id, now=NOW, rng=RNG)
 
     assert repo.get_day(db, date(2026, 7, 5)) is not None
+
+
+# --- ending the day, and starting it again ---------------------------------------
+
+
+def test_ending_the_day_stamps_it_and_keeps_its_entries(db, stomp):
+    start_exercise(db, exercise_id=stomp.id, now=NOW, rng=RNG)
+    stop_exercise(
+        db,
+        exercise_id=stomp.id,
+        algorithm=Algorithm.NORMAL,
+        now=NOW + timedelta(minutes=10),
+        rng=RNG,
+    )
+    later = NOW + timedelta(minutes=12)
+
+    ended = loaded(end_day(db, now=later))
+
+    assert ended.ended_at == later
+    assert loaded(repo.get_day(db, date(2026, 7, 5))).ended_at == later
+    assert len(repo.entries_for_day(db, ended.id)) == 1
+
+
+def test_a_day_with_nothing_logged_has_nothing_to_end(db):
+    assert end_day(db, now=NOW) is None
+    assert repo.get_day(db, date(2026, 7, 5)) is None  # and no day is opened
+
+
+def test_the_day_cannot_end_while_something_is_running(db, stomp):
+    start_exercise(db, exercise_id=stomp.id, now=NOW, rng=RNG)
+
+    with pytest.raises(EntryRunning):
+        end_day(db, now=NOW + timedelta(minutes=1))
+
+    assert loaded(repo.get_day(db, date(2026, 7, 5))).ended_at is None
+
+
+def test_reopening_a_day_clears_the_end(db, stomp):
+    start_exercise(db, exercise_id=stomp.id, now=NOW, rng=RNG)
+    stop_exercise(
+        db, exercise_id=stomp.id, algorithm=Algorithm.NORMAL, now=NOW, rng=RNG
+    )
+    end_day(db, now=NOW)
+
+    reopened = loaded(reopen_day(db, now=NOW))
+
+    assert reopened.ended_at is None
+    assert loaded(repo.get_day(db, date(2026, 7, 5))).ended_at is None
+
+
+def test_starting_anything_on_an_ended_day_reopens_it(db, stomp):
+    start_exercise(db, exercise_id=stomp.id, now=NOW, rng=RNG)
+    stop_exercise(
+        db, exercise_id=stomp.id, algorithm=Algorithm.NORMAL, now=NOW, rng=RNG
+    )
+    end_day(db, now=NOW)
+
+    start_ad_hoc(db, rng=RNG, description="jam", now=NOW + timedelta(minutes=5))
+
+    assert loaded(repo.get_day(db, date(2026, 7, 5))).ended_at is None
+
+
+def test_the_next_practice_day_is_not_ended_by_yesterdays_end(db, stomp):
+    start_exercise(db, exercise_id=stomp.id, now=NOW, rng=RNG)
+    stop_exercise(
+        db, exercise_id=stomp.id, algorithm=Algorithm.NORMAL, now=NOW, rng=RNG
+    )
+    end_day(db, now=NOW)
+
+    start_exercise(db, exercise_id=stomp.id, now=NOW + timedelta(days=1), rng=RNG)
+
+    assert loaded(repo.get_day(db, date(2026, 7, 6))).ended_at is None
+    assert loaded(repo.get_day(db, date(2026, 7, 5))).ended_at is not None
 
 
 def test_starting_does_not_move_the_schedule(db, stomp):
