@@ -287,6 +287,8 @@ sit underneath, then:
   the row in the notation the row already uses: `66%` stays a percentage, `88`
   stays a BPM. With no target BPM on the row the slider is greyed out; fill the
   target in first.
+- **volume** — a slider from silent to full, for a single file. It is the
+  player's own: not stored, and every load starts at full.
 - **pitch** — up or down by up to 12 semitones, at the same speed. The first
   time you pick one the app renders it, which takes a few seconds; the result is
   kept and reused. Playing resumes where it was.

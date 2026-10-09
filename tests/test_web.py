@@ -1598,6 +1598,39 @@ def test_the_card_plays_the_file_attached_to_the_exercise(
     assert "loop.wav" in page
 
 
+def test_a_single_track_player_has_a_volume_slider(client, conn, le_freak, loop_wav):
+    media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+    start(client, le_freak.id)
+
+    page = client.get("/").text
+    player = page[page.index('class="player"') : page.index("</audio>")]
+    volume = page[page.index('class="volume"') :][:300]
+
+    assert 'class="volume"' in page
+    assert 'type="range"' in volume and 'min="0"' in volume and 'max="1"' in volume
+    assert 'aria-label="volume"' in volume
+    assert player  # inside the player's own controls, not beside it
+
+
+def test_a_track_set_gets_no_volume_slider_of_its_own(client, conn, le_freak, loop_wav):
+    first = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+    media.attach(
+        conn,
+        exercise_id=le_freak.id,
+        kind="file",
+        path=str(loop_wav),
+        group_id=first.group_id,
+        now=NOW,
+    )
+    start(client, le_freak.id)
+
+    assert 'class="volume"' not in client.get("/").text
+
+
 def test_a_youtube_attachment_is_an_embed_with_the_link_behind_it(
     client, conn, le_freak
 ):
