@@ -37,6 +37,9 @@
         <output>{{ tempo_text(running_exercise) }}</output>
         {% if ratio is none %}<span class="muted">needs a target BPM</span>{% endif %}
       </label>
+      <label class="volume">volume
+        <input type="range" min="0" max="1" step="0.01" value="1" aria-label="volume">
+      </label>
       <label class="pitch">pitch
         <select>
           {% for st in range(-12, 13) %}

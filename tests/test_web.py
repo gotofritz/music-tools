@@ -18,10 +18,11 @@ from fastapi.testclient import TestClient
 from music_tools.db import repository as repo
 from music_tools.db.connection import open_db
 from music_tools.db.migrate import migrate
-from music_tools.domain import media
+from music_tools.domain import media, session
 from music_tools.web import deps
 from music_tools.web.app import create_app
 from music_tools.web.deps import get_now, get_rng
+from music_tools.web.views import PAGE_OF_DAYS
 from tests.conftest import SteadyRandom
 
 NOW = datetime(2026, 7, 5, 22, 47)
@@ -425,19 +426,6 @@ def test_done_twice_counts_twice(client, conn, le_freak):
     assert after.practiced_count == 10
 
 
-def test_an_ad_hoc_entry_starts_against_no_exercise(client, conn):
-    response = client.post(
-        "/entries",
-        data={"description": "warm-up", "log_group": "TECHNIQUE"},
-        headers=hx(),
-    )
-
-    assert response.status_code == 200
-    entry = running(conn)
-    assert entry is not None
-    assert (entry.description, entry.exercise_id) == ("warm-up", None)
-
-
 def test_a_false_start_is_discarded_and_logs_nothing(client, conn, le_freak):
     start(client, le_freak.id)
     entry_id = running(conn).id
@@ -611,8 +599,8 @@ def test_the_empty_boxes_on_a_row_say_what_they_are_for(client, songs, le_freak)
 
 @pytest.fixture
 def earlier_days(conn):
-    """Six finished days before the pinned one, one entry each."""
-    for number in range(1, 7):
+    """A page of finished days and one more, before the pinned one."""
+    for number in range(1, PAGE_OF_DAYS + 2):
         day = date(2026, 6, number)
         record = repo.create_day(conn, day=day)
         entry = repo.create_entry(
@@ -647,7 +635,7 @@ def test_today_no_longer_lists_what_is_due(client, le_freak):
 def test_only_a_page_of_days_is_shown_with_a_way_to_get_more(client, earlier_days):
     page = client.get("/").text
 
-    assert "2026-06-01" not in page  # the sixth-oldest, past the page of 5
+    assert "2026-06-01" not in page  # the oldest, one past the page
     assert "load more" in page
     assert 'href="/days?before=2026-06-02"' in page  # carry on from the last shown
 
@@ -671,6 +659,780 @@ def test_the_load_more_link_is_a_whole_page_without_htmx(client, earlier_days):
 
 def test_a_day_with_no_history_behind_it_offers_nothing_to_load(client):
     assert "load more" not in client.get("/").text
+
+
+# --- earlier days are collapsed (Phase 10, step 1) -----------------------------
+
+
+def _details(page: str) -> list[str]:
+    return re.findall(r"<details\b[^>]*>", page)
+
+
+def test_every_earlier_day_is_a_collapsed_details_with_a_summary(client, earlier_days):
+    page = client.get("/").text
+
+    tags = _details(page)
+    assert len(tags) == PAGE_OF_DAYS
+    assert all(" open" not in tag for tag in tags)
+    assert page.count("<summary") == PAGE_OF_DAYS
+    summary = re.search(r"<summary.*?</summary>", page, re.S)
+    assert summary is not None
+    assert "2026-06-21" in summary.group(0)  # newest first
+    assert "00:15" in summary.group(0)
+    assert "TECHNIQUE" in summary.group(0)
+
+
+def test_todays_log_is_not_collapsible(client, sample_block):
+    page = client.get("/").text
+    assert "00:19" in page
+    log = page[page.index('id="day-log"') : page.index('id="history"')]
+
+    assert "<details" not in log
+
+
+def test_one_button_flips_collapse_all_and_expand_all(client, earlier_days):
+    page = client.get("/").text
+
+    assert page.count('id="toggle-days"') == 1
+    assert "expand all" in page  # every load starts collapsed
+
+
+def test_no_toggle_when_there_is_no_history(client):
+    assert "toggle-days" not in client.get("/").text
+
+
+def test_load_more_days_arrive_as_collapsed_details(client, earlier_days):
+    page = client.get("/days?before=2026-06-02", headers=hx()).text
+
+    assert len(_details(page)) == 1
+    assert " open" not in _details(page)[0]
+
+
+def test_a_day_page_is_open_and_its_edits_redraw_it_open(client, conn, earlier_days):
+    page = client.get("/days/2026-06-06").text
+    assert _details(page)
+    assert all(" open" in tag for tag in _details(page))
+
+    day = repo.get_day(conn, date(2026, 6, 6))
+    assert day is not None
+    entry = repo.entries_for_day(conn, day.id)[0]
+    amended = client.patch(
+        f"/entries/{entry.id}", data={"notes": "x"}, headers=hx()
+    ).text
+    assert _details(amended)
+    assert all(" open" in tag for tag in _details(amended))
+
+
+# --- the picker (Phase 10, step 2) ---------------------------------------------
+
+
+def test_the_picker_is_one_button_per_live_module_in_tab_order(
+    client, conn, slap, songs
+):
+    archived = repo.create_module(conn, name="OLD", log_group="TECHNIQUE")
+    repo.update_module(conn, archived.id, archived_at=NOW)
+
+    page = client.get("/picker", headers=hx()).text
+
+    assert page.index("SLAP") < page.index("SONGS")
+    assert "OLD" not in page
+    assert 'hx-get="/picker/slap"' in page
+    assert 'hx-get="/picker/songs"' in page
+    assert "<table" not in page  # buttons only until one is clicked
+
+
+def test_a_modules_list_has_its_name_on_top_and_its_live_rows_due_first(
+    client, conn, songs, le_freak, espresso
+):
+    gone = repo.create_exercise(conn, module_id=songs.id, name="gone", next_due=TODAY)
+    repo.update_exercise(conn, gone.id, archived_at=NOW)
+
+    page = client.get("/picker/songs", headers=hx()).text
+
+    assert 'class="picker-list"' in page
+    assert page.index("<h3") < page.index("le freak") < page.index("espresso")
+    assert "SONGS" in page[page.index("<h3") :][:80]
+    assert "gone" not in page
+
+
+def test_the_list_is_the_tabs_table_minus_what_only_a_tab_needs(
+    client, songs, le_freak
+):
+    page = client.get("/picker/songs", headers=hx()).text
+    table = page[page.index("<table") : page.index("</table>")]
+
+    for absent in (
+        'type="checkbox"',
+        "archive",
+        "stop",
+        "media",
+        "<template",
+        "hx-patch",
+    ):
+        assert absent not in table
+    assert "66%" in table and "133" in table  # speed and target, read-only
+
+
+def test_clicking_a_row_starts_it_with_the_tabs_own_call(client, songs, le_freak):
+    page = client.get("/picker/songs", headers=hx()).text
+
+    assert f'hx-post="/exercises/{le_freak.id}/start"' in page
+    assert f'action="/exercises/{le_freak.id}/start"' in page  # and with no JS
+    assert 'hx-target="#day-log"' in page
+
+
+def test_the_open_modules_button_closes_the_list_and_a_close_control_does_too(
+    client, slap, songs, le_freak
+):
+    page = client.get("/picker/songs", headers=hx()).text
+
+    assert 'hx-get="/picker/slap"' in page  # the others still open theirs
+    assert 'hx-get="/picker/songs"' not in page  # this one now hides it
+    assert 'class="picker-close"' in page
+    assert page.count('hx-get="/picker"') >= 2  # the active button, and the close
+
+
+def test_a_picker_for_an_unknown_or_archived_module_is_404(client, conn, songs):
+    assert client.get("/picker/nothing", headers=hx()).status_code == 404
+
+    repo.update_module(conn, songs.id, archived_at=NOW)
+    assert client.get("/picker/songs", headers=hx()).status_code == 404
+
+
+# --- START is a picker, a stop is a start (Phase 10, steps 3 and 4) -----------
+
+
+def test_with_nothing_running_start_reveals_the_picker_and_opens_no_line(
+    client, conn, songs, le_freak
+):
+    page = client.get("/").text
+    now_playing = page[page.index('id="now-playing"') : page.index("<h2>Log</h2>")]
+
+    assert ">START<" in now_playing
+    assert 'hx-get="/picker"' in now_playing
+    assert 'id="picker"' not in now_playing  # revealed by the click, not drawn
+    assert running(conn) is None
+    assert repo.get_day(conn, TODAY) is None  # a false start leaves nothing behind
+
+
+def test_the_bare_post_entries_start_is_gone(client, conn):
+    response = client.post("/entries", headers=hx())
+
+    assert response.status_code in (404, 405)
+    assert running(conn) is None
+
+
+def test_the_picker_without_htmx_is_a_page_of_its_own(client, songs, le_freak):
+    page = client.get("/picker/songs").text
+
+    assert "<html" in page
+    assert "le freak" in page
+
+
+def test_starting_a_row_from_the_picker_shows_it_running_with_no_picker(
+    client, conn, songs, le_freak
+):
+    response = client.post(
+        f"/exercises/{le_freak.id}/start", headers=hx(referer="http://localhost/")
+    )
+
+    assert '<section id="day-log"' in response.text
+    assert "le freak" in response.text
+    assert 'id="picker"' not in response.text
+    day = repo.get_day(conn, TODAY)
+    assert day is not None
+    assert len(repo.entries_for_day(conn, day.id)) == 1
+
+
+def test_the_running_card_has_the_five_stops_in_place_of_the_pulldown(
+    client, conn, le_freak
+):
+    start(client, le_freak.id)
+
+    page = client.get("/").text
+    card = page[page.index('id="now-playing"') : page.index("<h2>Log</h2>")]
+
+    assert "<select" not in card
+    assert ">done<" not in card
+    entry_id = running(conn).id
+    for algorithm in ("normal", "short", "long", "rotate", "hold"):
+        assert re.search(rf'<button[^>]*name="algorithm"[^>]*value="{algorithm}"', card)
+    assert f'hx-post="/entries/{entry_id}/done"' in card
+    assert f'action="/entries/{entry_id}/done"' in card
+    assert f'action="/entries/{entry_id}/discard"' in card  # discard stays
+
+
+@pytest.mark.parametrize("algorithm", ["normal", "short", "long", "rotate", "hold"])
+def test_every_stop_logs_the_entry_and_moves_the_schedule_then_offers_the_picker(
+    client, conn, songs, le_freak, algorithm
+):
+    start(client, le_freak.id)
+
+    response = client.post(
+        f"/entries/{running(conn).id}/done",
+        data={"algorithm": algorithm},
+        headers=hx(referer="http://localhost/"),
+    )
+
+    assert running(conn) is None
+    day = repo.get_day(conn, TODAY)
+    assert day is not None
+    assert [e.description for e in repo.entries_for_day(conn, day.id)] == ["le freak"]
+    after = repo.get_exercise(conn, le_freak.id)
+    assert after is not None
+    assert after.practiced_count == 9
+    assert 'id="picker"' in response.text  # the same state as after START
+    assert 'hx-get="/picker/songs"' in response.text
+
+
+def test_discard_lands_on_the_picker_too(client, conn, songs, le_freak):
+    start(client, le_freak.id)
+
+    response = client.post(
+        f"/entries/{running(conn).id}/discard", headers=hx(referer="http://localhost/")
+    )
+
+    assert 'id="picker"' in response.text
+    assert running(conn) is None
+
+
+def test_a_stop_from_a_module_page_does_not_draw_a_picker(
+    client, conn, songs, le_freak
+):
+    start(client, le_freak.id)
+
+    response = stop(client, le_freak.id, referer="http://localhost/modules/songs")
+
+    assert 'id="picker"' not in response.text
+
+
+# --- the current exercise, editable in place (Phase 10, step 5) ---------------------
+
+
+def _card(page: str) -> str:
+    return page[page.index('id="now-playing"') : page.index("<h2>Log</h2>")]
+
+
+def test_the_running_card_carries_the_tab_rows_editable_cells(
+    client, conn, songs, le_freak
+):
+    start(client, le_freak.id)
+
+    card = _card(client.get("/").text)
+
+    assert 'id="now-exercise"' in card
+    for field in ("name", "speed", "target_bpm", "notes"):
+        assert f'id="exercise-{le_freak.id}-{field}"' in card
+    assert f'hx-patch="/exercises/{le_freak.id}"' in card
+    assert 'hx-target="#now-exercise"' in card
+    assert 'value="le freak"' in card
+    assert "of 133" not in card and "133" in card  # the target, as its own cell
+
+
+def test_an_ad_hoc_line_has_no_exercise_to_edit(client, conn):
+    session.start_ad_hoc(conn, rng=SteadyRandom(), description="warm-up", now=NOW)
+
+    assert 'id="now-exercise"' not in _card(client.get("/").text)
+
+
+def test_an_edit_aimed_at_the_card_answers_with_the_card_cells_only(
+    client, conn, songs, le_freak, loop_wav
+):
+    media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+    start(client, le_freak.id)
+
+    response = client.patch(
+        f"/exercises/{le_freak.id}",
+        data={"notes": "watch the thumb", "speed": "70%"},
+        headers=hx(**{"HX-Target": "now-exercise"}),
+    )
+
+    assert response.status_code == 200
+    assert response.text.lstrip().startswith("<div")
+    assert 'id="now-exercise"' in response.text
+    assert "watch the thumb" in response.text
+    assert "<tr" not in response.text  # not the tab's row
+    # nothing the player is made of: playback and the waveform keep going
+    for player in ("<audio", "data-peaks-url", 'class="player"', "now-media"):
+        assert player not in response.text
+    after = repo.get_exercise(conn, le_freak.id)
+    assert after is not None
+    assert (after.notes, after.speed) == ("watch the thumb", "70%")
+
+
+def test_an_edit_aimed_at_the_tabs_row_still_answers_with_the_row(
+    client, songs, le_freak
+):
+    response = client.patch(
+        f"/exercises/{le_freak.id}",
+        data={"speed": "70%"},
+        headers=hx(**{"HX-Target": f"exercise-{le_freak.id}"}),
+    )
+
+    assert f'<tr id="exercise-{le_freak.id}"' in response.text
+    assert 'id="now-exercise"' not in response.text
+
+
+def test_a_refused_edit_in_the_card_is_a_message_not_a_redraw(
+    client, conn, songs, le_freak, espresso
+):
+    start(client, le_freak.id)
+
+    response = client.patch(
+        f"/exercises/{le_freak.id}",
+        data={"name": "espresso"},
+        headers=hx(**{"HX-Target": "now-exercise"}),
+    )
+
+    assert response.status_code == 409
+    assert "now-exercise" not in response.headers.get("HX-Retarget", "")
+
+
+# --- media, edited inline (Phase 10, step 6) ----------------------------------------
+
+
+def test_the_card_embeds_the_media_list_and_the_attach_forms(
+    client, conn, songs, le_freak, loop_wav
+):
+    media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+    start(client, le_freak.id)
+
+    card = _card(client.get("/").text)
+
+    assert 'id="now-media-list"' in card
+    assert 'id="media-list"' not in card
+    assert 'hx-target="#now-media-list"' in card
+    for kind in ("file", "youtube", "score", "text"):
+        assert f'<input type="hidden" name="kind" value="{kind}">' in card
+    assert "<audio" in card  # the player is still the card's
+
+
+def test_the_media_page_keeps_its_own_list_and_forms(client, le_freak, roots):
+    page = client.get(f"/exercises/{le_freak.id}/media").text
+
+    assert 'id="media-list"' in page
+    assert 'id="now-media-list"' not in page
+    assert 'hx-target="#media-list"' in page
+
+
+def _from_card(**headers: str) -> dict[str, str]:
+    return hx(**{"HX-Target": "now-media-list"}, **headers)
+
+
+def test_attaching_from_the_card_answers_with_the_list_and_the_new_players(
+    client, conn, songs, le_freak, loop_wav
+):
+    start(client, le_freak.id)
+
+    response = client.post(
+        f"/exercises/{le_freak.id}/media",
+        data={"kind": "file", "path": str(loop_wav)},
+        headers=_from_card(),
+    )
+
+    source = media.exercise_media(conn, exercise_id=le_freak.id)[0].sources[0]
+    assert response.status_code == 200
+    assert 'id="now-media-list"' in response.text
+    assert 'id="media-players" hx-swap-oob="true"' in response.text
+    assert f'src="/media/{source.id}/audio"' in response.text
+    assert 'id="media-list"' not in response.text
+
+
+def test_removing_and_reordering_from_the_card_redraw_the_players(
+    client, conn, songs, le_freak, loop_wav
+):
+    first = media.attach(
+        conn, exercise_id=le_freak.id, kind="text", body="one", now=NOW
+    )
+    media.attach(conn, exercise_id=le_freak.id, kind="text", body="two", now=NOW)
+    start(client, le_freak.id)
+
+    moved = client.post(
+        f"/media/{first.id}/move", data={"direction": "down"}, headers=_from_card()
+    )
+    removed = client.delete(f"/media/{first.id}", headers=_from_card())
+
+    for response in (moved, removed):
+        assert 'id="now-media-list"' in response.text
+        assert 'id="media-players" hx-swap-oob="true"' in response.text
+
+
+def test_naming_and_mixing_a_track_from_the_card_leaves_the_player_alone(
+    client, conn, songs, le_freak, loop_wav
+):
+    source = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+    start(client, le_freak.id)
+
+    response = client.patch(
+        f"/media/{source.id}",
+        data={"label": "bass", "gain": "0.5"},
+        headers=_from_card(),
+    )
+
+    assert 'id="now-media-list"' in response.text
+    assert "media-players" not in response.text  # no oob, so no new <audio>
+    assert "<audio" not in response.text
+    group = media.exercise_media(conn, exercise_id=le_freak.id)[0].group
+    assert group is not None
+    labelled = client.post(
+        f"/groups/{group.id}/label", data={"label": "stems"}, headers=_from_card()
+    )
+    assert "media-players" not in labelled.text
+
+
+def test_the_media_page_writes_are_unchanged(client, conn, le_freak, loop_wav):
+    response = client.post(
+        f"/exercises/{le_freak.id}/media",
+        data={"kind": "file", "path": str(loop_wav)},
+        headers=hx(),
+    )
+
+    assert 'id="media-list"' in response.text
+    assert "media-players" not in response.text
+
+
+def test_a_refused_attach_from_the_card_is_a_message(
+    client, conn, songs, le_freak, roots
+):
+    start(client, le_freak.id)
+
+    response = client.post(
+        f"/exercises/{le_freak.id}/media",
+        data={"kind": "file", "path": "/nowhere/else.wav"},
+        headers=_from_card(),
+    )
+
+    assert response.status_code == 400
+    assert media.exercise_media(conn, exercise_id=le_freak.id) == []
+
+
+# --- the tabs read as configuration (Phase 10, step 7) -------------------------------
+
+
+def test_a_module_page_says_where_a_session_is_run(client, songs, le_freak):
+    page = client.get("/modules/songs").text
+
+    assert 'class="config-note muted"' in page
+    assert 'href="/"' in page[page.index('class="config-note muted"') :][:300]
+    assert "start" in page and "stop" in page  # still useful, still there
+
+
+# --- the site icon -------------------------------------------------------------------
+
+
+def test_every_page_links_the_svg_favicon_and_the_app_serves_it(client, songs):
+    for url in ("/", "/modules/songs"):
+        assert (
+            '<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">'
+            in client.get(url).text
+        )
+
+    icon = client.get("/static/favicon.svg")
+
+    assert icon.status_code == 200
+    assert icon.headers["content-type"].startswith("image/svg+xml")
+    assert icon.text.lstrip().startswith("<svg")
+
+
+# --- day summaries as equal cells with a duration bar -------------------------------
+
+
+def _cells(page: str, day: str) -> list[str]:
+    block = page[page.index(f'id="day-{day}"') :]
+    block = block[: block.index("</summary>")]
+    return re.findall(r'<span class="group-cell".*?</span>\s*</span>', block, re.S)
+
+
+def _first(pattern: str, text: str) -> str:
+    found = re.search(pattern, text)
+    assert found is not None, (pattern, text)
+    return found.group(1)
+
+
+def test_every_log_group_is_a_cell_even_with_no_time_that_day(
+    client, slap, songs, earlier_days
+):
+    cells = _cells(client.get("/").text, "2026-06-06")
+
+    assert len(cells) == 2  # TECHNIQUE had time, REPERTOIRE did not
+    assert "TECHNIQUE" in cells[0] and "00:15" in cells[0]
+    assert "REPERTOIRE" in cells[1] and "00:00" in cells[1]
+
+
+def test_the_cells_follow_module_order_and_share_a_group_once(
+    client, conn, slap, songs, earlier_days
+):
+    repo.create_module(conn, name="ETUDES", log_group="TECHNIQUE")  # same group
+
+    cells = _cells(client.get("/").text, "2026-06-06")
+
+    assert [("TECHNIQUE" in c, "REPERTOIRE" in c) for c in cells] == [
+        (True, False),
+        (False, True),
+    ]
+
+
+def test_a_group_the_day_used_but_no_module_has_is_a_cell_too(
+    client, conn, slap, earlier_days
+):
+    day = repo.get_day(conn, date(2026, 6, 6))
+    assert day is not None
+    entry = repo.create_entry(conn, day_id=day.id, started_at=datetime(2026, 6, 6, 21))
+    repo.close_entry(
+        conn,
+        entry.id,
+        ended_at=datetime(2026, 6, 6, 21, 5),
+        description="jam",
+        log_group="OLD GROUP",
+    )
+
+    cells = _cells(client.get("/").text, "2026-06-06")
+
+    assert any("OLD GROUP" in c and "00:05" in c for c in cells)
+
+
+def test_equal_times_are_equal_bars_and_each_group_has_a_colour(
+    client, conn, slap, songs, earlier_days
+):
+    day = repo.get_day(conn, date(2026, 6, 6))
+    assert day is not None
+    entry = repo.create_entry(conn, day_id=day.id, started_at=datetime(2026, 6, 6, 21))
+    repo.close_entry(
+        conn,
+        entry.id,
+        ended_at=datetime(2026, 6, 6, 21, 15),
+        description="le freak",
+        log_group="REPERTOIRE",
+    )
+
+    cells = _cells(client.get("/").text, "2026-06-06")
+
+    widths = [_first(r"width: ([\d.]+)%", c) for c in cells]
+    assert [float(w) for w in widths] == [100.0, 100.0]
+    colours = [_first(r"--c: ([^;\"]+)", c) for c in cells]
+    assert len(set(colours)) == 2
+
+
+def _add_time(conn, day, *, minutes: int, log_group: str):
+    record = repo.get_day(conn, day) or repo.create_day(conn, day=day)
+    started = datetime.combine(day, time(21))
+    entry = repo.create_entry(conn, day_id=record.id, started_at=started)
+    repo.close_entry(
+        conn,
+        entry.id,
+        ended_at=started.replace(minute=minutes % 60, hour=21 + minutes // 60),
+        description=log_group.lower(),
+        log_group=log_group,
+    )
+
+
+def test_bars_share_one_scale_across_every_day_shown(client, conn, slap):
+    jazz = repo.create_module(conn, name="JAZZ", log_group="JAZZ")
+    assert jazz is not None
+    _add_time(conn, date(2026, 6, 10), minutes=20, log_group="JAZZ")
+    _add_time(conn, date(2026, 6, 11), minutes=60, log_group="JAZZ")
+
+    page = client.get("/").text
+
+    def width(day: str) -> float:
+        cell = next(c for c in _cells(page, day) if "JAZZ" in c)
+        return float(_first(r"width: ([\d.]+)%", cell))
+
+    assert width("2026-06-11") == pytest.approx(100.0)
+    assert width("2026-06-10") == pytest.approx(100 / 3, abs=0.01)  # 20 of 60 min
+
+
+def test_every_cell_carries_its_seconds_for_the_page_to_rescale_by(
+    client, slap, songs, earlier_days
+):
+    cells = _cells(client.get("/").text, "2026-06-06")
+
+    assert 'data-seconds="900"' in cells[0]
+    assert 'data-seconds="0"' in cells[1]
+
+
+def test_a_group_with_no_time_has_an_empty_bar(client, slap, songs, earlier_days):
+    cells = _cells(client.get("/").text, "2026-06-06")
+
+    assert "width: 0%" in cells[1]
+
+
+def test_the_load_more_days_carry_the_same_cells(client, slap, songs, earlier_days):
+    page = client.get("/days?before=2026-06-02", headers=hx()).text
+
+    assert page.count('class="group-cell"') == 2
+
+
+def test_the_summary_has_no_disclosure_triangle(client):
+    css = client.get("/static/app.css").text
+
+    assert "details.day > summary" in css
+    assert "list-style: none" in css
+    assert "::-webkit-details-marker" in css
+
+
+# --- END: the day's log moves into Earlier, START brings it back ------------------
+
+
+def _ended_at(conn):
+    day = repo.get_day(conn, TODAY)
+    assert day is not None
+    return day.ended_at
+
+
+def _idle(page: str) -> str:
+    return page[page.index('id="now-playing"') : page.index("<h2>Log</h2>")]
+
+
+def test_end_sits_next_to_start_once_there_is_something_to_end(client, sample_block):
+    idle = _idle(client.get("/").text)
+
+    assert ">START<" in idle
+    assert 'hx-post="/day/end"' in idle
+    assert 'action="/day/end"' in idle
+    assert ">END<" in idle
+
+
+def test_there_is_no_end_for_a_day_with_nothing_in_it(client):
+    assert ">END<" not in client.get("/").text
+
+
+def test_there_is_no_end_while_something_is_running(client, conn, le_freak):
+    start(client, le_freak.id)
+
+    assert ">END<" not in client.get("/").text
+
+
+def test_end_is_offered_beside_the_picker_after_a_stop_too(
+    client, conn, songs, le_freak
+):
+    start(client, le_freak.id)
+    stopped = client.post(
+        f"/entries/{running(conn).id}/done", headers=hx(referer="http://localhost/")
+    )
+
+    assert 'id="picker"' in stopped.text
+    assert ">END<" in stopped.text
+
+
+def test_ending_the_day_moves_its_log_into_earlier(client, conn, sample_block):
+    response = client.post("/day/end", headers=hx(referer="http://localhost/"))
+
+    assert response.status_code == 200
+    assert '<section id="day-log"' in response.text
+    assert "Nothing logged yet today" in response.text
+    assert '<section id="history" hx-swap-oob="true"' in response.text
+    assert '<section id="day-totals" hx-swap-oob="true"' in response.text
+    history = response.text[response.text.index('id="history"') :]
+    assert 'id="day-2026-07-05"' in history
+    assert "le freak" in history
+    assert _ended_at(conn) == NOW
+
+
+def test_after_ending_the_page_starts_blank_with_the_day_in_earlier(
+    client, sample_block
+):
+    client.post("/day/end", headers=hx())
+
+    page = client.get("/").text
+    log = page[page.index('id="day-log"') : page.index('id="history"')]
+    history = page[page.index('id="history"') :]
+
+    assert "le freak" not in log
+    assert "Nothing logged yet today" in log
+    assert (
+        "00:53" not in page[page.index('id="day-totals"') : page.index('id="history"')]
+    )
+    assert 'id="day-2026-07-05"' in history  # the first of Earlier
+    assert "00:53" in history
+    assert 'hx-post="/day/reopen"' in _idle(page)
+    assert ">END<" not in page
+
+
+def test_ending_with_something_running_is_a_409(client, conn, le_freak):
+    start(client, le_freak.id)
+
+    response = client.post("/day/end", headers=hx())
+
+    assert response.status_code == 409
+    assert _ended_at(conn) is None
+
+
+def test_ending_a_day_with_nothing_in_it_changes_nothing(client, conn):
+    response = client.post("/day/end", headers=hx())
+
+    assert response.status_code == 200
+    assert repo.get_day(conn, TODAY) is None
+
+
+def test_start_after_end_brings_the_day_back_and_opens_the_picker(
+    client, conn, songs, sample_block
+):
+    client.post("/day/end", headers=hx())
+
+    response = client.post("/day/reopen", headers=hx(referer="http://localhost/"))
+
+    assert response.status_code == 200
+    assert _ended_at(conn) is None
+    assert "le freak" in response.text.split('id="history"')[0]  # the log is back
+    assert 'id="picker"' in response.text
+    history = response.text[response.text.index('id="history"') :]
+    assert 'id="day-2026-07-05"' not in history  # no longer an earlier day
+    page = client.get("/").text
+    assert "00:53" in page[page.index('id="day-totals"') :]
+
+
+def test_starting_a_row_on_an_ended_day_reopens_it_and_refreshes_earlier(
+    client, conn, songs, le_freak, sample_block
+):
+    client.post("/day/end", headers=hx())
+
+    response = client.post(
+        f"/exercises/{le_freak.id}/start", headers=hx(referer="http://localhost/")
+    )
+
+    assert _ended_at(conn) is None
+    assert '<section id="history" hx-swap-oob="true"' in response.text
+    assert (
+        'id="day-2026-07-05"'
+        not in response.text[response.text.index('id="history"') :]
+    )
+
+
+def test_a_correction_to_an_ended_day_redraws_it_as_an_earlier_block(
+    client, conn, sample_block
+):
+    client.post("/day/end", headers=hx())
+    entry = repo.entries_for_day(conn, sample_block.id)[0]
+
+    response = client.patch(f"/entries/{entry.id}", data={"notes": "x"}, headers=hx())
+
+    assert 'id="day-2026-07-05"' in response.text
+    assert "<details" in response.text
+    assert 'id="day-log"' not in response.text
+
+
+def test_an_ended_day_is_a_block_on_its_own_page_not_the_live_log(client, sample_block):
+    client.post("/day/end", headers=hx())
+
+    page = client.get("/days/2026-07-05").text
+
+    assert "<details" in page
+    assert 'id="day-log"' not in page
+
+
+def test_end_and_reopen_without_htmx_redirect_back(client, sample_block):
+    ended = client.post("/day/end", follow_redirects=False)
+    reopened = client.post("/day/reopen", follow_redirects=False)
+
+    assert (ended.status_code, ended.headers["location"]) == (303, "/")
+    assert (reopened.status_code, reopened.headers["location"]) == (303, "/")
 
 
 # --- correcting a line of the log, in place -------------------------------------------
@@ -994,6 +1756,43 @@ def test_the_card_plays_the_file_attached_to_the_exercise(
     assert "loop.wav" in page
 
 
+def test_a_single_track_player_has_a_volume_slider(client, conn, le_freak, loop_wav):
+    media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+    start(client, le_freak.id)
+
+    page = client.get("/").text
+    player = page[page.index('class="player"') : page.index("</audio>")]
+    volume = page[page.index('class="volume"') :][:300]
+
+    assert 'class="volume"' in page
+    assert 'type="range"' in volume and 'min="0"' in volume and 'max="1"' in volume
+    assert 'aria-label="volume"' in volume
+    assert player  # inside the player's own controls, not beside it
+
+
+def test_a_track_set_gets_no_volume_slider_of_its_own(client, conn, le_freak, loop_wav):
+    from pydub import AudioSegment
+
+    drums = loop_wav.with_name("drums.wav")
+    AudioSegment.silent(duration=4000).export(drums, format="wav")
+    first = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+    media.attach(
+        conn,
+        exercise_id=le_freak.id,
+        kind="file",
+        path=str(drums),
+        group_id=first.group_id,
+        now=NOW,
+    )
+    start(client, le_freak.id)
+
+    assert 'class="volume"' not in client.get("/").text
+
+
 def test_a_youtube_attachment_is_an_embed_with_the_link_behind_it(
     client, conn, le_freak
 ):
@@ -1310,6 +2109,20 @@ def test_the_media_page_lists_the_roots_paths_are_confined_to(client, le_freak, 
     assert str(roots) in page  # a path is typed in, so say where it may point
 
 
+def test_a_path_pasted_in_quotes_is_attached_without_them(
+    client, conn, le_freak, loop_wav
+):
+    response = client.post(
+        f"/exercises/{le_freak.id}/media",
+        data={"kind": "file", "path": f"'{loop_wav}'"},
+        headers=hx(),
+    )
+
+    assert response.status_code == 200
+    cards = media.exercise_media(conn, exercise_id=le_freak.id)
+    assert cards[0].sources[0].path == str(loop_wav)
+
+
 def test_a_file_is_attached_from_the_page(client, conn, le_freak, loop_wav):
     response = client.post(
         f"/exercises/{le_freak.id}/media",
@@ -1322,6 +2135,19 @@ def test_a_file_is_attached_from_the_page(client, conn, le_freak, loop_wav):
     cards = media.exercise_media(conn, exercise_id=le_freak.id)
     assert [card.kind for card in cards] == ["file"]
     assert cards[0].sources[0].label == "the loop"
+
+
+def test_attaching_the_same_file_twice_is_a_409_with_a_message(
+    client, conn, le_freak, loop_wav
+):
+    data = {"kind": "file", "path": str(loop_wav)}
+    client.post(f"/exercises/{le_freak.id}/media", data=data, headers=hx())
+
+    response = client.post(f"/exercises/{le_freak.id}/media", data=data, headers=hx())
+
+    assert response.status_code == 409
+    assert "loop.wav" in response.text
+    assert len(media.exercise_media(conn, exercise_id=le_freak.id)) == 1
 
 
 def test_a_youtube_url_is_attached_from_the_page(client, conn, le_freak):
@@ -1845,24 +2671,6 @@ def test_notes_are_a_textarea_on_the_row_and_on_the_add_form(client, songs, le_f
     assert 'input type="text" name="notes"' not in page
 
 
-def test_with_nothing_running_there_is_a_start_button(client):
-    page = client.get("/").text
-
-    assert "Nothing running" not in page
-    assert 'action="/entries"' in page
-    assert ">START<" in page
-
-
-def test_start_with_no_description_logs_a_practice_line(client, conn):
-    response = client.post("/entries", headers=hx())
-
-    assert response.status_code == 200
-    entry = running(conn)
-    assert entry is not None
-    assert (entry.description, entry.exercise_id) == ("Practice", None)
-    assert entry.ended_at is None
-
-
 def test_the_running_exercise_is_first_in_its_queue_and_marked(
     client, conn, songs, le_freak, espresso
 ):
@@ -1972,7 +2780,7 @@ def test_notes_open_as_a_wide_box_of_at_least_two_lines(
 def test_stop_on_a_row_closes_the_start_button_line_and_schedules_the_row(
     client, conn, le_freak
 ):
-    client.post("/entries", headers=hx())
+    session.start_ad_hoc(conn, rng=SteadyRandom(), description="Practice", now=NOW)
 
     response = stop(client, le_freak.id)
 

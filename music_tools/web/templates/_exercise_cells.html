@@ -1,0 +1,45 @@
+{# The two forms that edit an exercise in place, shared by the tab's row and the
+   running card. `target` is what an edit swaps: the row's own `<tr>` on a tab,
+   `#now-exercise` on the card — the route reads `HX-Target` to know which.
+
+   Two forms rather than one because a form cannot span table cells, and the
+   row has the name and the speed in different ones. Each box has an id so the
+   cursor survives the redraw. #}
+{% from "_cells.html" import editable %}
+
+{% macro name_form(exercise, target) -%}
+<form action="/exercises/{{ exercise.id }}" method="post"
+      hx-patch="/exercises/{{ exercise.id }}" hx-trigger="change, submit"
+      hx-target="{{ target }}" hx-swap="outerHTML">
+  {% call editable(exercise.name, "what to practise") %}<input type="text" class="cell" id="exercise-{{ exercise.id }}-name" name="name" value="{{ exercise.name }}" size="22"
+         aria-label="name" placeholder="what to practise">{% endcall %}
+  {% call editable(exercise.notes or "", "notes", wide=True) %}<textarea class="cell" id="exercise-{{ exercise.id }}-notes" name="notes" rows="2" aria-label="notes"
+            placeholder="notes">{{ exercise.notes or "" }}</textarea>{% endcall %}
+</form>
+{%- endmacro %}
+
+{# The speed is what this column is about, so it is edited here, with the target
+   it resolves against. #}
+{% macro tempo_form(exercise, target) -%}
+<form action="/exercises/{{ exercise.id }}" method="post"
+      hx-patch="/exercises/{{ exercise.id }}" hx-trigger="change, submit"
+      hx-target="{{ target }}" hx-swap="outerHTML">
+  {% call editable(exercise.speed or "", "speed") %}<input type="text" class="cell" id="exercise-{{ exercise.id }}-speed" name="speed" value="{{ exercise.speed or "" }}" size="9"
+         aria-label="speed" placeholder="80% or 96"
+         hx-get="/exercises/{{ exercise.id }}/tempo"
+         hx-trigger="keyup changed delay:300ms"
+         hx-params="speed,target_bpm"
+         hx-target="#tempo-{{ exercise.id }}">{% endcall %}
+  {% call editable(exercise.target_bpm or "", "target BPM") %}<input type="text" class="cell" id="exercise-{{ exercise.id }}-target_bpm" name="target_bpm" inputmode="decimal"
+         pattern="[0-9]*\.?[0-9]*" value="{{ exercise.target_bpm or "" }}"
+         size="9" aria-label="target BPM" placeholder="target BPM"
+         hx-get="/exercises/{{ exercise.id }}/tempo"
+         hx-trigger="keyup changed delay:300ms"
+         hx-params="speed,target_bpm"
+         hx-target="#tempo-{{ exercise.id }}">{% endcall %}
+</form>
+<span id="tempo-{{ exercise.id }}">{{ tempo_text(exercise) }}</span>
+{% if exercise.target_bpm is none %}
+<span class="no-target" title="a percentage cannot resolve without one">no target</span>
+{% endif %}
+{%- endmacro %}

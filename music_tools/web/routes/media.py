@@ -32,6 +32,9 @@ from music_tools.web.deps import fragment_or_redirect, get_conn, get_now, render
 
 router = APIRouter()
 
+#: The element id (as HTMX sends it in `HX-Target`) of the running card's list.
+NOW_MEDIA_LIST = "now-media-list"
+
 
 def _playable_path(conn: sqlite3.Connection, source_id: int) -> Path:
     """The file a media row points at, guarded the way every path in is.
@@ -153,7 +156,9 @@ def attach(
             group_id=group_id,
             now=now,
         )
-    return fragment_or_redirect(request, _list(conn, exercise_id))
+    return fragment_or_redirect(
+        request, _list(request, conn, exercise_id, players=True, now=now)
+    )
 
 
 @router.api_route("/media/{source_id}", methods=["DELETE"])
@@ -162,6 +167,7 @@ def detach(
     request: Request,
     source_id: int,
     conn: sqlite3.Connection = Depends(get_conn),
+    now: datetime = Depends(get_now),
 ) -> Response:
     """Take an attachment off an exercise. The file itself is left alone.
 
@@ -171,7 +177,9 @@ def detach(
     source = _source(conn, source_id)
     with _reporting():
         media.detach(conn, source_id=source_id)
-    return fragment_or_redirect(request, _list(conn, source.exercise_id))
+    return fragment_or_redirect(
+        request, _list(request, conn, source.exercise_id, players=True, now=now)
+    )
 
 
 @router.post("/media/{source_id}/move")
@@ -180,6 +188,7 @@ def move(
     source_id: int,
     direction: str = Form(...),
     conn: sqlite3.Connection = Depends(get_conn),
+    now: datetime = Depends(get_now),
 ) -> Response:
     """Move a card one place up or down the exercise."""
     source = _source(conn, source_id)
@@ -187,7 +196,9 @@ def move(
         media.move(conn, source_id=source_id, direction=direction)
     except ValueError as unknown:
         raise HTTPException(status_code=400, detail=str(unknown)) from None
-    return fragment_or_redirect(request, _list(conn, source.exercise_id))
+    return fragment_or_redirect(
+        request, _list(request, conn, source.exercise_id, players=True, now=now)
+    )
 
 
 @router.api_route("/media/{source_id}", methods=["PATCH", "POST"])
@@ -215,7 +226,7 @@ def describe(
             pan=pan,
             muted=muted,
         )
-    return fragment_or_redirect(request, _list(conn, source.exercise_id))
+    return fragment_or_redirect(request, _list(request, conn, source.exercise_id))
 
 
 @router.post("/groups/{group_id}/label")
@@ -230,7 +241,7 @@ def label_set(
     if group is None:
         raise HTTPException(status_code=404, detail="no track set with that id")
     media.label_set(conn, group_id=group_id, label=label or None)
-    return fragment_or_redirect(request, _list(conn, group.exercise_id))
+    return fragment_or_redirect(request, _list(request, conn, group.exercise_id))
 
 
 @contextmanager
@@ -252,8 +263,8 @@ def _reporting() -> Iterator[None]:
 
     A path that is wrong or missing is something the player typed and can
     retype: 400, with the message the domain wrote. A set that will not take
-    another member is a collision with what is already there: 409, like every
-    other `InUse` in this app.
+    another member, or a file that is already attached, is a collision with what
+    is already there: 409, like every other `InUse` in this app.
     """
     try:
         yield
@@ -263,7 +274,11 @@ def _reporting() -> Iterator[None]:
         ) from None
     except media.UnknownMedia:
         raise HTTPException(status_code=404, detail="no media with that id") from None
-    except (media.SetTooBig, media.MembersDisagree) as refused:
+    except (
+        media.DuplicateMedia,
+        media.SetTooBig,
+        media.MembersDisagree,
+    ) as refused:
         raise HTTPException(status_code=409, detail=str(refused)) from None
     except (media.OutsideRoots, media.MissingFile, media.BadMedia) as wrong:
         raise HTTPException(status_code=400, detail=str(wrong)) from None
@@ -283,10 +298,36 @@ def _source(conn: sqlite3.Connection, source_id: int) -> MediaSource:
     return source
 
 
-def _list(conn: sqlite3.Connection, exercise_id: int) -> str:
-    """The attachment list, as it now reads: what every write answers with."""
-    return render(
-        "_media_list.html",
-        exercise=_exercise(conn, exercise_id),
-        cards=media.exercise_media(conn, exercise_id=exercise_id),
+def _list(
+    request: Request,
+    conn: sqlite3.Connection,
+    exercise_id: int,
+    *,
+    players: bool = False,
+    now: datetime | None = None,
+) -> str:
+    """The attachment list, as it now reads: what every write answers with.
+
+    Aimed at the running card (`HX-Target: now-media-list`) the list keeps the
+    card's id. A write that changed the source set — `players` — also swaps the
+    card's players out of band, so a new file gets its waveform and a removed
+    one stops; a label or a gain leaves them, and the audio playing in them,
+    where they are.
+    """
+    exercise = _exercise(conn, exercise_id)
+    cards = media.exercise_media(conn, exercise_id=exercise_id)
+    if request.headers.get("HX-Target") != NOW_MEDIA_LIST:
+        return render("_media_list.html", exercise=exercise, cards=cards)
+    html = render(
+        "_media_list.html", exercise=exercise, cards=cards, list_id=NOW_MEDIA_LIST
     )
+    if players and now is not None:
+        running = views.running_entry(conn, now=now)
+        if running is not None and running.exercise_id == exercise.id:
+            html += render(
+                "_media_players.html",
+                oob=True,
+                cards=cards,
+                running_exercise=exercise,
+            )
+    return html

@@ -1,0 +1,11 @@
+{# What plays: the card's players, or what to do when there are none. Its own
+   block so a write that changes the source set can swap it out of band — and
+   one that does not (a label, a gain) leaves it, and the audio running in it,
+   alone. #}
+<div id="media-players"{% if oob %} hx-swap-oob="true"{% endif %}>
+  {% if cards %}
+  {% include "_media.html" %}
+  {% elif running_exercise %}
+  <p class="muted">Nothing attached to this one yet — attach it below.</p>
+  {% endif %}
+</div>

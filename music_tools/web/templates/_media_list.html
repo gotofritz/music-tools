@@ -5,7 +5,8 @@
    members' names and mix state, because a track set is one thing to play and
    those are its channels. #}
 {% from "_cells.html" import editable %}
-<section id="media-list">
+{% set list_id = list_id | default("media-list") %}
+<section id="{{ list_id }}">
   {% if not cards %}
   <p>Nothing attached yet.</p>
   {% endif %}
@@ -17,13 +18,13 @@
 
     <form action="/media/{{ card.sources[0].id }}/move" method="post"
           hx-post="/media/{{ card.sources[0].id }}/move"
-          hx-target="#media-list" hx-swap="outerHTML">
+          hx-target="#{{ list_id }}" hx-swap="outerHTML">
       <input type="hidden" name="direction" value="up">
       <button type="submit" aria-label="move up">up</button>
     </form>
     <form action="/media/{{ card.sources[0].id }}/move" method="post"
           hx-post="/media/{{ card.sources[0].id }}/move"
-          hx-target="#media-list" hx-swap="outerHTML">
+          hx-target="#{{ list_id }}" hx-swap="outerHTML">
       <input type="hidden" name="direction" value="down">
       <button type="submit" aria-label="move down">down</button>
     </form>
@@ -31,7 +32,7 @@
     {% if card.group %}
     <form action="/groups/{{ card.group.id }}/label" method="post"
           hx-post="/groups/{{ card.group.id }}/label" hx-trigger="change, submit"
-          hx-target="#media-list" hx-swap="outerHTML">
+          hx-target="#{{ list_id }}" hx-swap="outerHTML">
       {% call editable(card.group.label or "", "stems, with click") %}<input type="text" class="cell" id="group-{{ card.group.id }}-label" name="label"
              value="{{ card.group.label or "" }}" size="14"
              aria-label="what this set is" placeholder="stems, with click">{% endcall %}
@@ -55,7 +56,7 @@
             {% if source.kind == "file" %}
             <form action="/media/{{ source.id }}" method="post"
                   hx-patch="/media/{{ source.id }}" hx-trigger="change, submit"
-                  hx-target="#media-list" hx-swap="outerHTML">
+                  hx-target="#{{ list_id }}" hx-swap="outerHTML">
               {% call editable(source.label or "", "bass, drums") %}<input type="text" class="cell" id="media-{{ source.id }}-label" name="label" value="{{ source.label or "" }}" size="10"
                      aria-label="track name" placeholder="bass, drums">{% endcall %}
               gain {% call editable(source.gain, "gain") %}<input type="text" class="cell" id="media-{{ source.id }}-gain" name="gain" value="{{ source.gain }}" size="4"
@@ -73,7 +74,7 @@
           <td>
             <form action="/media/{{ source.id }}/delete" method="post"
                   hx-delete="/media/{{ source.id }}"
-                  hx-target="#media-list" hx-swap="outerHTML"
+                  hx-target="#{{ list_id }}" hx-swap="outerHTML"
                   hx-confirm="Remove this attachment? The file itself stays where it is.">
               <button type="submit" class="remove">remove</button>
             </form>
@@ -87,7 +88,7 @@
     {# Adding a file to an existing group is the only way to make a track set. #}
     <form action="/exercises/{{ exercise.id }}/media" method="post"
           hx-post="/exercises/{{ exercise.id }}/media"
-          hx-target="#media-list" hx-swap="outerHTML">
+          hx-target="#{{ list_id }}" hx-swap="outerHTML">
       <input type="hidden" name="kind" value="file">
       <input type="hidden" name="group_id" value="{{ card.group.id }}">
       <input type="text" name="path" size="40" required

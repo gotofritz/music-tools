@@ -6,12 +6,5 @@
 {% include "_day_log.html" %}
 {% include "_day_totals.html" %}
 
-<section id="history">
-  <h2>Earlier</h2>
-  {% if history %}
-  {% include "_history_page.html" %}
-  {% else %}
-  <p>Nothing logged before today.</p>
-  {% endif %}
-</section>
+{% include "_history.html" %}
 {% endblock %}

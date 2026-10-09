@@ -72,3 +72,77 @@ document.addEventListener("htmx:afterSettle", () => {
     openCell(cell);
   }
 });
+
+// Earlier days are <details>, collapsed on every load. One button flips them
+// all, and its label says what the next click does. Days that arrive by "load
+// more" are put in whatever mode the button is in now. Nothing is remembered.
+function daysToggle() {
+  return document.getElementById("toggle-days");
+}
+
+function setDays(open) {
+  document
+    .querySelectorAll("#history details.day")
+    .forEach((day) => {
+      day.dataset.seen = "";
+      day.open = open;
+    });
+}
+
+document.addEventListener("click", (event) => {
+  const button = event.target.closest && event.target.closest("#toggle-days");
+  if (!button) {
+    return;
+  }
+  const open = button.dataset.state === "collapsed";
+  button.dataset.state = open ? "expanded" : "collapsed";
+  button.textContent = open ? "collapse all" : "expand all";
+  setDays(open);
+});
+
+// The swap that brings a page of days replaces the button it came from, so
+// the new days are found by not having been seen yet rather than by target.
+// Only expanded mode has anything to do: the server draws them collapsed.
+document.addEventListener("htmx:afterSwap", () => {
+  const button = daysToggle();
+  if (!button) {
+    return;
+  }
+  document
+    .querySelectorAll("#history details.day:not([data-seen])")
+    .forEach((day) => {
+      day.dataset.seen = "";
+      if (button.dataset.state === "expanded") {
+        day.open = true;
+      }
+    });
+});
+
+// A row of the picker is a start. The button in its name cell is the real
+// control (keyboard, and no JavaScript); a click anywhere else on the row
+// presses it.
+document.addEventListener("click", (event) => {
+  const row = event.target.closest && event.target.closest("tr.pick-row");
+  if (!row || event.target.closest("button")) {
+    return;
+  }
+  row.querySelector("button.row-start").click();
+});
+
+// The bars are a graph: the same length means the same time on every row. The
+// server draws them against the longest group on the page it rendered; when a
+// page of days is added or a day is redrawn after an edit, the longest on the
+// whole of what is shown may have changed, so every bar is scaled again.
+function rescaleBars() {
+  const cells = [...document.querySelectorAll("#history .group-cell")];
+  const longest = Math.max(0, ...cells.map((cell) => Number(cell.dataset.seconds)));
+  cells.forEach((cell) => {
+    const bar = cell.querySelector(".bar");
+    if (bar) {
+      bar.style.width = longest ? `${(100 * Number(cell.dataset.seconds)) / longest}%` : "0%";
+    }
+  });
+}
+
+document.addEventListener("htmx:afterSettle", rescaleBars);
+document.addEventListener("DOMContentLoaded", rescaleBars);

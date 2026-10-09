@@ -6,12 +6,12 @@ and the fragment it re-renders after a write cannot disagree about it.
 """
 
 import sqlite3
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from music_tools.db import repository as repo
 from music_tools.domain import media
-from music_tools.domain.models import Exercise, Module, PracticeEntry
+from music_tools.domain.models import DaySummary, Exercise, Module, PracticeEntry
 from music_tools.domain.session import (
     current_entry,
     day_summary,
@@ -21,7 +21,7 @@ from music_tools.domain.session import (
 
 #: How many finished days a page of history holds. Small on purpose: the
 #: button is there for the rare look backwards, not for scrolling a year.
-PAGE_OF_DAYS = 5
+PAGE_OF_DAYS = 20
 
 
 def running_entry(conn: sqlite3.Connection, *, now: datetime) -> PracticeEntry | None:
@@ -75,30 +75,54 @@ def chrome(conn: sqlite3.Connection, *, now: datetime) -> dict[str, Any]:
     }
 
 
+def day_ended(conn: sqlite3.Connection, *, now: datetime) -> bool:
+    """Whether the player has said they are done for today."""
+    record = repo.get_day(conn, practice_day_for(now))
+    return record is not None and record.ended_at is not None
+
+
+def is_live_day(conn: sqlite3.Connection, *, day: date, now: datetime) -> bool:
+    """Today's log as it is being practised: today, and not ended by hand."""
+    return day == practice_day_for(now) and not day_ended(conn, now=now)
+
+
 def today_context(conn: sqlite3.Connection, *, now: datetime) -> dict[str, Any]:
-    """Today's block and totals, and the days behind it — the whole of `GET /`."""
+    """Today's block and totals, and the days behind it — the whole of `GET /`.
+
+    A day that has been ended is no longer today's: it is the first of the days
+    behind it, and today's log and totals start blank until something is
+    started on it again.
+    """
     today = practice_day_for(now)
+    ended = day_ended(conn, now=now)
+    summary = DaySummary(day=today) if ended else day_summary(conn, day=today, now=now)
     return {
         **chrome(conn, now=now),
         "day": today,
-        "summary": day_summary(conn, day=today, now=now),
+        "summary": summary,
+        "day_ended": ended,
+        "day_has_entries": bool(summary.entries),
         "live": now,
         "modules_by_id": modules_by_id(conn),
-        **history_context(conn, now=now, before=today),
+        **history_context(
+            conn, now=now, before=today + timedelta(days=1) if ended else today
+        ),
     }
 
 
 def day_context(
     conn: sqlite3.Connection, *, now: datetime, day: date
 ) -> dict[str, Any]:
-    """One day on its own — today's log, or a finished block."""
-    is_today = day == practice_day_for(now)
+    """One day on its own — today's log, or a finished block, shown open."""
+    is_today = is_live_day(conn, day=day, now=now)
     return {
         **chrome(conn, now=now),
         "day": day,
+        "open": True,
         "is_today": is_today,
         "live": now if is_today else None,
         "summary": day_summary(conn, day=day, now=now),
+        "group_order": group_order(conn),
     }
 
 
@@ -112,8 +136,13 @@ def history_context(
     "load more" button needs.
     """
     days = recent_days(conn, before=before, limit=PAGE_OF_DAYS + 1, now=now)
+    shown = days[:PAGE_OF_DAYS]
     return {
-        "history": days[:PAGE_OF_DAYS],
+        "group_order": group_order(conn),
+        "bar_scale": max(
+            (total.seconds for day in shown for total in day.groups), default=0
+        ),
+        "history": shown,
         "more_before": days[PAGE_OF_DAYS - 1].day if len(days) > PAGE_OF_DAYS else None,
     }
 
@@ -123,3 +152,33 @@ def modules_by_id(conn: sqlite3.Connection) -> dict[int, Module]:
     return {
         module.id: module for module in repo.list_modules(conn, include_archived=True)
     }
+
+
+def picker_context(
+    conn: sqlite3.Connection, *, now: datetime, active: Module | None = None
+) -> dict[str, Any]:
+    """The module buttons, and — for the open one — its live rows in queue order.
+
+    Overdue first and then by due date is what `exercises_due` already says, so
+    the list reads in the order the tab does.
+    """
+    return {
+        "today": practice_day_for(now),
+        "picker_modules": repo.list_modules(conn),
+        "active": active,
+        "picker_rows": (
+            repo.exercises_due(conn, module_id=active.id) if active else []
+        ),
+    }
+
+
+def group_order(conn: sqlite3.Connection) -> list[str]:
+    """The log groups of the live modules, once each, in tab order.
+
+    What a day's heading lists a cell for, so a group with no time that day
+    still has its place — and its colour — in every day's row.
+    """
+    seen: dict[str, None] = {}
+    for module in repo.list_modules(conn):
+        seen.setdefault(module.log_group)
+    return list(seen)

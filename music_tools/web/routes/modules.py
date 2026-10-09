@@ -35,6 +35,9 @@ router = APIRouter()
 #: What an edit may change. Anything else in the form is ignored.
 EDITABLE = ("name", "speed", "target_bpm", "style", "notes")
 
+#: The element id (as HTMX sends it in `HX-Target`) of the running card's cells.
+NOW_EXERCISE = "now-exercise"
+
 
 @router.get("/modules/{slug}", response_class=HTMLResponse)
 def module_page(
@@ -94,6 +97,9 @@ async def edit_exercise(
 ) -> Response:
     """Edit a row in place, and hand back the row as it now reads.
 
+    Aimed at the running card (`HX-Target: now-exercise`) it hands back the
+    card's cells instead.
+
     The form is read raw: a declared `Form` field cannot tell a box that was
     left empty from one that was not sent, and a box left empty is how a value
     is cleared. A field that is not in the form is left alone.
@@ -110,6 +116,12 @@ async def edit_exercise(
         ) from None
     except catalogue.InUse as clash:
         raise HTTPException(status_code=409, detail=str(clash)) from None
+    if request.headers.get("HX-Target") == NOW_EXERCISE:
+        # Aimed at the running card: only its cells come back, so the player
+        # beside them — and the audio playing in it — is not rebuilt.
+        return fragment_or_redirect(
+            request, render("_now_exercise.html", exercise=exercise)
+        )
     return fragment_or_redirect(request, _row(conn, exercise, now=now))
 
 

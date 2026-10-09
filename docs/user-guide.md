@@ -126,15 +126,28 @@ starts it without opening a window.
 
 **The first page is today.**
 
-- **The card at the top of the log** is what you are practising right now: what
-  it is, how long you have been on it, the material attached to it — the audio,
-  the video, the YouTube player, the score, your own notes — and the two
-  buttons that end it, **done** and **discard**.
+- **The card at the top of the log** is what you are practising right now:
+  what it is, how long you have been on it, its name, speed, target BPM and
+  notes — editable where they are — and its material: the audio, the video, the
+  YouTube player, the score, your own notes. Its media is editable in the card
+  too (names, order, remove, mix, add to a set, and **attach something**), so a
+  whole session never leaves this page. Under it are the five **stop** buttons
+  — `normal`, `short`, `long`, `rotate`, `hold` — and **discard**. Typing in
+  the card never restarts the player.
+- **START** opens no line. It shows one button per module; click one and its
+  rows appear in a panel under the buttons, due ones first. Click a row to
+  start it; click the module again, or **close**, to hide the list. Any stop
+  (and discard) puts you back on the module buttons, so the next tune is one
+  click away.
 - **Log** is today, line by line, with the entry that is running now counting
   up. **Totals** underneath is the subtotal per log group and the total for the
   day — the same numbers as `practice log`.
-- **Earlier** is the five days before it, newest first, each with what you
-  played, its subtotals and its total. **load more** adds the next five. There
+- **Earlier** is the twenty days before it, newest first. Each is a date and total with a row of equal cells under it, one per log group — empty ones too, so
+  the row lines up from day to day. A coloured bar under each cell is its time on one scale shared by every day on the
+  page — 60 minutes is three times as long as 20, on any row — and a group keeps its colour. Click the heading to open the day;
+  **expand all** / **collapse all** at the top flips them all, and **load more**
+  adds the next twenty in whatever mode the button is in. Every load starts
+  collapsed. There
   is no date picker and no search: it is a log, and you read it backwards.
 - **Every line is editable where it is.** Click a time, the name, the notes,
   the speed or the group — it turns into a box — change it, and move away — Tab, Enter or a click
@@ -152,13 +165,16 @@ starts it without opening a window.
 - The line that is **running** gets no boxes: that one is
   what you are playing, and **done** and **discard** on the card are what move
   it. It becomes editable once it is closed, like every other line.
-- With nothing running, the card holds a **START** button. It opens a line
-  called `Practice` from now, for when you want the clock going before you have
-  decided what to play; **done** closes it, and **edit** names it afterwards.
-  There is no clock to stop beyond that, and when you are finished for the
-  evening you close the window.
+- With nothing running, the card holds a **START** button (see above), and,
+  once the day has something in it, **END**. END is "done for the day": its
+  log, totals and all, moves to the top of **Earlier**, and today starts blank.
+  Nothing is deleted. Click **START** again — or start anything, here or from
+  the terminal — and the day is today's again, log and totals back. END is
+  refused while something is running: stop or discard that first.
 
-**Each module has its own page**, reached from the links at the top: the whole
+**Each module has its own page**, reached from the links at the top. It is
+where the module is *set up* — adding, editing, moving and archiving rows — but
+start and stop stay, because they are still useful. The whole
 queue, most overdue first, and every field editable in place. The row being
 practised moves to the top and is highlighted green. **start** and
 **stop** are the buttons at the end of every row — the same two things as
@@ -174,7 +190,7 @@ What a click means depends on what is running:
 | nothing | **start** here | this one starts |
 | this row | **start** here | nothing — the line keeps the time it began at |
 | another row | **stop** here | nothing |
-| a **START** line, no row | **stop** here | the line becomes this row's — it keeps its start time — and closes |
+| a line with no row (from `practice start --ad-hoc`) | **stop** here | the line becomes this row's — it keeps its start time — and closes |
 | nothing | **stop** here | the line is written backwards, from the last line's end to now |
 | this row | **stop** here | the line closes and the schedule moves |
 
@@ -256,7 +272,9 @@ with a message rather than quietly read.
 1. On the module page, press **media** beside the row.
 2. Copy the file's **absolute path** — the one starting with `/`. On a Mac,
    select it in Finder and press ⌥⌘C; on Linux use your file manager's "Copy
-   path", or `realpath file.wav` in a terminal.
+   path", or `realpath file.wav` in a terminal. The quotes Finder puts around it
+   are fine; they are dropped. A file already attached to this row is refused
+   (other rows may use the same file).
 3. Paste it into the first box on the media page and press **attach audio or
    video**. A path outside the allowed folders, or to a file that is not there,
    is refused with a message.
@@ -274,6 +292,8 @@ sit underneath, then:
   the row in the notation the row already uses: `66%` stays a percentage, `88`
   stays a BPM. With no target BPM on the row the slider is greyed out; fill the
   target in first.
+- **volume** — a slider from silent to full, for a single file. It is the
+  player's own: not stored, and every load starts at full.
 - **pitch** — up or down by up to 12 semitones, at the same speed. The first
   time you pick one the app renders it, which takes a few seconds; the result is
   kept and reused. Playing resumes where it was.

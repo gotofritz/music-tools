@@ -1,0 +1,43 @@
+{# The four ways to attach something to an exercise. `list_id` is the media
+   list a write swaps: the media page's own, or the running card's. #}
+{% set list_id = list_id | default("media-list") %}
+<form action="/exercises/{{ exercise.id }}/media" method="post"
+      hx-post="/exercises/{{ exercise.id }}/media"
+      hx-target="#{{ list_id }}" hx-swap="outerHTML">
+  <input type="hidden" name="kind" value="file">
+  <input type="text" name="path" size="40" required aria-label="path"
+         placeholder="/absolute/path/to/loop.wav">
+  <input type="text" name="label" size="12" aria-label="label" placeholder="label">
+  <button type="submit">attach audio or video</button>
+</form>
+
+<form action="/exercises/{{ exercise.id }}/media" method="post"
+      hx-post="/exercises/{{ exercise.id }}/media"
+      hx-target="#{{ list_id }}" hx-swap="outerHTML">
+  <input type="hidden" name="kind" value="youtube">
+  <input type="url" name="url" size="40" required aria-label="YouTube URL"
+         placeholder="https://www.youtube.com/watch?v=...">
+  <input type="text" name="label" size="12" aria-label="label" placeholder="label">
+  <button type="submit">attach a YouTube URL</button>
+</form>
+
+<form action="/exercises/{{ exercise.id }}/media" method="post"
+      hx-post="/exercises/{{ exercise.id }}/media"
+      hx-target="#{{ list_id }}" hx-swap="outerHTML">
+  <input type="hidden" name="kind" value="score">
+  <input type="text" name="path" size="40" required aria-label="score path"
+         placeholder="/absolute/path/to/tune.mscz or tune.pdf">
+  <input type="text" name="label" size="12" aria-label="label" placeholder="label">
+  <button type="submit">attach a score</button>
+  <span class="muted">MuseScore, PDF — whatever opens it</span>
+</form>
+
+<form action="/exercises/{{ exercise.id }}/media" method="post"
+      hx-post="/exercises/{{ exercise.id }}/media"
+      hx-target="#{{ list_id }}" hx-swap="outerHTML">
+  <input type="hidden" name="kind" value="text">
+  <textarea name="body" rows="3" cols="40" required aria-label="text"
+            placeholder="fingering, a chord chart, a reminder"></textarea>
+  <input type="text" name="label" size="12" aria-label="label" placeholder="label">
+  <button type="submit">attach text</button>
+</form>

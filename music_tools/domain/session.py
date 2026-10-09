@@ -83,6 +83,33 @@ def start_day(
         return _start_day(conn, now=now, notes=notes)
 
 
+def end_day(conn: sqlite3.Connection, *, now: datetime) -> PracticeDay | None:
+    """Done for the day: its log moves into the history, and today starts blank.
+
+    Nothing is deleted or rewritten — the day is only stamped, and starting
+    anything on it clears the stamp again. Something still running has to be
+    finished or discarded first: ending the day would otherwise leave a line
+    with no end in the history. A day with nothing logged has nothing to end,
+    so it is `None` and no day is opened.
+    """
+    with transaction(conn):
+        day = repo.get_day(conn, practice_day_for(now))
+        if day is None or not repo.entries_for_day(conn, day.id):
+            return None
+        if repo.running_entry(conn, day_id=day.id) is not None:
+            raise EntryRunning(day.id)
+        return repo.set_day_ended(conn, day.id, now)
+
+
+def reopen_day(conn: sqlite3.Connection, *, now: datetime) -> PracticeDay | None:
+    """Back to practising today: clear the end, and the log is today's again."""
+    with transaction(conn):
+        day = repo.get_day(conn, practice_day_for(now))
+        if day is None:
+            return None
+        return _reopened(conn, day)
+
+
 def current_entry(conn: sqlite3.Connection, *, now: datetime) -> PracticeEntry | None:
     """What is being practised right now, if anything.
 
@@ -368,6 +395,7 @@ def _backfill(
         last_end = _last_end(conn, day_id=day.id)
         if last_end is None or last_end >= now:
             return None
+        _reopened(conn, day)  # a line written to the day is practice again
 
         module = repo.get_module(conn, exercise.module_id)
         tempo = parse_tempo(exercise.speed or "", target_bpm=exercise.target_bpm)
@@ -567,11 +595,19 @@ def _start_day(
     """The body of `start_day`, for callers already inside a transaction."""
     today = practice_day_for(now)
     day = repo.get_day(conn, today) or repo.create_day(conn, day=today, notes=notes)
+    day = _reopened(conn, day)
     for stale in repo.running_entries_before(conn, day_id=day.id):
         # The dangling FROM the sheet left behind: time that was never
         # attributed, and cannot be closed at an invented moment.
         repo.delete_entry(conn, stale.id)
     return day
+
+
+def _reopened(conn: sqlite3.Connection, day: PracticeDay) -> PracticeDay:
+    """The day, with any end cleared: whatever wrote to it is practising again."""
+    if day.ended_at is None:
+        return day
+    return repo.set_day_ended(conn, day.id, None)
 
 
 def _running_for(conn: sqlite3.Connection, *, now: datetime) -> PracticeEntry | None:

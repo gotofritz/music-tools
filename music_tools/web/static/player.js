@@ -25,6 +25,7 @@
     var slider = root.querySelector(".speed input");
     var readout = root.querySelector(".speed output");
     var pitch = root.querySelector(".pitch select");
+    var volume = root.querySelector(".volume input");
     var audioUrl = root.dataset.audioUrl;
     var speedUrl = root.dataset.speedUrl;
 
@@ -42,6 +43,12 @@
     audio.webkitPreservesPitch = true;
     slider.value = root.dataset.ratio;
     applyRate();
+
+    // Volume is the element's own, not the exercise's: it is not stored, and
+    // each load starts at full.
+    volume.addEventListener("input", function () {
+      audio.volume = parseFloat(volume.value);
+    });
 
     function say(message) {
       problem.textContent = message || "";

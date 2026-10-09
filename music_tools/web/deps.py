@@ -14,7 +14,7 @@ import sqlite3
 from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 from urllib.parse import urlsplit
 
 from fastapi import Request
@@ -23,7 +23,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from music_tools.db.connection import open_db
 from music_tools.domain.media import youtube_embed
-from music_tools.domain.models import Exercise, PracticeEntry
+from music_tools.domain.models import DaySummary, Exercise, PracticeEntry
 from music_tools.domain.session import (
     entry_duration,
     format_due,
@@ -79,6 +79,38 @@ def file_name(path: str | None) -> str:
     return Path(path).name if path else ""
 
 
+class GroupCell(NamedTuple):
+    """One log group on a day's heading: its time, bar and palette slot."""
+
+    name: str
+    seconds: int
+    percent: float
+    colour: int
+
+
+def group_cells(
+    summary: DaySummary, order: list[str], scale: int = 0
+) -> list[GroupCell]:
+    """Every log group as a cell of the day, whether or not it has time.
+
+    `order` is the groups the live modules define, in tab order, and gives each
+    its palette slot, so a group keeps its colour from day to day. A group the
+    day itself used that no live module has any more (an archived module's, a
+    renamed one) follows them. The bar is the group's share of the day's total.
+    """
+    seconds = {total.log_group: total.seconds for total in summary.groups}
+    names = order + [name for name in seconds if name not in order]
+    return [
+        GroupCell(
+            name=name,
+            seconds=seconds.get(name, 0),
+            percent=100 * seconds.get(name, 0) / scale if scale else 0,
+            colour=index,
+        )
+        for index, name in enumerate(names)
+    ]
+
+
 def _environment() -> Environment:
     env = Environment(
         loader=FileSystemLoader(TEMPLATES),
@@ -101,6 +133,7 @@ def _environment() -> Environment:
         "exercise_ratio": exercise_ratio,
         "duration_text": duration_text,
         "file_name": file_name,
+        "group_cells": group_cells,
         "youtube_embed": youtube_embed,
     }
     env.globals.update(helpers)

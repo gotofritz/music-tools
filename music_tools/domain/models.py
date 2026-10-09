@@ -92,6 +92,8 @@ class PracticeDay(BaseModel):
     id: int
     day: date
     notes: str | None = None
+    #: When the player said they were done for the day; null while it is open.
+    ended_at: datetime | None = None
 
 
 class PracticeEntry(BaseModel):
