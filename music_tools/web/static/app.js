@@ -72,3 +72,48 @@ document.addEventListener("htmx:afterSettle", () => {
     openCell(cell);
   }
 });
+
+// Earlier days are <details>, collapsed on every load. One button flips them
+// all, and its label says what the next click does. Days that arrive by "load
+// more" are put in whatever mode the button is in now. Nothing is remembered.
+function daysToggle() {
+  return document.getElementById("toggle-days");
+}
+
+function setDays(open) {
+  document
+    .querySelectorAll("#history details.day")
+    .forEach((day) => {
+      day.dataset.seen = "";
+      day.open = open;
+    });
+}
+
+document.addEventListener("click", (event) => {
+  const button = event.target.closest && event.target.closest("#toggle-days");
+  if (!button) {
+    return;
+  }
+  const open = button.dataset.state === "collapsed";
+  button.dataset.state = open ? "expanded" : "collapsed";
+  button.textContent = open ? "collapse all" : "expand all";
+  setDays(open);
+});
+
+// The swap that brings a page of days replaces the button it came from, so
+// the new days are found by not having been seen yet rather than by target.
+// Only expanded mode has anything to do: the server draws them collapsed.
+document.addEventListener("htmx:afterSwap", () => {
+  const button = daysToggle();
+  if (!button) {
+    return;
+  }
+  document
+    .querySelectorAll("#history details.day:not([data-seen])")
+    .forEach((day) => {
+      day.dataset.seen = "";
+      if (button.dataset.state === "expanded") {
+        day.open = true;
+      }
+    });
+});

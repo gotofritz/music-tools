@@ -9,6 +9,7 @@
 <section id="history">
   <h2>Earlier</h2>
   {% if history %}
+  <button type="button" id="toggle-days" data-state="collapsed">expand all</button>
   {% include "_history_page.html" %}
   {% else %}
   <p>Nothing logged before today.</p>

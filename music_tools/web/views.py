@@ -91,11 +91,12 @@ def today_context(conn: sqlite3.Connection, *, now: datetime) -> dict[str, Any]:
 def day_context(
     conn: sqlite3.Connection, *, now: datetime, day: date
 ) -> dict[str, Any]:
-    """One day on its own — today's log, or a finished block."""
+    """One day on its own — today's log, or a finished block, shown open."""
     is_today = day == practice_day_for(now)
     return {
         **chrome(conn, now=now),
         "day": day,
+        "open": True,
         "is_today": is_today,
         "live": now if is_today else None,
         "summary": day_summary(conn, day=day, now=now),

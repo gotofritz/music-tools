@@ -673,6 +673,68 @@ def test_a_day_with_no_history_behind_it_offers_nothing_to_load(client):
     assert "load more" not in client.get("/").text
 
 
+# --- earlier days are collapsed (Phase 10, step 1) ---------------------------------
+
+
+def _details(page: str) -> list[str]:
+    return re.findall(r"<details\b[^>]*>", page)
+
+
+def test_every_earlier_day_is_a_collapsed_details_with_a_summary(client, earlier_days):
+    page = client.get("/").text
+
+    tags = _details(page)
+    assert len(tags) == 5
+    assert all(" open" not in tag for tag in tags)
+    assert page.count("<summary") == 5
+    summary = re.search(r"<summary.*?</summary>", page, re.S)
+    assert summary is not None
+    assert "2026-06-06" in summary.group(0)
+    assert "00:15" in summary.group(0)
+    assert "TECHNIQUE" in summary.group(0)
+
+
+def test_todays_log_is_not_collapsible(client, sample_block):
+    page = client.get("/").text
+    assert "00:19" in page
+    log = page[page.index('id="day-log"') : page.index('id="history"')]
+
+    assert "<details" not in log
+
+
+def test_one_button_flips_collapse_all_and_expand_all(client, earlier_days):
+    page = client.get("/").text
+
+    assert page.count('id="toggle-days"') == 1
+    assert "expand all" in page  # every load starts collapsed
+
+
+def test_no_toggle_when_there_is_no_history(client):
+    assert "toggle-days" not in client.get("/").text
+
+
+def test_load_more_days_arrive_as_collapsed_details(client, earlier_days):
+    page = client.get("/days?before=2026-06-02", headers=hx()).text
+
+    assert len(_details(page)) == 1
+    assert " open" not in _details(page)[0]
+
+
+def test_a_day_page_is_open_and_its_edits_redraw_it_open(
+    client, conn, earlier_days
+):
+    page = client.get("/days/2026-06-06").text
+    assert _details(page)
+    assert all(" open" in tag for tag in _details(page))
+
+    entry = repo.entries_for_day(conn, repo.get_day(conn, date(2026, 6, 6)).id)[0]
+    amended = client.patch(
+        f"/entries/{entry.id}", data={"notes": "x"}, headers=hx()
+    ).text
+    assert _details(amended)
+    assert all(" open" in tag for tag in _details(amended))
+
+
 # --- correcting a line of the log, in place -------------------------------------------
 
 
