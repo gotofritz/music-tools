@@ -489,7 +489,10 @@ details.day > summary::-webkit-details-marker {
 
 .group-cell {
   position: relative;
-  display: block;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
   padding: 0.2rem 0.4rem 0.45rem;
   border-bottom: 6px solid transparent;
   background: #f4f4f4;
@@ -497,11 +500,16 @@ details.day > summary::-webkit-details-marker {
 }
 
 .group-cell .group-name {
-  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: #555;
+}
+
+.group-cell .group-time {
+  flex: none;
 }
 
 .group-cell .bar {
