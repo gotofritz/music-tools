@@ -100,6 +100,7 @@ def day_context(
         "is_today": is_today,
         "live": now if is_today else None,
         "summary": day_summary(conn, day=day, now=now),
+        "group_order": group_order(conn),
     }
 
 
@@ -114,6 +115,7 @@ def history_context(
     """
     days = recent_days(conn, before=before, limit=PAGE_OF_DAYS + 1, now=now)
     return {
+        "group_order": group_order(conn),
         "history": days[:PAGE_OF_DAYS],
         "more_before": days[PAGE_OF_DAYS - 1].day if len(days) > PAGE_OF_DAYS else None,
     }
@@ -142,3 +144,15 @@ def picker_context(
             repo.exercises_due(conn, module_id=active.id) if active else []
         ),
     }
+
+
+def group_order(conn: sqlite3.Connection) -> list[str]:
+    """The log groups of the live modules, once each, in tab order.
+
+    What a day's heading lists a cell for, so a group with no time that day
+    still has its place — and its colour — in every day's row.
+    """
+    seen: dict[str, None] = {}
+    for module in repo.list_modules(conn):
+        seen.setdefault(module.log_group)
+    return list(seen)

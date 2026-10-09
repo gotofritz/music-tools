@@ -450,3 +450,64 @@ details.day > summary {
 details.attach {
   margin-top: 0.4rem;
 }
+
+/* A day's heading: the date and total, then one equal cell per log group. The
+   bar under each is its share of the day, in the colour its group always has.
+   The browser's disclosure triangle is gone; the heading is still the toggle. */
+:root {
+  --g0: #4e79a7;
+  --g1: #f28e2b;
+  --g2: #59a14f;
+  --g3: #e15759;
+  --g4: #b07aa1;
+  --g5: #76b7b2;
+  --g6: #edc948;
+  --g7: #9c755f;
+  --g8: #ff9da7;
+  --g9: #8c8c8c;
+}
+
+details.day > summary {
+  list-style: none;
+}
+
+details.day > summary::-webkit-details-marker {
+  display: none;
+}
+
+.day-head {
+  display: block;
+  font-weight: bold;
+  margin-bottom: 0.25rem;
+}
+
+.group-cells {
+  display: grid;
+  grid-template-columns: repeat(var(--n, 1), minmax(0, 1fr));
+  gap: 0.4rem;
+}
+
+.group-cell {
+  position: relative;
+  display: block;
+  padding: 0.2rem 0.4rem 0.45rem;
+  border-bottom: 6px solid transparent;
+  background: #f4f4f4;
+  font-size: 0.85rem;
+}
+
+.group-cell .group-name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #555;
+}
+
+.group-cell .bar {
+  position: absolute;
+  left: 0;
+  bottom: -6px;
+  height: 6px;
+  background: var(--c);
+}

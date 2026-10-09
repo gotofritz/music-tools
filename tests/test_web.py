@@ -1140,6 +1140,105 @@ def test_every_page_links_the_svg_favicon_and_the_app_serves_it(client, songs):
     assert icon.text.lstrip().startswith("<svg")
 
 
+# --- day summaries as equal cells with a duration bar -------------------------------
+
+
+def _cells(page: str, day: str) -> list[str]:
+    block = page[page.index(f'id="day-{day}"') :]
+    block = block[: block.index("</summary>")]
+    return re.findall(r'<span class="group-cell".*?</span>\s*</span>', block, re.S)
+
+
+def _first(pattern: str, text: str) -> str:
+    found = re.search(pattern, text)
+    assert found is not None, (pattern, text)
+    return found.group(1)
+
+
+def test_every_log_group_is_a_cell_even_with_no_time_that_day(
+    client, slap, songs, earlier_days
+):
+    cells = _cells(client.get("/").text, "2026-06-06")
+
+    assert len(cells) == 2  # TECHNIQUE had time, REPERTOIRE did not
+    assert "TECHNIQUE" in cells[0] and "00:15" in cells[0]
+    assert "REPERTOIRE" in cells[1] and "00:00" in cells[1]
+
+
+def test_the_cells_follow_module_order_and_share_a_group_once(
+    client, conn, slap, songs, earlier_days
+):
+    repo.create_module(conn, name="ETUDES", log_group="TECHNIQUE")  # same group
+
+    cells = _cells(client.get("/").text, "2026-06-06")
+
+    assert [("TECHNIQUE" in c, "REPERTOIRE" in c) for c in cells] == [
+        (True, False),
+        (False, True),
+    ]
+
+
+def test_a_group_the_day_used_but_no_module_has_is_a_cell_too(
+    client, conn, slap, earlier_days
+):
+    day = repo.get_day(conn, date(2026, 6, 6))
+    assert day is not None
+    entry = repo.create_entry(conn, day_id=day.id, started_at=datetime(2026, 6, 6, 21))
+    repo.close_entry(
+        conn,
+        entry.id,
+        ended_at=datetime(2026, 6, 6, 21, 5),
+        description="jam",
+        log_group="OLD GROUP",
+    )
+
+    cells = _cells(client.get("/").text, "2026-06-06")
+
+    assert any("OLD GROUP" in c and "00:05" in c for c in cells)
+
+
+def test_the_bar_is_the_groups_share_of_the_day_and_each_group_has_a_colour(
+    client, conn, slap, songs, earlier_days
+):
+    day = repo.get_day(conn, date(2026, 6, 6))
+    assert day is not None
+    entry = repo.create_entry(conn, day_id=day.id, started_at=datetime(2026, 6, 6, 21))
+    repo.close_entry(
+        conn,
+        entry.id,
+        ended_at=datetime(2026, 6, 6, 21, 15),
+        description="le freak",
+        log_group="REPERTOIRE",
+    )
+
+    cells = _cells(client.get("/").text, "2026-06-06")
+
+    widths = [_first(r"width: ([\d.]+)%", c) for c in cells]
+    assert [float(w) for w in widths] == [50.0, 50.0]
+    colours = [_first(r"--c: ([^;\"]+)", c) for c in cells]
+    assert len(set(colours)) == 2
+
+
+def test_a_group_with_no_time_has_an_empty_bar(client, slap, songs, earlier_days):
+    cells = _cells(client.get("/").text, "2026-06-06")
+
+    assert "width: 0%" in cells[1]
+
+
+def test_the_load_more_days_carry_the_same_cells(client, slap, songs, earlier_days):
+    page = client.get("/days?before=2026-06-02", headers=hx()).text
+
+    assert page.count('class="group-cell"') == 2
+
+
+def test_the_summary_has_no_disclosure_triangle(client):
+    css = client.get("/static/app.css").text
+
+    assert "details.day > summary" in css
+    assert "list-style: none" in css
+    assert "::-webkit-details-marker" in css
+
+
 # --- correcting a line of the log, in place -------------------------------------------
 
 
