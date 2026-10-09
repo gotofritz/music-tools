@@ -1122,6 +1122,23 @@ def test_a_module_page_says_where_a_session_is_run(client, songs, le_freak):
     assert "start" in page and "stop" in page  # still useful, still there
 
 
+# --- the site icon -------------------------------------------------------------------
+
+
+def test_every_page_links_the_svg_favicon_and_the_app_serves_it(client, songs):
+    for url in ("/", "/modules/songs"):
+        assert (
+            '<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">'
+            in client.get(url).text
+        )
+
+    icon = client.get("/static/favicon.svg")
+
+    assert icon.status_code == 200
+    assert icon.headers["content-type"].startswith("image/svg+xml")
+    assert icon.text.lstrip().startswith("<svg")
+
+
 # --- correcting a line of the log, in place -------------------------------------------
 
 
