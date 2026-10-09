@@ -1615,6 +1615,10 @@ def test_a_single_track_player_has_a_volume_slider(client, conn, le_freak, loop_
 
 
 def test_a_track_set_gets_no_volume_slider_of_its_own(client, conn, le_freak, loop_wav):
+    from pydub import AudioSegment
+
+    drums = loop_wav.with_name("drums.wav")
+    AudioSegment.silent(duration=4000).export(drums, format="wav")
     first = media.attach(
         conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
     )
@@ -1622,7 +1626,7 @@ def test_a_track_set_gets_no_volume_slider_of_its_own(client, conn, le_freak, lo
         conn,
         exercise_id=le_freak.id,
         kind="file",
-        path=str(loop_wav),
+        path=str(drums),
         group_id=first.group_id,
         now=NOW,
     )
@@ -1973,6 +1977,19 @@ def test_a_file_is_attached_from_the_page(client, conn, le_freak, loop_wav):
     cards = media.exercise_media(conn, exercise_id=le_freak.id)
     assert [card.kind for card in cards] == ["file"]
     assert cards[0].sources[0].label == "the loop"
+
+
+def test_attaching_the_same_file_twice_is_a_409_with_a_message(
+    client, conn, le_freak, loop_wav
+):
+    data = {"kind": "file", "path": str(loop_wav)}
+    client.post(f"/exercises/{le_freak.id}/media", data=data, headers=hx())
+
+    response = client.post(f"/exercises/{le_freak.id}/media", data=data, headers=hx())
+
+    assert response.status_code == 409
+    assert "loop.wav" in response.text
+    assert len(media.exercise_media(conn, exercise_id=le_freak.id)) == 1
 
 
 def test_a_youtube_url_is_attached_from_the_page(client, conn, le_freak):

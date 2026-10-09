@@ -355,6 +355,9 @@ entry running right now) counts towards the day total but has no subtotal.
   group. Adding a file to an existing group is the only way to make a track set.
   Only `kind = 'file'` may carry a `group_id` — an embed cannot be sample-locked
   to anything, and text has no timeline.
+- **A file is attached to an exercise once.** The resolved path is compared, so
+  a quoted or dotted spelling of the same file is the same file; `DuplicateMedia`
+  is a 409. Another exercise may use the same file, and removing it frees it.
 - **Members of a set must agree, and there are at most eight**
   (`DURATION_TOLERANCE`, `MAX_TRACKS`). Both are checked on attach, where the
   message can name the file that disagrees, rather than in the browser where it

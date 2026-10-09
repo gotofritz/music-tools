@@ -127,6 +127,80 @@ def test_a_file_outside_the_roots_is_not_attached(db, le_freak, roots, tmp_path)
     assert media.exercise_media(db, exercise_id=le_freak.id) == []
 
 
+def test_the_same_file_is_not_attached_twice_to_one_exercise(db, le_freak, audio_file):
+    path = audio_file("S/le freak/loop.wav")
+    media.attach(db, exercise_id=le_freak.id, kind="file", path=str(path), now=NOW)
+
+    with pytest.raises(media.DuplicateMedia) as refused:
+        media.attach(db, exercise_id=le_freak.id, kind="file", path=str(path), now=NOW)
+
+    assert "loop.wav" in str(refused.value)
+    assert len(media.exercise_media(db, exercise_id=le_freak.id)) == 1
+
+
+def test_a_quoted_or_dotted_spelling_of_the_same_file_is_still_the_same_file(
+    db, le_freak, audio_file, roots
+):
+    path = audio_file("S/le freak/loop.wav")
+    media.attach(db, exercise_id=le_freak.id, kind="file", path=str(path), now=NOW)
+
+    for spelling in (f"'{path}'", str(roots / "S" / "." / "le freak" / "loop.wav")):
+        with pytest.raises(media.DuplicateMedia):
+            media.attach(
+                db, exercise_id=le_freak.id, kind="file", path=spelling, now=NOW
+            )
+
+
+def test_the_same_file_cannot_join_its_own_track_set_either(db, le_freak, audio_file):
+    path = audio_file("S/le freak/loop.wav")
+    first = media.attach(
+        db, exercise_id=le_freak.id, kind="file", path=str(path), now=NOW
+    )
+
+    with pytest.raises(media.DuplicateMedia):
+        media.attach(
+            db,
+            exercise_id=le_freak.id,
+            kind="file",
+            path=str(path),
+            group_id=first.group_id,
+            now=NOW,
+        )
+
+
+def test_a_score_is_not_attached_twice_either(db, le_freak, roots):
+    score = roots / "le freak.pdf"
+    score.write_bytes(b"%PDF")
+    media.attach(db, exercise_id=le_freak.id, kind="score", path=str(score), now=NOW)
+
+    with pytest.raises(media.DuplicateMedia):
+        media.attach(
+            db, exercise_id=le_freak.id, kind="score", path=str(score), now=NOW
+        )
+
+
+def test_another_exercise_may_use_the_same_file(db, songs, le_freak, audio_file):
+    other = repo.create_exercise(db, module_id=songs.id, name="espresso")
+    path = audio_file("S/shared/loop.wav")
+    media.attach(db, exercise_id=le_freak.id, kind="file", path=str(path), now=NOW)
+
+    media.attach(db, exercise_id=other.id, kind="file", path=str(path), now=NOW)
+
+    assert len(media.exercise_media(db, exercise_id=other.id)) == 1
+
+
+def test_a_removed_file_can_be_attached_again(db, le_freak, audio_file):
+    path = audio_file("S/le freak/loop.wav")
+    source = media.attach(
+        db, exercise_id=le_freak.id, kind="file", path=str(path), now=NOW
+    )
+    media.detach(db, source_id=source.id)
+
+    media.attach(db, exercise_id=le_freak.id, kind="file", path=str(path), now=NOW)
+
+    assert len(media.exercise_media(db, exercise_id=le_freak.id)) == 1
+
+
 def test_a_file_that_is_not_there_is_refused(db, le_freak, roots):
     with pytest.raises(media.MissingFile):
         media.attach(

@@ -85,6 +85,10 @@ class MissingFile(ValueError):
     """The path is inside the roots, and there is nothing there."""
 
 
+class DuplicateMedia(ValueError):
+    """That file is already attached to this exercise."""
+
+
 class SetTooBig(ValueError):
     """A track set holds at most `MAX_TRACKS`."""
 
@@ -244,6 +248,11 @@ def attach(
         if not resolved.is_file():
             raise MissingFile(f"there is nothing at {resolved}")
         path = str(resolved)
+        if any(
+            source.path == path
+            for source in repo.media_sources_for_exercise(conn, exercise_id=exercise_id)
+        ):
+            raise DuplicateMedia(f"{resolved.name} is already attached to this one")
 
     if kind == "file" and group_id is not None:
         return add_to_set(

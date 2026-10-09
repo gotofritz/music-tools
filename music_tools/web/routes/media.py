@@ -263,8 +263,8 @@ def _reporting() -> Iterator[None]:
 
     A path that is wrong or missing is something the player typed and can
     retype: 400, with the message the domain wrote. A set that will not take
-    another member is a collision with what is already there: 409, like every
-    other `InUse` in this app.
+    another member, or a file that is already attached, is a collision with what
+    is already there: 409, like every other `InUse` in this app.
     """
     try:
         yield
@@ -274,7 +274,11 @@ def _reporting() -> Iterator[None]:
         ) from None
     except media.UnknownMedia:
         raise HTTPException(status_code=404, detail="no media with that id") from None
-    except (media.SetTooBig, media.MembersDisagree) as refused:
+    except (
+        media.DuplicateMedia,
+        media.SetTooBig,
+        media.MembersDisagree,
+    ) as refused:
         raise HTTPException(status_code=409, detail=str(refused)) from None
     except (media.OutsideRoots, media.MissingFile, media.BadMedia) as wrong:
         raise HTTPException(status_code=400, detail=str(wrong)) from None
