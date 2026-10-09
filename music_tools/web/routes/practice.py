@@ -10,12 +10,12 @@ import random
 import sqlite3
 from datetime import date, datetime, time
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 
 from music_tools.db import repository as repo
 from music_tools.domain import session
-from music_tools.domain.models import Exercise
+from music_tools.domain.models import Exercise, Module
 from music_tools.domain.scheduling import Algorithm
 from music_tools.domain.session import practice_day_for
 from music_tools.web import views
@@ -45,15 +45,17 @@ def today(
 
 @router.get("/picker", response_class=HTMLResponse)
 def picker(
+    request: Request,
     conn: sqlite3.Connection = Depends(get_conn),
     now: datetime = Depends(get_now),
 ) -> HTMLResponse:
     """The module buttons alone: START's answer, and what closing a list gives."""
-    return HTMLResponse(render("_picker.html", **views.picker_context(conn, now=now)))
+    return _picker_view(request, conn, now=now)
 
 
 @router.get("/picker/{slug}", response_class=HTMLResponse)
 def picker_list(
+    request: Request,
     slug: str,
     conn: sqlite3.Connection = Depends(get_conn),
     now: datetime = Depends(get_now),
@@ -62,9 +64,7 @@ def picker_list(
     module = repo.find_module(conn, slug)
     if module is None or module.archived_at is not None:
         raise HTTPException(status_code=404, detail=f"no module called {slug}")
-    return HTMLResponse(
-        render("_picker.html", **views.picker_context(conn, now=now, active=module))
-    )
+    return _picker_view(request, conn, now=now, active=module)
 
 
 @router.get("/days", response_class=HTMLResponse)
@@ -150,7 +150,9 @@ async def stop(
         rng=rng,
     )
     row = result.exercise if result is not None else exercise
-    return fragment_or_redirect(request, _redraw(request, conn, now=now, row=row))
+    return fragment_or_redirect(
+        request, _redraw(request, conn, now=now, row=row, picker=True)
+    )
 
 
 @router.post("/entries/{entry_id}/done")
@@ -179,7 +181,7 @@ async def done(
             status_code=409, detail="that entry is already finished"
         ) from None
     return fragment_or_redirect(
-        request, _redraw(request, conn, now=now, row=result.exercise)
+        request, _redraw(request, conn, now=now, row=result.exercise, picker=True)
     )
 
 
@@ -205,36 +207,9 @@ def discard(
         if entry.exercise_id is not None
         else None
     )
-    return fragment_or_redirect(request, _redraw(request, conn, now=now, row=row))
-
-
-@router.post("/entries")
-def add_entry(
-    request: Request,
-    description: str = Form(session.DEFAULT_DESCRIPTION),
-    log_group: str | None = Form(None),
-    speed: str | None = Form(None),
-    notes: str | None = Form(None),
-    conn: sqlite3.Connection = Depends(get_conn),
-    now: datetime = Depends(get_now),
-    rng: random.Random = Depends(get_rng),
-) -> Response:
-    """Start something the catalogue does not know about: a warm-up, a jam.
-
-    With no description it is just `Practice`: the START button on a day with
-    nothing running, for when the clock should begin before anyone has said
-    what is being played.
-    """
-    session.start_ad_hoc(
-        conn,
-        rng=rng,
-        description=description.strip() or session.DEFAULT_DESCRIPTION,
-        log_group=log_group or None,
-        speed=speed or None,
-        notes=notes or None,
-        now=now,
+    return fragment_or_redirect(
+        request, _redraw(request, conn, now=now, row=row, picker=True)
     )
-    return fragment_or_redirect(request, _log_fragments(conn, now=now))
 
 
 @router.api_route("/entries/{entry_id}", methods=["PATCH", "POST"])
@@ -309,12 +284,29 @@ def remove_entry(
     )
 
 
+def _picker_view(
+    request: Request,
+    conn: sqlite3.Connection,
+    *,
+    now: datetime,
+    active: Module | None = None,
+) -> HTMLResponse:
+    """The picker as a fragment for HTMX, and as a page for a plain browser."""
+    context = views.picker_context(conn, now=now, active=active)
+    if is_htmx(request):
+        return HTMLResponse(render("_picker.html", **context))
+    return HTMLResponse(
+        render("picker.html", **{**views.chrome(conn, now=now), **context})
+    )
+
+
 def _redraw(
     request: Request,
     conn: sqlite3.Connection,
     *,
     now: datetime,
     row: Exercise | None = None,
+    picker: bool = False,
 ) -> str:
     """The piece that was clicked, and whatever else the write changed.
 
@@ -326,8 +318,14 @@ def _redraw(
     The queue rather than the row, because these writes move due dates: the
     row is re-read in the order it now belongs to, instead of keeping the
     place it had when the page was drawn.
+
+    `picker` is for the writes that leave nothing running — a stop, a discard:
+    on the today page the log comes back with the module picker open, because
+    a stop is a start for the next one.
     """
     context = views.today_context(conn, now=now)
+    if picker and context["running"] is None:
+        context |= views.picker_context(conn, now=now) | {"picker_open": True}
     if row is not None and not _is_today_page(request):
         return render(
             "_queue.html",

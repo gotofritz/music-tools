@@ -18,7 +18,7 @@ from fastapi.testclient import TestClient
 from music_tools.db import repository as repo
 from music_tools.db.connection import open_db
 from music_tools.db.migrate import migrate
-from music_tools.domain import media
+from music_tools.domain import media, session
 from music_tools.web import deps
 from music_tools.web.app import create_app
 from music_tools.web.deps import get_now, get_rng
@@ -425,19 +425,6 @@ def test_done_twice_counts_twice(client, conn, le_freak):
     assert after.practiced_count == 10
 
 
-def test_an_ad_hoc_entry_starts_against_no_exercise(client, conn):
-    response = client.post(
-        "/entries",
-        data={"description": "warm-up", "log_group": "TECHNIQUE"},
-        headers=hx(),
-    )
-
-    assert response.status_code == 200
-    entry = running(conn)
-    assert entry is not None
-    assert (entry.description, entry.exercise_id) == ("warm-up", None)
-
-
 def test_a_false_start_is_discarded_and_logs_nothing(client, conn, le_freak):
     start(client, le_freak.id)
     entry_id = running(conn).id
@@ -673,7 +660,7 @@ def test_a_day_with_no_history_behind_it_offers_nothing_to_load(client):
     assert "load more" not in client.get("/").text
 
 
-# --- earlier days are collapsed (Phase 10, step 1) ---------------------------------
+# --- earlier days are collapsed (Phase 10, step 1) -----------------------------
 
 
 def _details(page: str) -> list[str]:
@@ -720,9 +707,7 @@ def test_load_more_days_arrive_as_collapsed_details(client, earlier_days):
     assert " open" not in _details(page)[0]
 
 
-def test_a_day_page_is_open_and_its_edits_redraw_it_open(
-    client, conn, earlier_days
-):
+def test_a_day_page_is_open_and_its_edits_redraw_it_open(client, conn, earlier_days):
     page = client.get("/days/2026-06-06").text
     assert _details(page)
     assert all(" open" in tag for tag in _details(page))
@@ -735,7 +720,7 @@ def test_a_day_page_is_open_and_its_edits_redraw_it_open(
     assert all(" open" in tag for tag in _details(amended))
 
 
-# --- the picker (Phase 10, step 2) ----------------------------------------------------
+# --- the picker (Phase 10, step 2) ---------------------------------------------
 
 
 def test_the_picker_is_one_button_per_live_module_in_tab_order(
@@ -773,7 +758,14 @@ def test_the_list_is_the_tabs_table_minus_what_only_a_tab_needs(
     page = client.get("/picker/songs", headers=hx()).text
     table = page[page.index("<table") : page.index("</table>")]
 
-    for absent in ('type="checkbox"', "archive", "stop", "media", "<template", "hx-patch"):
+    for absent in (
+        'type="checkbox"',
+        "archive",
+        "stop",
+        "media",
+        "<template",
+        "hx-patch",
+    ):
         assert absent not in table
     assert "66%" in table and "133" in table  # speed and target, read-only
 
@@ -802,6 +794,113 @@ def test_a_picker_for_an_unknown_or_archived_module_is_404(client, conn, songs):
 
     repo.update_module(conn, songs.id, archived_at=NOW)
     assert client.get("/picker/songs", headers=hx()).status_code == 404
+
+
+# --- START is a picker, a stop is a start (Phase 10, steps 3 and 4) -----------
+
+
+def test_with_nothing_running_start_reveals_the_picker_and_opens_no_line(
+    client, conn, songs, le_freak
+):
+    page = client.get("/").text
+    now_playing = page[page.index('id="now-playing"') : page.index("<h2>Log</h2>")]
+
+    assert ">START<" in now_playing
+    assert 'hx-get="/picker"' in now_playing
+    assert 'id="picker"' not in now_playing  # revealed by the click, not drawn
+    assert running(conn) is None
+    assert repo.get_day(conn, TODAY) is None  # a false start leaves nothing behind
+
+
+def test_the_bare_post_entries_start_is_gone(client, conn):
+    response = client.post("/entries", headers=hx())
+
+    assert response.status_code in (404, 405)
+    assert running(conn) is None
+
+
+def test_the_picker_without_htmx_is_a_page_of_its_own(client, songs, le_freak):
+    page = client.get("/picker/songs").text
+
+    assert "<html" in page
+    assert "le freak" in page
+
+
+def test_starting_a_row_from_the_picker_shows_it_running_with_no_picker(
+    client, conn, songs, le_freak
+):
+    response = client.post(
+        f"/exercises/{le_freak.id}/start", headers=hx(referer="http://localhost/")
+    )
+
+    assert '<section id="day-log"' in response.text
+    assert "le freak" in response.text
+    assert 'id="picker"' not in response.text
+    day = repo.get_day(conn, TODAY)
+    assert day is not None
+    assert len(repo.entries_for_day(conn, day.id)) == 1
+
+
+def test_the_running_card_has_the_five_stops_in_place_of_the_pulldown(
+    client, conn, le_freak
+):
+    start(client, le_freak.id)
+
+    page = client.get("/").text
+    card = page[page.index('id="now-playing"') : page.index("<h2>Log</h2>")]
+
+    assert "<select" not in card
+    assert ">done<" not in card
+    entry_id = running(conn).id
+    for algorithm in ("normal", "short", "long", "rotate", "hold"):
+        assert re.search(rf'<button[^>]*name="algorithm"[^>]*value="{algorithm}"', card)
+    assert f'hx-post="/entries/{entry_id}/done"' in card
+    assert f'action="/entries/{entry_id}/done"' in card
+    assert f'action="/entries/{entry_id}/discard"' in card  # discard stays
+
+
+@pytest.mark.parametrize("algorithm", ["normal", "short", "long", "rotate", "hold"])
+def test_every_stop_logs_the_entry_and_moves_the_schedule_then_offers_the_picker(
+    client, conn, songs, le_freak, algorithm
+):
+    start(client, le_freak.id)
+
+    response = client.post(
+        f"/entries/{running(conn).id}/done",
+        data={"algorithm": algorithm},
+        headers=hx(referer="http://localhost/"),
+    )
+
+    assert running(conn) is None
+    day = repo.get_day(conn, TODAY)
+    assert day is not None
+    assert [e.description for e in repo.entries_for_day(conn, day.id)] == ["le freak"]
+    after = repo.get_exercise(conn, le_freak.id)
+    assert after is not None
+    assert after.practiced_count == 9
+    assert 'id="picker"' in response.text  # the same state as after START
+    assert 'hx-get="/picker/songs"' in response.text
+
+
+def test_discard_lands_on_the_picker_too(client, conn, songs, le_freak):
+    start(client, le_freak.id)
+
+    response = client.post(
+        f"/entries/{running(conn).id}/discard", headers=hx(referer="http://localhost/")
+    )
+
+    assert 'id="picker"' in response.text
+    assert running(conn) is None
+
+
+def test_a_stop_from_a_module_page_does_not_draw_a_picker(
+    client, conn, songs, le_freak
+):
+    start(client, le_freak.id)
+
+    response = stop(client, le_freak.id, referer="http://localhost/modules/songs")
+
+    assert 'id="picker"' not in response.text
 
 
 # --- correcting a line of the log, in place -------------------------------------------
@@ -1976,24 +2075,6 @@ def test_notes_are_a_textarea_on_the_row_and_on_the_add_form(client, songs, le_f
     assert 'input type="text" name="notes"' not in page
 
 
-def test_with_nothing_running_there_is_a_start_button(client):
-    page = client.get("/").text
-
-    assert "Nothing running" not in page
-    assert 'action="/entries"' in page
-    assert ">START<" in page
-
-
-def test_start_with_no_description_logs_a_practice_line(client, conn):
-    response = client.post("/entries", headers=hx())
-
-    assert response.status_code == 200
-    entry = running(conn)
-    assert entry is not None
-    assert (entry.description, entry.exercise_id) == ("Practice", None)
-    assert entry.ended_at is None
-
-
 def test_the_running_exercise_is_first_in_its_queue_and_marked(
     client, conn, songs, le_freak, espresso
 ):
@@ -2103,7 +2184,7 @@ def test_notes_open_as_a_wide_box_of_at_least_two_lines(
 def test_stop_on_a_row_closes_the_start_button_line_and_schedules_the_row(
     client, conn, le_freak
 ):
-    client.post("/entries", headers=hx())
+    session.start_ad_hoc(conn, rng=SteadyRandom(), description="Practice", now=NOW)
 
     response = stop(client, le_freak.id)
 

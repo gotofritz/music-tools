@@ -1,9 +1,9 @@
 {# What is being practised right now: the line the log already has, the
-   material to play it from, and the two ways out of it.
+   material to play it from, and the ways out of it.
 
-   `done` moves the schedule on; `discard` takes a false start out again and
-   logs nothing for it. There is no clock to stop — the entry is the clock, and
-   these two are what move it. #}
+   Any of the five stops moves the schedule on; `discard` takes a false start
+   out again and logs nothing for it. There is no clock to stop — the entry is
+   the clock, and these are what move it. #}
 <div id="now-playing" class="now-playing">
   {% if running %}
   <h3>{{ running.description or "something" }}
@@ -17,17 +17,18 @@
   <p class="muted">Nothing attached to this one yet —
     <a href="/exercises/{{ running_exercise.id }}/media">attach the tune</a>.</p>
   {% endif %}
+  {# The stops: one button per way it comes back, each sending its own
+     `algorithm`. Whatever it is, the answer is the log with the picker under
+     it — a stop is a start for the next one. #}
   <form class="finish" action="/entries/{{ running.id }}/done" method="post"
         hx-post="/entries/{{ running.id }}/done" hx-target="#day-log"
         hx-swap="outerHTML">
-    <select name="algorithm" aria-label="how it comes back">
-      <option value="normal">normal</option>
-      <option value="short">short</option>
-      <option value="long">long</option>
-      <option value="rotate">rotate</option>
-      <option value="hold">hold</option>
-    </select>
-    <button type="submit">done</button>
+    <fieldset class="stop-box">
+      <legend>stop</legend>
+      {% for algorithm in ("normal", "short", "long", "rotate", "hold") %}
+      <button type="submit" name="algorithm" value="{{ algorithm }}">{{ algorithm }}</button>
+      {% endfor %}
+    </fieldset>
   </form>
   <form action="/entries/{{ running.id }}/discard" method="post"
         hx-post="/entries/{{ running.id }}/discard" hx-target="#day-log"
@@ -35,13 +36,14 @@
         hx-confirm="Discard this line? No time is logged for it.">
     <button type="submit" class="remove">discard</button>
   </form>
+  {% elif picker_open %}
+  {# A stop or a discard has just left nothing running: the same state START
+     reveals. #}
+  {% include "_picker.html" %}
   {% else %}
-  {# Nothing running: START opens a line from now, for anything, and the
-     exercise can be named afterwards. A module page is still where a row's
-     material comes with it. #}
-  <form action="/entries" method="post" hx-post="/entries" hx-target="#day-log"
-        hx-swap="outerHTML">
-    <button type="submit">START</button>
-  </form>
+  {# Nothing running: START only reveals the module picker. A line opens when
+     a row is picked, so a false start leaves nothing behind. #}
+  <a class="start" href="/picker" hx-get="/picker" hx-target="this"
+     hx-swap="outerHTML" role="button">START</a>
   {% endif %}
 </div>
