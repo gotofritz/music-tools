@@ -1,0 +1,28 @@
+{# The row of module buttons, and under it the list of the one that is open.
+
+   One button per live module, in tab order. The open module's button hides
+   the list again — the same as the close control — and every other button
+   opens its own. All of them swap this whole block, so which button is lit
+   and which list is showing cannot disagree. Without JavaScript the buttons
+   are links to the same fragments. #}
+<div id="picker" class="picker">
+  <div class="picker-modules">
+    {% for module in picker_modules %}
+    {% if active and active.id == module.id %}
+    <a class="picker-module active" href="/picker" hx-get="/picker"
+       hx-target="#picker" hx-swap="outerHTML" aria-pressed="true">{{ module.name }}</a>
+    {% else %}
+    <a class="picker-module" href="/picker/{{ module.slug }}"
+       hx-get="/picker/{{ module.slug }}" hx-target="#picker"
+       hx-swap="outerHTML" aria-pressed="false">{{ module.name }}</a>
+    {% endif %}
+    {% endfor %}
+    {% if active %}
+    <a class="picker-close" href="/picker" hx-get="/picker" hx-target="#picker"
+       hx-swap="outerHTML" aria-label="close the list">close</a>
+    {% endif %}
+  </div>
+  {% if active %}
+  {% include "_picker_list.html" %}
+  {% endif %}
+</div>

@@ -117,3 +117,14 @@ document.addEventListener("htmx:afterSwap", () => {
       }
     });
 });
+
+// A row of the picker is a start. The button in its name cell is the real
+// control (keyboard, and no JavaScript); a click anywhere else on the row
+// presses it.
+document.addEventListener("click", (event) => {
+  const row = event.target.closest && event.target.closest("tr.pick-row");
+  if (!row || event.target.closest("button")) {
+    return;
+  }
+  row.querySelector("button.row-start").click();
+});

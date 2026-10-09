@@ -735,6 +735,75 @@ def test_a_day_page_is_open_and_its_edits_redraw_it_open(
     assert all(" open" in tag for tag in _details(amended))
 
 
+# --- the picker (Phase 10, step 2) ----------------------------------------------------
+
+
+def test_the_picker_is_one_button_per_live_module_in_tab_order(
+    client, conn, slap, songs
+):
+    archived = repo.create_module(conn, name="OLD", log_group="TECHNIQUE")
+    repo.update_module(conn, archived.id, archived_at=NOW)
+
+    page = client.get("/picker", headers=hx()).text
+
+    assert page.index("SLAP") < page.index("SONGS")
+    assert "OLD" not in page
+    assert 'hx-get="/picker/slap"' in page
+    assert 'hx-get="/picker/songs"' in page
+    assert "<table" not in page  # buttons only until one is clicked
+
+
+def test_a_modules_list_has_its_name_on_top_and_its_live_rows_due_first(
+    client, conn, songs, le_freak, espresso
+):
+    gone = repo.create_exercise(conn, module_id=songs.id, name="gone", next_due=TODAY)
+    repo.update_exercise(conn, gone.id, archived_at=NOW)
+
+    page = client.get("/picker/songs", headers=hx()).text
+
+    assert 'class="picker-list"' in page
+    assert page.index("<h3") < page.index("le freak") < page.index("espresso")
+    assert "SONGS" in page[page.index("<h3") :][:80]
+    assert "gone" not in page
+
+
+def test_the_list_is_the_tabs_table_minus_what_only_a_tab_needs(
+    client, songs, le_freak
+):
+    page = client.get("/picker/songs", headers=hx()).text
+    table = page[page.index("<table") : page.index("</table>")]
+
+    for absent in ('type="checkbox"', "archive", "stop", "media", "<template", "hx-patch"):
+        assert absent not in table
+    assert "66%" in table and "133" in table  # speed and target, read-only
+
+
+def test_clicking_a_row_starts_it_with_the_tabs_own_call(client, songs, le_freak):
+    page = client.get("/picker/songs", headers=hx()).text
+
+    assert f'hx-post="/exercises/{le_freak.id}/start"' in page
+    assert f'action="/exercises/{le_freak.id}/start"' in page  # and with no JS
+    assert 'hx-target="#day-log"' in page
+
+
+def test_the_open_modules_button_closes_the_list_and_a_close_control_does_too(
+    client, slap, songs, le_freak
+):
+    page = client.get("/picker/songs", headers=hx()).text
+
+    assert 'hx-get="/picker/slap"' in page  # the others still open theirs
+    assert 'hx-get="/picker/songs"' not in page  # this one now hides it
+    assert 'class="picker-close"' in page
+    assert page.count('hx-get="/picker"') >= 2  # the active button, and the close
+
+
+def test_a_picker_for_an_unknown_or_archived_module_is_404(client, conn, songs):
+    assert client.get("/picker/nothing", headers=hx()).status_code == 404
+
+    repo.update_module(conn, songs.id, archived_at=NOW)
+    assert client.get("/picker/songs", headers=hx()).status_code == 404
+
+
 # --- correcting a line of the log, in place -------------------------------------------
 
 

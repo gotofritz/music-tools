@@ -43,6 +43,30 @@ def today(
     return HTMLResponse(render("today.html", **views.today_context(conn, now=now)))
 
 
+@router.get("/picker", response_class=HTMLResponse)
+def picker(
+    conn: sqlite3.Connection = Depends(get_conn),
+    now: datetime = Depends(get_now),
+) -> HTMLResponse:
+    """The module buttons alone: START's answer, and what closing a list gives."""
+    return HTMLResponse(render("_picker.html", **views.picker_context(conn, now=now)))
+
+
+@router.get("/picker/{slug}", response_class=HTMLResponse)
+def picker_list(
+    slug: str,
+    conn: sqlite3.Connection = Depends(get_conn),
+    now: datetime = Depends(get_now),
+) -> HTMLResponse:
+    """The buttons with one module's live rows open under them."""
+    module = repo.find_module(conn, slug)
+    if module is None or module.archived_at is not None:
+        raise HTTPException(status_code=404, detail=f"no module called {slug}")
+    return HTMLResponse(
+        render("_picker.html", **views.picker_context(conn, now=now, active=module))
+    )
+
+
 @router.get("/days", response_class=HTMLResponse)
 def earlier_days(
     request: Request,

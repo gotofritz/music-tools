@@ -124,3 +124,21 @@ def modules_by_id(conn: sqlite3.Connection) -> dict[int, Module]:
     return {
         module.id: module for module in repo.list_modules(conn, include_archived=True)
     }
+
+
+def picker_context(
+    conn: sqlite3.Connection, *, now: datetime, active: Module | None = None
+) -> dict[str, Any]:
+    """The module buttons, and — for the open one — its live rows in queue order.
+
+    Overdue first and then by due date is what `exercises_due` already says, so
+    the list reads in the order the tab does.
+    """
+    return {
+        "today": practice_day_for(now),
+        "picker_modules": repo.list_modules(conn),
+        "active": active,
+        "picker_rows": (
+            repo.exercises_due(conn, module_id=active.id) if active else []
+        ),
+    }

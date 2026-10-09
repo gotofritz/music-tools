@@ -1,0 +1,42 @@
+{# One module's live rows, read-only: the tab's table without the move box, the
+   module column, stop, archive and every editable cell. A row is a start —
+   the same call as the tab's start button — and the answer is the log with
+   the running state in it, which has no picker. The button in the name cell
+   is the click with no JavaScript, and what a keyboard reaches; `app.js`
+   forwards a click anywhere else on the row to it. #}
+<section class="picker-list" id="picker-list">
+  <h3>{{ active.name }}</h3>
+  {% if picker_rows %}
+  <div class="picker-scroll">
+    <table>
+      <thead>
+        <tr><th>row</th><th>speed</th><th>last</th><th>due</th><th>when</th>
+          <th>count</th></tr>
+      </thead>
+      <tbody>
+        {% for exercise in picker_rows %}
+        <tr id="pick-{{ exercise.id }}" class="pick-row{% if exercise.next_due and exercise.next_due <= today %} overdue{% endif %}">
+          <td class="name">
+            <form action="/exercises/{{ exercise.id }}/start" method="post"
+                  hx-post="/exercises/{{ exercise.id }}/start"
+                  hx-target="#day-log" hx-swap="outerHTML">
+              <button type="submit" class="row-start">{{ exercise.name }}</button>
+            </form>
+            {% if exercise.notes %}<span class="muted">{{ exercise.notes }}</span>{% endif %}
+          </td>
+          <td>{{ exercise.speed or "" }}{% if exercise.target_bpm is not none %}
+            <span class="muted">of {{ "%g" | format(exercise.target_bpm) }}</span>{% endif %}
+            <span class="muted">{{ tempo_text(exercise) }}</span></td>
+          <td>{{ exercise.last_practiced.isoformat() if exercise.last_practiced else "—" }}</td>
+          <td>{{ format_due(exercise.next_due) }}</td>
+          <td>{{ format_when(exercise.next_due, today) }}</td>
+          <td>x{{ exercise.practiced_count }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p>Nothing in this module yet.</p>
+  {% endif %}
+</section>
