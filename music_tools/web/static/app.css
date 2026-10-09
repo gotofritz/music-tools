@@ -475,13 +475,27 @@ details.day > summary::-webkit-details-marker {
   display: none;
 }
 
+/* The heading is one row: the date and total as a first cell clipped to its
+   text, then the group cells sharing the rest equally. */
+details.day > summary {
+  display: flex;
+  gap: 0.4rem;
+  align-items: stretch;
+}
+
 .day-head {
-  display: block;
+  flex: none;
+  padding: 0.2rem 0.4rem 0.45rem;
+  border-bottom: 6px solid transparent;
+  background: #f4f4f4;
+  font-size: 0.85rem;
   font-weight: bold;
-  margin-bottom: 0.25rem;
+  white-space: nowrap;
 }
 
 .group-cells {
+  flex: 1 1 auto;
+  min-width: 0;
   display: grid;
   grid-template-columns: repeat(var(--n, 1), minmax(0, 1fr));
   gap: 0.4rem;
