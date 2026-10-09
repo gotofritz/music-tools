@@ -903,6 +903,212 @@ def test_a_stop_from_a_module_page_does_not_draw_a_picker(
     assert 'id="picker"' not in response.text
 
 
+# --- the current exercise, editable in place (Phase 10, step 5) ---------------------
+
+
+def _card(page: str) -> str:
+    return page[page.index('id="now-playing"') : page.index("<h2>Log</h2>")]
+
+
+def test_the_running_card_carries_the_tab_rows_editable_cells(
+    client, conn, songs, le_freak
+):
+    start(client, le_freak.id)
+
+    card = _card(client.get("/").text)
+
+    assert 'id="now-exercise"' in card
+    for field in ("name", "speed", "target_bpm", "notes"):
+        assert f'id="exercise-{le_freak.id}-{field}"' in card
+    assert f'hx-patch="/exercises/{le_freak.id}"' in card
+    assert 'hx-target="#now-exercise"' in card
+    assert 'value="le freak"' in card
+    assert "of 133" not in card and "133" in card  # the target, as its own cell
+
+
+def test_an_ad_hoc_line_has_no_exercise_to_edit(client, conn):
+    session.start_ad_hoc(conn, rng=SteadyRandom(), description="warm-up", now=NOW)
+
+    assert 'id="now-exercise"' not in _card(client.get("/").text)
+
+
+def test_an_edit_aimed_at_the_card_answers_with_the_card_cells_only(
+    client, conn, songs, le_freak, loop_wav
+):
+    media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+    start(client, le_freak.id)
+
+    response = client.patch(
+        f"/exercises/{le_freak.id}",
+        data={"notes": "watch the thumb", "speed": "70%"},
+        headers=hx(**{"HX-Target": "now-exercise"}),
+    )
+
+    assert response.status_code == 200
+    assert response.text.lstrip().startswith("<div")
+    assert 'id="now-exercise"' in response.text
+    assert "watch the thumb" in response.text
+    assert "<tr" not in response.text  # not the tab's row
+    # nothing the player is made of: playback and the waveform keep going
+    for player in ("<audio", "data-peaks-url", 'class="player"', "now-media"):
+        assert player not in response.text
+    after = repo.get_exercise(conn, le_freak.id)
+    assert after is not None
+    assert (after.notes, after.speed) == ("watch the thumb", "70%")
+
+
+def test_an_edit_aimed_at_the_tabs_row_still_answers_with_the_row(
+    client, songs, le_freak
+):
+    response = client.patch(
+        f"/exercises/{le_freak.id}",
+        data={"speed": "70%"},
+        headers=hx(**{"HX-Target": f"exercise-{le_freak.id}"}),
+    )
+
+    assert f'<tr id="exercise-{le_freak.id}"' in response.text
+    assert 'id="now-exercise"' not in response.text
+
+
+def test_a_refused_edit_in_the_card_is_a_message_not_a_redraw(
+    client, conn, songs, le_freak, espresso
+):
+    start(client, le_freak.id)
+
+    response = client.patch(
+        f"/exercises/{le_freak.id}",
+        data={"name": "espresso"},
+        headers=hx(**{"HX-Target": "now-exercise"}),
+    )
+
+    assert response.status_code == 409
+    assert "now-exercise" not in response.headers.get("HX-Retarget", "")
+
+
+# --- media, edited inline (Phase 10, step 6) ----------------------------------------
+
+
+def test_the_card_embeds_the_media_list_and_the_attach_forms(
+    client, conn, songs, le_freak, loop_wav
+):
+    media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+    start(client, le_freak.id)
+
+    card = _card(client.get("/").text)
+
+    assert 'id="now-media-list"' in card
+    assert 'id="media-list"' not in card
+    assert 'hx-target="#now-media-list"' in card
+    for kind in ("file", "youtube", "score", "text"):
+        assert f'<input type="hidden" name="kind" value="{kind}">' in card
+    assert "<audio" in card  # the player is still the card's
+
+
+def test_the_media_page_keeps_its_own_list_and_forms(client, le_freak, roots):
+    page = client.get(f"/exercises/{le_freak.id}/media").text
+
+    assert 'id="media-list"' in page
+    assert 'id="now-media-list"' not in page
+    assert 'hx-target="#media-list"' in page
+
+
+def _from_card(**headers: str) -> dict[str, str]:
+    return hx(**{"HX-Target": "now-media-list"}, **headers)
+
+
+def test_attaching_from_the_card_answers_with_the_list_and_the_new_players(
+    client, conn, songs, le_freak, loop_wav
+):
+    start(client, le_freak.id)
+
+    response = client.post(
+        f"/exercises/{le_freak.id}/media",
+        data={"kind": "file", "path": str(loop_wav)},
+        headers=_from_card(),
+    )
+
+    source = media.exercise_media(conn, exercise_id=le_freak.id)[0].sources[0]
+    assert response.status_code == 200
+    assert 'id="now-media-list"' in response.text
+    assert 'id="media-players" hx-swap-oob="true"' in response.text
+    assert f'src="/media/{source.id}/audio"' in response.text
+    assert 'id="media-list"' not in response.text
+
+
+def test_removing_and_reordering_from_the_card_redraw_the_players(
+    client, conn, songs, le_freak, loop_wav
+):
+    first = media.attach(
+        conn, exercise_id=le_freak.id, kind="text", body="one", now=NOW
+    )
+    media.attach(conn, exercise_id=le_freak.id, kind="text", body="two", now=NOW)
+    start(client, le_freak.id)
+
+    moved = client.post(
+        f"/media/{first.id}/move", data={"direction": "down"}, headers=_from_card()
+    )
+    removed = client.delete(f"/media/{first.id}", headers=_from_card())
+
+    for response in (moved, removed):
+        assert 'id="now-media-list"' in response.text
+        assert 'id="media-players" hx-swap-oob="true"' in response.text
+
+
+def test_naming_and_mixing_a_track_from_the_card_leaves_the_player_alone(
+    client, conn, songs, le_freak, loop_wav
+):
+    source = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+    start(client, le_freak.id)
+
+    response = client.patch(
+        f"/media/{source.id}",
+        data={"label": "bass", "gain": "0.5"},
+        headers=_from_card(),
+    )
+
+    assert 'id="now-media-list"' in response.text
+    assert "media-players" not in response.text  # no oob, so no new <audio>
+    assert "<audio" not in response.text
+    group = media.exercise_media(conn, exercise_id=le_freak.id)[0].group
+    assert group is not None
+    labelled = client.post(
+        f"/groups/{group.id}/label", data={"label": "stems"}, headers=_from_card()
+    )
+    assert "media-players" not in labelled.text
+
+
+def test_the_media_page_writes_are_unchanged(client, conn, le_freak, loop_wav):
+    response = client.post(
+        f"/exercises/{le_freak.id}/media",
+        data={"kind": "file", "path": str(loop_wav)},
+        headers=hx(),
+    )
+
+    assert 'id="media-list"' in response.text
+    assert "media-players" not in response.text
+
+
+def test_a_refused_attach_from_the_card_is_a_message(
+    client, conn, songs, le_freak, roots
+):
+    start(client, le_freak.id)
+
+    response = client.post(
+        f"/exercises/{le_freak.id}/media",
+        data={"kind": "file", "path": "/nowhere/else.wav"},
+        headers=_from_card(),
+    )
+
+    assert response.status_code == 400
+    assert media.exercise_media(conn, exercise_id=le_freak.id) == []
+
+
 # --- correcting a line of the log, in place -------------------------------------------
 
 

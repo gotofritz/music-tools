@@ -8,7 +8,7 @@
    The tick box belongs to the move form below the table for the same reason —
    a form cannot wrap rows that already contain forms — so it says which one it
    is in with `form="move"`, which both the browser and HTMX read. #}
-{% from "_cells.html" import editable %}
+{% from "_exercise_cells.html" import name_form, tempo_form with context %}
 <tr id="exercise-{{ exercise.id }}"
     class="{% if running and running.exercise_id == exercise.id %}active{% elif exercise.next_due and exercise.next_due <= today %}overdue{% endif %}">
   <td class="pick">
@@ -17,41 +17,13 @@
   </td>
   <td>{{ module.name }}</td>
   <td class="name">
-    <form action="/exercises/{{ exercise.id }}" method="post"
-          hx-patch="/exercises/{{ exercise.id }}" hx-trigger="change, submit"
-          hx-target="#exercise-{{ exercise.id }}" hx-swap="outerHTML">
-      {% call editable(exercise.name, "what to practise") %}<input type="text" class="cell" id="exercise-{{ exercise.id }}-name" name="name" value="{{ exercise.name }}" size="22"
-             aria-label="name" placeholder="what to practise">{% endcall %}
-      {% call editable(exercise.notes or "", "notes", wide=True) %}<textarea class="cell" id="exercise-{{ exercise.id }}-notes" name="notes" rows="2" aria-label="notes"
-                placeholder="notes">{{ exercise.notes or "" }}</textarea>{% endcall %}
-    </form>
+    {{ name_form(exercise, "#exercise-" ~ exercise.id) }}
     <a class="media-link" href="/exercises/{{ exercise.id }}/media"
        title="attach or play a sound file, a score, a YouTube link or a note">media</a>
   </td>
   <td>
-    {# Its own form: one cannot span two cells. The speed is what this column
-       is about, so it is edited here, with the target it resolves against. #}
-    <form action="/exercises/{{ exercise.id }}" method="post"
-          hx-patch="/exercises/{{ exercise.id }}" hx-trigger="change, submit"
-          hx-target="#exercise-{{ exercise.id }}" hx-swap="outerHTML">
-      {% call editable(exercise.speed or "", "speed") %}<input type="text" class="cell" id="exercise-{{ exercise.id }}-speed" name="speed" value="{{ exercise.speed or "" }}" size="9"
-             aria-label="speed" placeholder="80% or 96"
-             hx-get="/exercises/{{ exercise.id }}/tempo"
-             hx-trigger="keyup changed delay:300ms"
-             hx-params="speed,target_bpm"
-             hx-target="#tempo-{{ exercise.id }}">{% endcall %}
-      {% call editable(exercise.target_bpm or "", "target BPM") %}<input type="text" class="cell" id="exercise-{{ exercise.id }}-target_bpm" name="target_bpm" inputmode="decimal"
-             pattern="[0-9]*\.?[0-9]*" value="{{ exercise.target_bpm or "" }}"
-             size="9" aria-label="target BPM" placeholder="target BPM"
-             hx-get="/exercises/{{ exercise.id }}/tempo"
-             hx-trigger="keyup changed delay:300ms"
-             hx-params="speed,target_bpm"
-             hx-target="#tempo-{{ exercise.id }}">{% endcall %}
-    </form>
-    <span id="tempo-{{ exercise.id }}">{{ tempo_text(exercise) }}</span>
-    {% if exercise.target_bpm is none %}
-    <span class="no-target" title="a percentage cannot resolve without one">no target</span>
-    {% endif %}
+    {# Its own form: one cannot span two cells. #}
+    {{ tempo_form(exercise, "#exercise-" ~ exercise.id) }}
   </td>
   <td>{{ exercise.last_practiced.isoformat() if exercise.last_practiced else "—" }}</td>
   <td>{{ format_due(exercise.next_due) }}</td>

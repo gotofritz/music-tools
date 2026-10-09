@@ -9,13 +9,22 @@
   <h3>{{ running.description or "something" }}
     <span class="muted">since {{ running.started_at.strftime("%H:%M") }}
       ({{ duration_text(running, live or now) }})</span></h3>
-  {% if running_media %}
-  {% with cards = running_media %}
-  {% include "_media.html" %}
+  {% if running_exercise %}
+  {% with exercise = running_exercise %}
+  {% include "_now_exercise.html" %}
   {% endwith %}
-  {% elif running_exercise %}
-  <p class="muted">Nothing attached to this one yet —
-    <a href="/exercises/{{ running_exercise.id }}/media">attach the tune</a>.</p>
+  {% with cards = running_media %}
+  {% include "_media_players.html" %}
+  {% endwith %}
+  {# The media page, inline: the same list and the same four forms, answering
+     into this card instead of that page. #}
+  {% with exercise = running_exercise, cards = running_media, list_id = "now-media-list" %}
+  {% include "_media_list.html" %}
+  <details class="attach">
+    <summary>attach something</summary>
+    {% include "_media_attach.html" %}
+  </details>
+  {% endwith %}
   {% endif %}
   {# The stops: one button per way it comes back, each sending its own
      `algorithm`. Whatever it is, the answer is the log with the picker under

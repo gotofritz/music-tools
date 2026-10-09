@@ -1,0 +1,9 @@
+{# The running exercise's own cells: what the tab row shows, editable in the
+   same way. An edit answers with this block alone — never with the player
+   beside it — so playback and the waveform carry on while the notes or the
+   speed are being typed. #}
+{% from "_exercise_cells.html" import name_form, tempo_form with context %}
+<div id="now-exercise" class="now-exercise">
+  {{ name_form(exercise, "#now-exercise") }}
+  {{ tempo_form(exercise, "#now-exercise") }}
+</div>
