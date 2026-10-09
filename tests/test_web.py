@@ -1947,6 +1947,20 @@ def test_the_media_page_lists_the_roots_paths_are_confined_to(client, le_freak, 
     assert str(roots) in page  # a path is typed in, so say where it may point
 
 
+def test_a_path_pasted_in_quotes_is_attached_without_them(
+    client, conn, le_freak, loop_wav
+):
+    response = client.post(
+        f"/exercises/{le_freak.id}/media",
+        data={"kind": "file", "path": f"'{loop_wav}'"},
+        headers=hx(),
+    )
+
+    assert response.status_code == 200
+    cards = media.exercise_media(conn, exercise_id=le_freak.id)
+    assert cards[0].sources[0].path == str(loop_wav)
+
+
 def test_a_file_is_attached_from_the_page(client, conn, le_freak, loop_wav):
     response = client.post(
         f"/exercises/{le_freak.id}/media",

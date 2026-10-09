@@ -169,14 +169,30 @@ def media_roots() -> tuple[Path, ...]:
     )
 
 
+def unquote_path(path: str) -> str:
+    """The path as typed, without the quotes a file manager wraps it in.
+
+    Finder's "copy as pathname" (⌥⌘C) gives `'/Users/me/a tune.wav'`. One
+    matching pair around the whole thing is dropped, with the whitespace
+    around it; a quote anywhere else is part of the file's name.
+    """
+    path = path.strip()
+    if len(path) >= 2 and path[0] == path[-1] and path[0] in "'\"":
+        path = path[1:-1].strip()
+    return path
+
+
 def resolve_within_roots(path: str, *, roots: tuple[Path, ...] | None = None) -> Path:
     """An absolute path inside the roots, or `OutsideRoots`.
+
+    A pair of quotes around it is dropped first (`unquote_path`).
 
     Resolved before it is compared, so `..` and a symlink out of a root are
     both refused rather than followed. A relative path is refused too: an
     attachment is stored absolute, and there is no sensible directory to read
     one against — the browser's idea of "here" is not the server's.
     """
+    path = unquote_path(path)
     written = Path(path).expanduser()
     if not written.is_absolute():
         raise OutsideRoots(f"{path} is not an absolute path")

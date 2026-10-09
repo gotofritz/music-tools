@@ -269,7 +269,8 @@ with a message rather than quietly read.
 1. On the module page, press **media** beside the row.
 2. Copy the file's **absolute path** — the one starting with `/`. On a Mac,
    select it in Finder and press ⌥⌘C; on Linux use your file manager's "Copy
-   path", or `realpath file.wav` in a terminal.
+   path", or `realpath file.wav` in a terminal. The quotes Finder puts around it
+   are fine; they are dropped.
 3. Paste it into the first box on the media page and press **attach audio or
    video**. A path outside the allowed folders, or to a file that is not there,
    is refused with a message.

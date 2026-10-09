@@ -62,6 +62,22 @@ def test_a_path_inside_the_roots_resolves_to_itself(audio_file):
     assert media.resolve_within_roots(str(path)) == path
 
 
+@pytest.mark.parametrize("quote", ["'", '"'])
+def test_a_quoted_path_resolves_like_the_bare_one(audio_file, quote):
+    """Finder's copy-as-pathname hands over the path in single quotes."""
+    path = audio_file("S/Stomp/loop.wav")
+
+    assert media.resolve_within_roots(f"{quote}{path}{quote}") == path
+    assert media.resolve_within_roots(f"  {quote}{path}{quote}\n") == path
+
+
+def test_only_a_matching_pair_of_quotes_is_trimmed(roots):
+    with pytest.raises(media.OutsideRoots):
+        media.resolve_within_roots(f"'{roots}/loop.wav\"")  # mismatched
+    # a quote that does not wrap the whole path is part of a file's name
+    assert media.resolve_within_roots(f"{roots}/it's.wav'") == roots / "it's.wav'"
+
+
 def test_a_path_outside_the_roots_is_refused(roots, tmp_path):
     outside = tmp_path / "elsewhere.wav"
     outside.write_bytes(b"")
