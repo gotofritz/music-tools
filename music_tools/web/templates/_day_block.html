@@ -11,11 +11,11 @@
     <span class="day-head"><time datetime="{{ summary.day.isoformat() }}">{{ summary.day.isoformat() }}</time>
       <span class="time">{{ format_duration(summary.total_seconds) }}</span></span>
     {# One equal cell per log group, empty ones too; the bar under each is its
-       share of the day, in the colour its group always has. #}
-    {% set cells = group_cells(summary, group_order) %}
+       time on a scale shared by every day shown, in the colour its group always has. #}
+    {% set cells = group_cells(summary, group_order, bar_scale | default(0)) %}
     <span class="group-cells" style="--n: {{ cells | length }}">
       {% for cell in cells %}
-      <span class="group-cell" style="--c: var(--g{{ cell.colour % 10 }})"><span class="group-name">{{ cell.name }}</span> <span class="group-time">{{ format_duration(cell.seconds) }}</span><span class="bar" style="width: {{ '%g' | format(cell.percent) }}%"></span></span>
+      <span class="group-cell" data-seconds="{{ cell.seconds }}" style="--c: var(--g{{ cell.colour % 10 }})"><span class="group-name">{{ cell.name }}</span> <span class="group-time">{{ format_duration(cell.seconds) }}</span><span class="bar" style="width: {{ '%g' | format(cell.percent) }}%"></span></span>
       {% endfor %}
     </span>
   </summary>

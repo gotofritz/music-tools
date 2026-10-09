@@ -452,7 +452,8 @@ details.attach {
 }
 
 /* A day's heading: the date and total, then one equal cell per log group. The
-   bar under each is its share of the day, in the colour its group always has.
+   bar under each is its time on a scale shared by every day shown (app.js
+   rescales it as days are added), in the colour its group always has.
    The browser's disclosure triangle is gone; the heading is still the toggle. */
 :root {
   --g0: #4e79a7;

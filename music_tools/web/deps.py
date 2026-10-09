@@ -88,7 +88,9 @@ class GroupCell(NamedTuple):
     colour: int
 
 
-def group_cells(summary: DaySummary, order: list[str]) -> list[GroupCell]:
+def group_cells(
+    summary: DaySummary, order: list[str], scale: int = 0
+) -> list[GroupCell]:
     """Every log group as a cell of the day, whether or not it has time.
 
     `order` is the groups the live modules define, in tab order, and gives each
@@ -102,11 +104,7 @@ def group_cells(summary: DaySummary, order: list[str]) -> list[GroupCell]:
         GroupCell(
             name=name,
             seconds=seconds.get(name, 0),
-            percent=(
-                100 * seconds.get(name, 0) / summary.total_seconds
-                if summary.total_seconds
-                else 0
-            ),
+            percent=100 * seconds.get(name, 0) / scale if scale else 0,
             colour=index,
         )
         for index, name in enumerate(names)

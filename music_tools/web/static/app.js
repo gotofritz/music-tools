@@ -128,3 +128,21 @@ document.addEventListener("click", (event) => {
   }
   row.querySelector("button.row-start").click();
 });
+
+// The bars are a graph: the same length means the same time on every row. The
+// server draws them against the longest group on the page it rendered; when a
+// page of days is added or a day is redrawn after an edit, the longest on the
+// whole of what is shown may have changed, so every bar is scaled again.
+function rescaleBars() {
+  const cells = [...document.querySelectorAll("#history .group-cell")];
+  const longest = Math.max(0, ...cells.map((cell) => Number(cell.dataset.seconds)));
+  cells.forEach((cell) => {
+    const bar = cell.querySelector(".bar");
+    if (bar) {
+      bar.style.width = longest ? `${(100 * Number(cell.dataset.seconds)) / longest}%` : "0%";
+    }
+  });
+}
+
+document.addEventListener("htmx:afterSettle", rescaleBars);
+document.addEventListener("DOMContentLoaded", rescaleBars);

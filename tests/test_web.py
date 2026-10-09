@@ -1197,7 +1197,7 @@ def test_a_group_the_day_used_but_no_module_has_is_a_cell_too(
     assert any("OLD GROUP" in c and "00:05" in c for c in cells)
 
 
-def test_the_bar_is_the_groups_share_of_the_day_and_each_group_has_a_colour(
+def test_equal_times_are_equal_bars_and_each_group_has_a_colour(
     client, conn, slap, songs, earlier_days
 ):
     day = repo.get_day(conn, date(2026, 6, 6))
@@ -1214,9 +1214,47 @@ def test_the_bar_is_the_groups_share_of_the_day_and_each_group_has_a_colour(
     cells = _cells(client.get("/").text, "2026-06-06")
 
     widths = [_first(r"width: ([\d.]+)%", c) for c in cells]
-    assert [float(w) for w in widths] == [50.0, 50.0]
+    assert [float(w) for w in widths] == [100.0, 100.0]
     colours = [_first(r"--c: ([^;\"]+)", c) for c in cells]
     assert len(set(colours)) == 2
+
+
+def _add_time(conn, day, *, minutes: int, log_group: str):
+    record = repo.get_day(conn, day) or repo.create_day(conn, day=day)
+    started = datetime.combine(day, time(21))
+    entry = repo.create_entry(conn, day_id=record.id, started_at=started)
+    repo.close_entry(
+        conn,
+        entry.id,
+        ended_at=started.replace(minute=minutes % 60, hour=21 + minutes // 60),
+        description=log_group.lower(),
+        log_group=log_group,
+    )
+
+
+def test_bars_share_one_scale_across_every_day_shown(client, conn, slap):
+    jazz = repo.create_module(conn, name="JAZZ", log_group="JAZZ")
+    assert jazz is not None
+    _add_time(conn, date(2026, 6, 10), minutes=20, log_group="JAZZ")
+    _add_time(conn, date(2026, 6, 11), minutes=60, log_group="JAZZ")
+
+    page = client.get("/").text
+
+    def width(day: str) -> float:
+        cell = next(c for c in _cells(page, day) if "JAZZ" in c)
+        return float(_first(r"width: ([\d.]+)%", cell))
+
+    assert width("2026-06-11") == pytest.approx(100.0)
+    assert width("2026-06-10") == pytest.approx(100 / 3, abs=0.01)  # 20 of 60 min
+
+
+def test_every_cell_carries_its_seconds_for_the_page_to_rescale_by(
+    client, slap, songs, earlier_days
+):
+    cells = _cells(client.get("/").text, "2026-06-06")
+
+    assert 'data-seconds="900"' in cells[0]
+    assert 'data-seconds="0"' in cells[1]
 
 
 def test_a_group_with_no_time_has_an_empty_bar(client, slap, songs, earlier_days):

@@ -114,9 +114,13 @@ def history_context(
     "load more" button needs.
     """
     days = recent_days(conn, before=before, limit=PAGE_OF_DAYS + 1, now=now)
+    shown = days[:PAGE_OF_DAYS]
     return {
         "group_order": group_order(conn),
-        "history": days[:PAGE_OF_DAYS],
+        "bar_scale": max(
+            (total.seconds for day in shown for total in day.groups), default=0
+        ),
+        "history": shown,
         "more_before": days[PAGE_OF_DAYS - 1].day if len(days) > PAGE_OF_DAYS else None,
     }
 

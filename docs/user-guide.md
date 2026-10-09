@@ -143,8 +143,8 @@ starts it without opening a window.
   up. **Totals** underneath is the subtotal per log group and the total for the
   day — the same numbers as `practice log`.
 - **Earlier** is the twenty days before it, newest first. Each is a date and total with a row of equal cells under it, one per log group — empty ones too, so
-  the row lines up from day to day. A coloured bar under each cell is its share of that
-  day, and a group keeps its colour. Click the heading to open the day;
+  the row lines up from day to day. A coloured bar under each cell is its time on one scale shared by every day on the
+  page — 60 minutes is three times as long as 20, on any row — and a group keeps its colour. Click the heading to open the day;
   **expand all** / **collapse all** at the top flips them all, and **load more**
   adds the next twenty in whatever mode the button is in. Every load starts
   collapsed. There
