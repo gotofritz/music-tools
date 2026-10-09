@@ -497,7 +497,7 @@ Three rules hold this shape, and the tests in `tests/test_web.py` enforce them:
   practising with the network off.
 
 **History is paginated by date, not by offset.** `GET /days?before=<iso>`
-reads the five finished days before that date, and the button asks for the
+reads the twenty finished days before that date, and the button asks for the
 oldest day it just drew — no counting, no `OFFSET`, and a page that cannot
 shift under an insert. One row past the page is read and thrown away, which is
 how the button knows whether to draw itself. The same URL is the link's `href`

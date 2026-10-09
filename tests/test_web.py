@@ -22,6 +22,7 @@ from music_tools.domain import media, session
 from music_tools.web import deps
 from music_tools.web.app import create_app
 from music_tools.web.deps import get_now, get_rng
+from music_tools.web.views import PAGE_OF_DAYS
 from tests.conftest import SteadyRandom
 
 NOW = datetime(2026, 7, 5, 22, 47)
@@ -598,8 +599,8 @@ def test_the_empty_boxes_on_a_row_say_what_they_are_for(client, songs, le_freak)
 
 @pytest.fixture
 def earlier_days(conn):
-    """Six finished days before the pinned one, one entry each."""
-    for number in range(1, 7):
+    """A page of finished days and one more, before the pinned one."""
+    for number in range(1, PAGE_OF_DAYS + 2):
         day = date(2026, 6, number)
         record = repo.create_day(conn, day=day)
         entry = repo.create_entry(
@@ -634,7 +635,7 @@ def test_today_no_longer_lists_what_is_due(client, le_freak):
 def test_only_a_page_of_days_is_shown_with_a_way_to_get_more(client, earlier_days):
     page = client.get("/").text
 
-    assert "2026-06-01" not in page  # the sixth-oldest, past the page of 5
+    assert "2026-06-01" not in page  # the oldest, one past the page
     assert "load more" in page
     assert 'href="/days?before=2026-06-02"' in page  # carry on from the last shown
 
@@ -671,12 +672,12 @@ def test_every_earlier_day_is_a_collapsed_details_with_a_summary(client, earlier
     page = client.get("/").text
 
     tags = _details(page)
-    assert len(tags) == 5
+    assert len(tags) == PAGE_OF_DAYS
     assert all(" open" not in tag for tag in tags)
-    assert page.count("<summary") == 5
+    assert page.count("<summary") == PAGE_OF_DAYS
     summary = re.search(r"<summary.*?</summary>", page, re.S)
     assert summary is not None
-    assert "2026-06-06" in summary.group(0)
+    assert "2026-06-21" in summary.group(0)  # newest first
     assert "00:15" in summary.group(0)
     assert "TECHNIQUE" in summary.group(0)
 

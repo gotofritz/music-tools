@@ -142,10 +142,10 @@ starts it without opening a window.
 - **Log** is today, line by line, with the entry that is running now counting
   up. **Totals** underneath is the subtotal per log group and the total for the
   day — the same numbers as `practice log`.
-- **Earlier** is the five days before it, newest first. Each is one line — the
+- **Earlier** is the twenty days before it, newest first. Each is one line — the
   date, its total and its subtotals — that opens to show what you played;
   **expand all** / **collapse all** at the top flips them all, and **load more**
-  adds the next five in whatever mode the button is in. Every load starts
+  adds the next twenty in whatever mode the button is in. Every load starts
   collapsed. There
   is no date picker and no search: it is a log, and you read it backwards.
 - **Every line is editable where it is.** Click a time, the name, the notes,

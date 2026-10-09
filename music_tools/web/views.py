@@ -21,7 +21,7 @@ from music_tools.domain.session import (
 
 #: How many finished days a page of history holds. Small on purpose: the
 #: button is there for the rare look backwards, not for scrolling a year.
-PAGE_OF_DAYS = 5
+PAGE_OF_DAYS = 20
 
 
 def running_entry(conn: sqlite3.Connection, *, now: datetime) -> PracticeEntry | None:
