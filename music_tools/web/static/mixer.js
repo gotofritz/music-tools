@@ -64,8 +64,10 @@
     var span = null; // a dragged loop span, in tune seconds
     var frame = 0;
     var wanted = 0; // the latest load asked for; an older one that lands late is dropped
-    var speed = slider.disabled ? 1 : parseFloat(root.dataset.ratio) || 1;
-    slider.value = speed;
+    // The range input clamps what it is given, so a row at 40% starts the
+    // slider (and the render asked for) at its floor of 50%.
+    slider.value = slider.disabled ? 1 : parseFloat(root.dataset.ratio) || 1;
+    var speed = Math.round(parseFloat(slider.value) * 100) / 100;
 
     var player = { root: root, close: function () { if (transport) transport.close(); } };
     players.push(player);
@@ -145,7 +147,6 @@
           if (loop.checked) transport.setLoop(span || { start: 0, end: transport.duration() });
         } else {
           transport.swap(buffers, at);
-          if (loop.checked) transport.setLoop(span || { start: 0, end: transport.duration() });
         }
         playButton.disabled = false;
         status.textContent = "";
