@@ -133,21 +133,69 @@ tr.active {
   max-width: 32rem;
 }
 
-/* The player: the waveform, then one row of controls. Until player.js has run
-   (or with it off) only the native <audio controls> shows. */
+/* The player: a lane per track, then one row of controls. Until mixer.js has
+   run (or with it off) only the native <audio controls> show, one per track. */
 .player {
   --wave: #5b7a99;
   --playhead: #d33;
+  --loop: rgba(91, 122, 153, 0.18);
   max-width: 32rem;
 }
 
+.player.set {
+  max-width: 52rem;
+}
+
 .player:not([data-ready]) canvas,
-.player:not([data-ready]) .player-controls {
+.player:not([data-ready]) .player-controls,
+.player:not([data-ready]) .strip {
   display: none;
 }
 
 .player[data-ready] audio {
   display: none;
+}
+
+/* A lone file's name sits over its waveform. */
+.player:not(.set) .tracks {
+  display: block;
+}
+
+/* A set's lanes: name, waveform, strip — three columns placed by name, so a
+   cell that is not shown yet (the canvas before mixer.js) leaves its column
+   empty rather than pulling the next one in. */
+.player.set .tracks {
+  grid-template-columns: max-content minmax(0, 1fr) max-content;
+  gap: 0.15rem 0.6rem;
+}
+
+.player.set .track-name {
+  grid-column: 1;
+}
+
+.player.set canvas.axis,
+.player.set canvas.wave,
+.player.set audio {
+  grid-column: 2;
+}
+
+.player.set .strip {
+  grid-column: 3;
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  font-size: 0.75rem;
+}
+
+.strip input[type="range"] {
+  width: 4.5rem;
+}
+
+.player canvas.axis {
+  display: block;
+  width: 100%;
+  height: 18px;
+  color: var(--muted);
 }
 
 .player canvas.wave {
@@ -157,6 +205,11 @@ tr.active {
   margin: 0.2rem 0;
   background: color-mix(in srgb, var(--muted) 12%, transparent);
   cursor: pointer;
+}
+
+.player.set canvas.wave {
+  height: 48px;
+  margin: 0;
 }
 
 .player-controls {
@@ -170,6 +223,11 @@ tr.active {
 .player-controls output {
   min-width: 7rem;
   display: inline-block;
+}
+
+.player-controls output.clock {
+  min-width: 5.5rem;
+  font-variant-numeric: tabular-nums;
 }
 
 iframe.youtube {

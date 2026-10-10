@@ -373,6 +373,7 @@ def test_a_set_member_is_rendered_mono(tmp_path, cache):
 
     assert mono.parent == cache
     assert AudioSegment.from_file(mono).channels == 1
+    assert AudioSegment.from_file(mono).frame_rate == render.SET_RATE
     assert render.render_audio(path, cache=cache) == path  # stereo is untouched
 
 

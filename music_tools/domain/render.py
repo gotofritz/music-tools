@@ -167,6 +167,11 @@ def shift_pitch(source: Path, /, *, semitones: int, cache: Path) -> Path:
 MIN_SPEED = 0.5
 MAX_SPEED = 1.0
 
+#: The rate a member of a set is played at. Decoded audio is the browser's
+#: budget — float32, held whole — and mono at half the CD rate brings eight
+#: four-minute stems from around 680 MB to under 200 MB.
+SET_RATE = 22050
+
 #: The speeds that get used, rendered when the media is attached so the common
 #: moves of the slider are cache hits rather than a wait. Full speed is the
 #: file itself.
@@ -187,8 +192,9 @@ def render_audio(
     Speed is a render rather than `playbackRate` because Web Audio has no
     `preservesPitch` (docs/plans/05-playback.md, 5b): slower here means longer
     at the same pitch. Speed and pitch are one ffmpeg pass, so a set member
-    goes through one job whatever is asked of it. `mono` downmixes first, which
-    is what a member of a set is played as — and halves the stretch's work.
+    goes through one job whatever is asked of it. `mono` is how a member of a
+    set is played: downmixed first, which halves the stretch's work, and
+    resampled to `SET_RATE`, which halves what the browser fetches and holds.
 
     Speed is rounded to the slider's step, so 0.8 and 0.8000001 are one entry.
     Full speed, no shift and stereo is the file itself: nothing rendered.
@@ -215,6 +221,8 @@ def render_audio(
                 rate = int(mediainfo(str(source))["sample_rate"])
                 chain += [f"asetrate={rate * factor}", f"aresample={rate}"]
             chain += atempo_chain(speed / factor)
+        if mono:
+            chain.append(f"aresample={SET_RATE}")
         try:
             run_ffmpeg("-i", source, "-vn", "-af", ",".join(chain), out)
         except RenderError as failed:
@@ -229,6 +237,7 @@ def render_audio(
         speed=speed,
         semitones=semitones,
         mono=mono,
+        rate=SET_RATE if mono else None,
         engine="rubberband" if has_rubberband() else "atempo",
     )
 

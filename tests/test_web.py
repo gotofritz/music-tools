@@ -1772,7 +1772,9 @@ def test_a_single_track_player_has_a_volume_slider(client, conn, le_freak, loop_
     assert player  # inside the player's own controls, not beside it
 
 
-def test_a_track_set_gets_no_volume_slider_of_its_own(client, conn, le_freak, loop_wav):
+def test_a_track_set_has_one_volume_over_the_whole_mix(
+    client, conn, le_freak, loop_wav
+):
     from pydub import AudioSegment
 
     drums = loop_wav.with_name("drums.wav")
@@ -1790,7 +1792,10 @@ def test_a_track_set_gets_no_volume_slider_of_its_own(client, conn, le_freak, lo
     )
     start(client, le_freak.id)
 
-    assert 'class="volume"' not in client.get("/").text
+    page = client.get("/").text
+
+    assert page.count('class="volume"') == 1  # the master; each track has a gain
+    assert page.count('class="gain"') == 2
 
 
 def test_a_youtube_attachment_is_an_embed_with_the_link_behind_it(
@@ -3153,7 +3158,8 @@ def test_a_lone_file_gets_a_player_wired_to_its_urls(client, conn, le_freak, loo
     assert f'data-peaks-url="/media/{source.id}/peaks"' in page
     assert f'data-audio-url="/media/{source.id}/audio"' in page
     assert f'data-speed-url="/exercises/{le_freak.id}/speed"' in page
-    assert "/static/player.js" in page
+    assert "/static/transport.js" in page
+    assert "/static/mixer.js" in page
 
 
 def test_the_slider_starts_at_the_exercises_ratio(client, conn, songs, loop_wav):
@@ -3184,9 +3190,9 @@ def test_with_no_target_the_slider_sits_at_one_and_is_disabled(
     assert "target" in slider  # says why
 
 
-def test_a_track_set_keeps_its_stacked_players_until_5b(
-    client, conn, le_freak, loop_wav, roots
-):
+@pytest.fixture
+def stems(conn, le_freak, loop_wav, roots):
+    """A set of two: the loop, and four seconds of drums beside it."""
     from pydub import AudioSegment
 
     drums = roots / "S" / "le freak" / "drums.wav"
@@ -3194,20 +3200,88 @@ def test_a_track_set_keeps_its_stacked_players_until_5b(
     first = media.attach(
         conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
     )
-    media.attach(
+    second = media.attach(
         conn,
         exercise_id=le_freak.id,
         kind="file",
         path=str(drums),
         group_id=first.group_id,
+        label="drums",
         now=NOW,
+    )
+    return [first, second]
+
+
+def test_a_track_set_is_one_player_with_a_lane_per_track(client, conn, le_freak, stems):
+    start(client, le_freak.id)
+
+    page = client.get("/").text
+
+    assert page.count('class="player set"') == 1
+    assert 'data-set="1"' in page
+    player = page.split('class="player set"')[1].split("</article>")[0]
+    assert player.count('class="track"') == 2
+    assert player.count('class="wave"') == 2
+    assert player.count('class="axis"') == 1  # one time axis for every lane
+    assert player.count('class="play"') == 1  # one transport
+    for track in stems:
+        assert f'data-audio-url="/media/{track.id}/audio"' in player
+        assert f'data-peaks-url="/media/{track.id}/peaks"' in player
+        assert f'data-describe-url="/media/{track.id}"' in player
+
+
+def test_without_javascript_a_set_is_still_its_stacked_players(
+    client, conn, le_freak, stems
+):
+    start(client, le_freak.id)
+
+    page = client.get("/").text
+
+    assert page.count("<audio controls") == 2
+
+
+def test_each_lane_carries_its_strip_at_the_saved_mix(client, conn, le_freak, stems):
+    media.describe(conn, source_id=stems[1].id, gain=0.5, pan=-0.25, muted=True)
+    start(client, le_freak.id)
+
+    page = client.get("/").text
+    lane = page.split(f'data-id="{stems[1].id}"')[1].split('class="track"')[0]
+
+    assert 'data-gain="0.5"' in lane
+    assert 'data-pan="-0.25"' in lane
+    assert 'data-muted="1"' in lane
+    assert 'class="mute"' in lane and "checked" in lane.split('class="solo"')[0]
+    assert 'class="solo"' in lane
+    assert 'value="0.5" aria-label="gain"' in lane
+    assert 'value="-0.25" aria-label="pan"' in lane
+
+
+def test_a_lone_file_is_a_set_of_one_with_no_strip(client, conn, le_freak, loop_wav):
+    media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
     )
     start(client, le_freak.id)
 
     page = client.get("/").text
 
-    assert page.count("<audio") == 2
-    assert 'class="player"' not in page
+    assert 'class="player"' in page
+    assert 'data-set="0"' in page
+    assert page.count('class="track"') == 1
+    assert 'class="strip"' not in page
+
+
+def test_the_strip_saves_through_the_tracks_own_columns(client, conn, le_freak, stems):
+    response = client.patch(
+        f"/media/{stems[0].id}",
+        data={"gain": "1.5", "pan": "0.5", "muted": "on"},
+        headers=hx(**{"HX-Target": "now-media-list"}),
+    )
+
+    assert response.status_code == 200
+    saved = repo.get_media_source(conn, stems[0].id)
+    assert saved is not None
+    assert (saved.gain, saved.pan, saved.muted) == (1.5, 0.5, True)
+    assert "media-players" not in response.text  # the audio plays on
 
 
 def test_the_media_page_says_how_to_add_a_sound_file(client, le_freak, roots):
