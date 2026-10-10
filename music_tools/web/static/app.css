@@ -148,7 +148,8 @@ tr.active {
 
 .player:not([data-ready]) canvas,
 .player:not([data-ready]) .player-controls,
-.player:not([data-ready]) .strip {
+.player:not([data-ready]) .ms,
+.player:not([data-ready]) .lane-head label {
   display: none;
 }
 
@@ -156,39 +157,63 @@ tr.active {
   display: none;
 }
 
-/* A lone file's name sits over its waveform. */
-.player:not(.set) .tracks {
+/* A lane: a thin header (name, and a set's gain) over the waveform. A set
+   puts M and S stacked to its left, in a narrow column of their own, and the
+   time axis is indented by that column so it lines up with the waves. */
+.player .tracks {
   display: block;
 }
 
-/* A set's lanes: name, waveform, strip — three columns placed by name, so a
-   cell that is not shown yet (the canvas before mixer.js) leaves its column
-   empty rather than pulling the next one in. */
-.player.set .tracks {
-  grid-template-columns: max-content minmax(0, 1fr) max-content;
-  gap: 0.15rem 0.6rem;
+.player .track {
+  display: block;
+  margin-bottom: 0.35rem;
 }
 
-.player.set .track-name {
+.player.set .track {
+  display: grid;
+  grid-template-columns: 2.6rem minmax(0, 1fr);
+  column-gap: 0.4rem;
+}
+
+.player .lane-head {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  min-height: 1.1rem;
+  font-size: 0.75rem;
+  line-height: 1.1;
+}
+
+.player.set .ms {
   grid-column: 1;
+  grid-row: 1 / span 3;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.15rem;
+  font-size: 0.7rem;
 }
 
-.player.set canvas.axis,
+.player.set .ms label {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  white-space: nowrap;
+}
+
+.player.set .ms input {
+  margin: 0;
+}
+
+.player.set .lane-head,
 .player.set canvas.wave,
 .player.set audio {
   grid-column: 2;
 }
 
-.player.set .strip {
-  grid-column: 3;
-  display: flex;
-  gap: 0.4rem;
-  align-items: center;
-  font-size: 0.75rem;
-}
-
-.strip input[type="range"] {
-  width: 4.5rem;
+.lane-head input[type="range"] {
+  width: 5rem;
+  height: 0.8rem;
 }
 
 .player canvas.axis {
@@ -198,18 +223,22 @@ tr.active {
   color: var(--muted);
 }
 
+.player.set canvas.axis {
+  margin-left: 3rem;
+  width: calc(100% - 3rem);
+}
+
 .player canvas.wave {
   display: block;
   width: 100%;
-  height: 80px;
-  margin: 0.2rem 0;
+  height: 96px;
+  margin: 0.1rem 0 0;
   background: color-mix(in srgb, var(--muted) 12%, transparent);
   cursor: pointer;
 }
 
 .player.set canvas.wave {
-  height: 48px;
-  margin: 0;
+  height: 72px;
 }
 
 .player-controls {

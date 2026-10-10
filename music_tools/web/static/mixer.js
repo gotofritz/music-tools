@@ -10,7 +10,7 @@
 // Speed and pitch are server renders (`/media/{id}/audio?speed=&semitones=`):
 // moving either fetches every track again and swaps the buffers in at the same
 // place in the tune. The slider is the exercise's speed, written back through
-// POST data-speed-url. Gain, pan and mute are the track's own columns, written
+// POST data-speed-url. Gain and mute are the track's own columns, written
 // through PATCH /media/{id}; solo is a view and is not stored.
 (function () {
   "use strict";
@@ -85,8 +85,7 @@
       lane.strip = {
         mute: lane.querySelector(".mute input"),
         solo: lane.querySelector(".solo input"),
-        gain: lane.querySelector(".gain input"),
-        pan: lane.querySelector(".pan input")
+        gain: lane.querySelector(".gain input")
       };
     });
 
@@ -106,7 +105,6 @@
     function mixOf(lane) {
       return {
         gain: parseFloat(lane.dataset.gain),
-        pan: parseFloat(lane.dataset.pan),
         muted: lane.dataset.muted === "1"
       };
     }
@@ -338,16 +336,13 @@
 
     pitch.addEventListener("change", load);
 
-    // The strip. Moves are heard at once; gain, pan and mute are saved when
-    // a control is let go of, solo never.
+    // The strip. Moves are heard at once; gain and mute are saved when a
+    // control is let go of, solo never.
     lanes.forEach(function (lane, i) {
       var strip = lane.strip;
       if (!strip.gain) return;
       strip.gain.addEventListener("input", function () {
         if (transport) transport.setGain(i, parseFloat(strip.gain.value));
-      });
-      strip.pan.addEventListener("input", function () {
-        if (transport) transport.setPan(i, parseFloat(strip.pan.value));
       });
       strip.mute.addEventListener("change", function () {
         if (transport) transport.setMuted(i, strip.mute.checked);
@@ -357,15 +352,13 @@
         if (transport) transport.setSolo(i, strip.solo.checked);
       });
       strip.gain.addEventListener("change", function () { save(lane); });
-      strip.pan.addEventListener("change", function () { save(lane); });
     });
 
     function save(lane) {
       var strip = lane.strip;
       lane.dataset.gain = strip.gain.value;
-      lane.dataset.pan = strip.pan.value;
       lane.dataset.muted = strip.mute.checked ? "1" : "0";
-      var values = { gain: strip.gain.value, pan: strip.pan.value };
+      var values = { gain: strip.gain.value };
       if (strip.mute.checked) values.muted = "on";
       // On the running card the attachment list shows the same columns, so it
       // is redrawn from the answer; elsewhere the answer is not needed.
@@ -382,24 +375,19 @@
       }
     }
 
-    // A gain, pan or mute typed into the attachment list is the same column:
+    // A gain or mute typed into the attachment list is the same column:
     // the strip and the transport follow it.
     player.follow = function () {
       lanes.forEach(function (lane, i) {
         var id = lane.dataset.id;
         var gain = document.getElementById("media-" + id + "-gain");
-        var pan = document.getElementById("media-" + id + "-pan");
         var muted = document.getElementById("media-" + id + "-muted");
         var strip = lane.strip;
         if (!gain || !strip.gain) return;
-        var g = parseFloat(gain.value), p = parseFloat(pan.value);
+        var g = parseFloat(gain.value);
         if (!isNaN(g) && g !== parseFloat(strip.gain.value)) {
           strip.gain.value = g;
           if (transport) transport.setGain(i, g);
-        }
-        if (!isNaN(p) && p !== parseFloat(strip.pan.value)) {
-          strip.pan.value = p;
-          if (transport) transport.setPan(i, p);
         }
         if (muted.checked !== strip.mute.checked) {
           strip.mute.checked = muted.checked;

@@ -5,8 +5,9 @@
    locked to one clock, waveforms from server-computed peaks under a shared
    playhead and time axis, click to seek, drag to loop a span, a speed slider
    bound to the row's ratio and a semitone control. A set adds the mixer
-   strip — mute, solo, gain and pan per track, the first three saved on the
-   track. A lone file is a set of one, without the strip.
+   strip — M and S stacked beside each lane, and a gain in its header; gain
+   and mute are saved on the track. A lone file is a set of one, without
+   the strip.
 
    The `<audio controls>` in each lane is the whole thing with the JavaScript
    off: stacked, unsynchronised players. `mixer.js` takes over when it runs.
@@ -33,22 +34,23 @@
            data-peaks-url="/media/{{ track.id }}/peaks"
            data-describe-url="/media/{{ track.id }}"
            data-gain="{{ "%g" | format(track.gain) }}"
-           data-pan="{{ "%g" | format(track.pan) }}"
            data-muted="{{ 1 if track.muted else 0 }}">
-        <span class="track-name">{{ track.label or file_name(track.path) }}</span>
+        {% if card.is_set %}
+        <div class="ms">
+          <label class="mute" title="mute"><input type="checkbox"{% if track.muted %} checked{% endif %}> M</label>
+          <label class="solo" title="solo: hear only the soloed tracks"><input type="checkbox"> S</label>
+        </div>
+        {% endif %}
+        <div class="lane-head">
+          <span class="track-name">{{ track.label or file_name(track.path) }}</span>
+          {% if card.is_set %}
+          <label class="gain">gain
+            <input type="range" min="0" max="2" step="0.01" value="{{ "%g" | format(track.gain) }}" aria-label="gain"></label>
+          {% endif %}
+        </div>
         <canvas class="wave" aria-label="waveform: click to seek, drag to loop a span"></canvas>
         <audio controls preload="{{ "none" if card.is_set else "metadata" }}"
                src="/media/{{ track.id }}/audio"></audio>
-        {% if card.is_set %}
-        <div class="strip">
-          <label class="mute" title="mute"><input type="checkbox"{% if track.muted %} checked{% endif %}> M</label>
-          <label class="solo" title="solo: hear only the soloed tracks"><input type="checkbox"> S</label>
-          <label class="gain">gain
-            <input type="range" min="0" max="2" step="0.01" value="{{ "%g" | format(track.gain) }}" aria-label="gain"></label>
-          <label class="pan">pan
-            <input type="range" min="-1" max="1" step="0.01" value="{{ "%g" | format(track.pan) }}" aria-label="pan"></label>
-        </div>
-        {% endif %}
       </div>
       {% endfor %}
     </div>

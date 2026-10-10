@@ -321,10 +321,10 @@ disagrees is refused by name — a set plays as one thing, so a member from a
 different take is a mistake worth catching early.
 
 A set plays as one tune: one player with a lane per track, every track locked
-to the same clock, and beside each lane **M** (mute), **S** (solo — with any
-track soloed you hear only the soloed ones), **gain** and **pan**. Gain, pan
-and mute are kept with the track, so the mix is the same next time; solo is
-not. Loading a set takes a moment (the card counts the tracks in), and a set
+to the same clock. Each lane has a thin header with the track's name and its
+**gain**, and to its left **M** (mute) and **S** (solo — with any track
+soloed you hear only the soloed ones). Gain and mute are kept with the track,
+so the mix is the same next time; solo is not. Loading a set takes a moment (the card counts the tracks in), and a set
 plays in mono, which is what keeps eight tracks from filling the browser's
 memory. Play a set to the end and the card says how closely the tracks agreed.
 Without JavaScript a set is a stack of separate players, not in sync.

@@ -24,7 +24,7 @@
   // same render quantum rather than on whichever one the call happened in.
   var LEAD = 0.05;
 
-  // The time constant of a gain or pan move: fast enough to feel instant,
+  // The time constant of a gain move: fast enough to feel instant,
   // slow enough not to click.
   var SMOOTH = 0.01;
 
@@ -44,22 +44,19 @@
   }
 
   // The tracks and their mix, once: `buffers` rendered at `stretch`, `mix` an
-  // array of {gain, pan, muted}. Each is source → gain → pan → master.
+  // array of {gain, muted}. Each is source → gain → master.
   Transport.prototype.load = function (buffers, stretch, mix) {
     var ctx = this.ctx;
     var master = this.master;
     this.stop();
-    this.tracks.forEach(function (track) { track.pan.disconnect(); });
+    this.tracks.forEach(function (track) { track.gain.disconnect(); });
     this.tracks = buffers.map(function (buffer, i) {
       var gain = ctx.createGain();
-      var pan = ctx.createStereoPanner();
-      gain.connect(pan);
-      pan.connect(master);
+      gain.connect(master);
       var wanted = mix[i] || {};
       return {
         buffer: buffer,
         gain: gain,
-        pan: pan,
         level: wanted.gain == null ? 1 : wanted.gain,
         muted: !!wanted.muted,
         soloed: false,
@@ -68,9 +65,6 @@
     });
     this.stretch = stretch;
     this.offset = 0;
-    this.tracks.forEach(function (track, i) {
-      track.pan.pan.value = (mix[i] && mix[i].pan) || 0;
-    });
     this.applyMix(true);
   };
 
@@ -221,10 +215,6 @@
   Transport.prototype.setSolo = function (i, soloed) {
     this.tracks[i].soloed = soloed;
     this.applyMix();
-  };
-
-  Transport.prototype.setPan = function (i, pan) {
-    this.tracks[i].pan.pan.setTargetAtTime(pan, this.ctx.currentTime, SMOOTH);
   };
 
   Transport.prototype.setVolume = function (volume) {

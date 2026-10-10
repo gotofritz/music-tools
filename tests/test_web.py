@@ -3241,19 +3241,40 @@ def test_without_javascript_a_set_is_still_its_stacked_players(
 
 
 def test_each_lane_carries_its_strip_at_the_saved_mix(client, conn, le_freak, stems):
-    media.describe(conn, source_id=stems[1].id, gain=0.5, pan=-0.25, muted=True)
+    media.describe(conn, source_id=stems[1].id, gain=0.5, muted=True)
     start(client, le_freak.id)
 
     page = client.get("/").text
     lane = page.split(f'data-id="{stems[1].id}"')[1].split('class="track"')[0]
 
     assert 'data-gain="0.5"' in lane
-    assert 'data-pan="-0.25"' in lane
     assert 'data-muted="1"' in lane
-    assert 'class="mute"' in lane and "checked" in lane.split('class="solo"')[0]
-    assert 'class="solo"' in lane
+    assert "checked" in lane.split('class="solo"')[0]  # the mute box
     assert 'value="0.5" aria-label="gain"' in lane
-    assert 'value="-0.25" aria-label="pan"' in lane
+
+
+def test_a_lane_is_m_and_s_beside_a_header_of_name_and_gain_over_the_wave(
+    client, conn, le_freak, stems
+):
+    start(client, le_freak.id)
+
+    page = client.get("/").text
+    lane = page.split(f'data-id="{stems[1].id}"')[1].split('class="track"')[0]
+    ms = lane.split('class="ms"')[1].split("</div>")[0]
+    head = lane.split('class="lane-head"')[1].split("</div>")[0]
+
+    assert 'class="mute"' in ms and 'class="solo"' in ms
+    assert "drums" in head and 'class="gain"' in head
+    assert lane.index('class="lane-head"') < lane.index('class="wave"')
+
+
+def test_the_player_has_no_pan(client, conn, le_freak, stems):
+    start(client, le_freak.id)
+
+    page = client.get("/").text
+
+    assert 'aria-label="pan"' not in page
+    assert 'class="pan"' not in page
 
 
 def test_a_lone_file_is_a_set_of_one_with_no_strip(client, conn, le_freak, loop_wav):
@@ -3273,14 +3294,14 @@ def test_a_lone_file_is_a_set_of_one_with_no_strip(client, conn, le_freak, loop_
 def test_the_strip_saves_through_the_tracks_own_columns(client, conn, le_freak, stems):
     response = client.patch(
         f"/media/{stems[0].id}",
-        data={"gain": "1.5", "pan": "0.5", "muted": "on"},
+        data={"gain": "1.5", "muted": "on"},
         headers=hx(**{"HX-Target": "now-media-list"}),
     )
 
     assert response.status_code == 200
     saved = repo.get_media_source(conn, stems[0].id)
     assert saved is not None
-    assert (saved.gain, saved.pan, saved.muted) == (1.5, 0.5, True)
+    assert (saved.gain, saved.muted) == (1.5, True)
     assert "media-players" not in response.text  # the audio plays on
 
 

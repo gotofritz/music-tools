@@ -377,7 +377,9 @@ its own when it has no group, and a member's `position` is its place in the set.
 An audio or video file plays in the page, and a track set plays as one tune:
 a lane per track with its waveform, a shared playhead and time axis, click to
 seek, drag to loop a span, a speed slider, a semitone control, and for a set a
-mixer strip — mute, solo, gain and pan per track. One engine for both: a lone
+mixer strip — M and S stacked beside each lane, a gain in its header. A
+`pan` column exists from Phase 4 but nothing plays or edits it: the player
+did not want one. One engine for both: a lone
 file is a set of one without the strip. `static/transport.js` is the audio and
 has no DOM in it; `static/mixer.js` is the page around it. A1 still holds — no
 framework, no Node. Five decisions are load-bearing:
@@ -420,7 +422,7 @@ framework, no Node. Five decisions are load-bearing:
 - **Decoded audio is the budget.** A set is fetched mono at 22.05 kHz and
   decoded through an `OfflineAudioContext` at that rate (an `AudioContext`
   would decode at the device's); a lone file keeps its stereo. The eight-track
-  cap is `media.MAX_TRACKS`, enforced on attach. Gain, pan and mute are the
+  cap is `media.MAX_TRACKS`, enforced on attach. Gain and mute are the
   member's own columns, written through `PATCH /media/{id}` — the same handler
   as the attachment list, which follows the strip and which the strip follows;
   solo is a view and is not stored. A card swapped off the page closes its
