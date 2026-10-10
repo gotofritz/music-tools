@@ -5,8 +5,8 @@
    locked to one clock, waveforms from server-computed peaks under a shared
    playhead and time axis, click to seek, drag to loop a span, a speed slider
    bound to the row's ratio and a semitone control. A set adds the mixer
-   strip — M and S stacked beside each lane, and a gain in its header; gain
-   and mute are saved on the track. A lone file is a set of one, without
+   strip — the name, M, S and a gain to the left of each lane, so the waves
+   stack with nothing between them; gain and mute are saved on the track. A lone file is a set of one, without
    the strip.
 
    The `<audio controls>` in each lane is the whole thing with the JavaScript
@@ -35,19 +35,20 @@
            data-describe-url="/media/{{ track.id }}"
            data-gain="{{ "%g" | format(track.gain) }}"
            data-muted="{{ 1 if track.muted else 0 }}">
+        {% set name = track.label or file_name(track.path) %}
         {% if card.is_set %}
-        <div class="ms">
+        {# Everything but the wave sits to its left, so the waves stack with
+           nothing between them. The name is clipped; hover shows it whole. #}
+        <div class="side">
+          <span class="track-name" title="{{ name }}">{{ name }}</span>
           <label class="mute" title="mute"><input type="checkbox"{% if track.muted %} checked{% endif %}> M</label>
           <label class="solo" title="solo: hear only the soloed tracks"><input type="checkbox"> S</label>
-        </div>
-        {% endif %}
-        <div class="lane-head">
-          <span class="track-name">{{ track.label or file_name(track.path) }}</span>
-          {% if card.is_set %}
-          <label class="gain">gain
+          <label class="gain" title="gain">
             <input type="range" min="0" max="2" step="0.01" value="{{ "%g" | format(track.gain) }}" aria-label="gain"></label>
-          {% endif %}
         </div>
+        {% else %}
+        <span class="track-name">{{ name }}</span>
+        {% endif %}
         <canvas class="wave" aria-label="waveform: click to seek, drag to loop a span"></canvas>
         <audio controls preload="{{ "none" if card.is_set else "metadata" }}"
                src="/media/{{ track.id }}/audio"></audio>

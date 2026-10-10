@@ -3253,19 +3253,20 @@ def test_each_lane_carries_its_strip_at_the_saved_mix(client, conn, le_freak, st
     assert 'value="0.5" aria-label="gain"' in lane
 
 
-def test_a_lane_is_m_and_s_beside_a_header_of_name_and_gain_over_the_wave(
+def test_a_lanes_name_and_strip_sit_to_the_left_of_its_wave(
     client, conn, le_freak, stems
 ):
     start(client, le_freak.id)
 
     page = client.get("/").text
     lane = page.split(f'data-id="{stems[1].id}"')[1].split('class="track"')[0]
-    ms = lane.split('class="ms"')[1].split("</div>")[0]
-    head = lane.split('class="lane-head"')[1].split("</div>")[0]
+    side = lane.split('class="side"')[1].split("</div>")[0]
 
-    assert 'class="mute"' in ms and 'class="solo"' in ms
-    assert "drums" in head and 'class="gain"' in head
-    assert lane.index('class="lane-head"') < lane.index('class="wave"')
+    assert 'title="drums"' in side  # clipped on the page, whole on hover
+    for control in ('class="mute"', 'class="solo"', 'class="gain"'):
+        assert control in side
+    assert lane.index('class="side"') < lane.index('class="wave"')
+    assert "lane-head" not in lane  # nothing between one wave and the next
 
 
 def test_the_player_has_no_pan(client, conn, le_freak, stems):

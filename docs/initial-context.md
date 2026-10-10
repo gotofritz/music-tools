@@ -377,7 +377,8 @@ its own when it has no group, and a member's `position` is its place in the set.
 An audio or video file plays in the page, and a track set plays as one tune:
 a lane per track with its waveform, a shared playhead and time axis, click to
 seek, drag to loop a span, a speed slider, a semitone control, and for a set a
-mixer strip — M and S stacked beside each lane, a gain in its header. A
+mixer strip — name, M, S and gain in a column left of each lane, the waves
+stacked with nothing between them. A
 `pan` column exists from Phase 4 but nothing plays or edits it: the player
 did not want one. One engine for both: a lone
 file is a set of one without the strip. `static/transport.js` is the audio and
