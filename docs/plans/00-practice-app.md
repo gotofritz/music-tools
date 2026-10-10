@@ -48,9 +48,10 @@ that first depends on it is named.
   way to test it. Still no framework — a framework would not have made it
   testable either — but it is the first place the rule costs something.
   WebGL, Tauri and a native Rust rewrite were all weighed against it and all
-  declined; `05-playback.md` keeps that reasoning, along with the one hedge
-  that survived it — an audio sidecar owning playback, with the page as its
-  remote control, if browser playback disappoints.
+  declined; `../archive/2026-10-10-2032-ed876f9-05-playback.md` keeps that
+  reasoning, along with the one hedge that survived it — an audio sidecar
+  owning playback, with the page as its remote control, if browser playback
+  disappoints.
 - **A2 — parked with the loop editor.** Loop configs in SQLite, exported to
   `*.loop.yml` on every save, belonged to the YAML editor now at the back of
   the queue (`08-loop-editor.md`). Hand-written YAML and the CLI stay the loop
@@ -321,7 +322,7 @@ steps as its phase starts, and is expected to bend on contact with reality.
 | 2 | Domain, database, importer | `../archive/2026-08-15-1541-647ef39-02-domain.md` (done) | The sheet's brain in Python, plus a CLI and the migrated history |
 | 3 | The app, and the cutover | `../archive/2026-08-16-1213-21118f2-03-web.md` (done) | The spreadsheet retired |
 | 4 | Exercise media, and the log rework | `../archive/2026-08-17-1951-4f9262a-04-exercise-media.md` (done) | Start it and it is in the log, tune showing; done when done |
-| 5 | Playback | `05-playback.md` | The tune plays in the page: waveform, playhead, speed, pitch — then 3–8 stems from one transport, with a mixer |
+| 5 | Playback | `../archive/2026-10-10-2032-ed876f9-05-playback.md` (done) | The tune plays in the page: waveform, playhead, speed, pitch — then 3–8 stems from one transport, with a mixer |
 | 6 | Markers | `06-markers.md` | Markers placed, edited, guessed, exported — no Transcribe! |
 | 7 | Segments | `07-segments.md` | `loop.py`'s output built by pointing, no YAML in sight |
 | 8 | Loop editor | `08-loop-editor.md` (parked) | The YAML grid editor, if it is ever missed |
