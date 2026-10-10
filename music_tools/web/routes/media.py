@@ -20,7 +20,15 @@ from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+)
 from fastapi.responses import FileResponse, HTMLResponse, Response
 
 from music_tools.db import repository as repo
@@ -28,7 +36,13 @@ from music_tools.domain import media, waveform
 from music_tools.domain import render as renders
 from music_tools.domain.models import Exercise, MediaSource
 from music_tools.web import views
-from music_tools.web.deps import fragment_or_redirect, get_conn, get_now, render
+from music_tools.web.deps import (
+    exercise_ratio,
+    fragment_or_redirect,
+    get_conn,
+    get_now,
+    render,
+)
 
 router = APIRouter()
 
@@ -74,19 +88,26 @@ def media_file(
 @router.get("/media/{source_id}/audio")
 def media_audio(
     source_id: int,
+    speed: float = Query(1.0, ge=renders.MIN_SPEED, le=renders.MAX_SPEED),
     semitones: int = Query(0, ge=-renders.MAX_SEMITONES, le=renders.MAX_SEMITONES),
+    mono: bool = Query(False),
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> FileResponse:
-    """What the player plays: the file's audio, transposed by `semitones`.
+    """What the player plays: the file's audio, at `speed` and `semitones`.
 
-    A video is extracted and a shift is rendered, both through the cache; a
-    plain audio file at zero is served as it sits. Ranges come with
-    `FileResponse`, from the cache as from the roots.
+    A video is extracted, and speed, pitch and a `mono` downmix (what a member
+    of a set is played as) are one render, all through the cache; a plain
+    audio file at full speed, no shift and stereo is served as it sits. Ranges
+    come with `FileResponse`, from the cache as from the roots.
     """
     path = _playable_path(conn, source_id)
     with _rendering(path):
         audio = renders.playable_audio(
-            path, semitones=semitones, cache=renders.cache_dir()
+            path,
+            speed=speed,
+            semitones=semitones,
+            mono=mono,
+            cache=renders.cache_dir(),
         )
     return FileResponse(audio, filename=audio.name)
 
@@ -129,6 +150,7 @@ def media_page(
 @router.post("/exercises/{exercise_id}/media")
 def attach(
     request: Request,
+    background: BackgroundTasks,
     exercise_id: int,
     kind: str = Form(...),
     path: str | None = Form(None),
@@ -142,10 +164,11 @@ def attach(
     """Attach one thing to an exercise: a file, a URL, a score, some text.
 
     A file with a `group_id` joins that track set, which is where the two
-    checks on a set live; without one it gets a group of its own.
+    checks on a set live; without one it gets a group of its own. Its set is
+    then rendered at the common speeds behind the answer (`_prerender`).
     """
     with _reporting():
-        media.attach(
+        source = media.attach(
             conn,
             exercise_id=exercise_id,
             kind=kind,
@@ -156,8 +179,36 @@ def attach(
             group_id=group_id,
             now=now,
         )
+    if request.app.state.prerender and source.group_id is not None:
+        _prerender(conn, background, group_id=source.group_id)
     return fragment_or_redirect(
         request, _list(request, conn, exercise_id, players=True, now=now)
+    )
+
+
+def _prerender(
+    conn: sqlite3.Connection, background: BackgroundTasks, *, group_id: int
+) -> None:
+    """Render a set at the speeds the slider will ask for, after answering.
+
+    Every member, because a second track turns a stereo lone file into a mono
+    member of a set and its renders with it. The speeds are `LADDER` plus the
+    exercise's own, so the slider's first position is a hit too.
+    """
+    members = repo.media_sources_in_group(conn, group_id=group_id)
+    paths = []
+    for member in members:
+        try:
+            paths.append(_playable_path(conn, member.id))
+        except HTTPException:
+            continue  # gone or out of bounds: the player will say so when asked
+    ratio = exercise_ratio(repo.get_exercise(conn, members[0].exercise_id))
+    background.add_task(
+        renders.prerender,
+        paths,
+        speeds=renders.speed_ladder(ratio),
+        mono=len(members) > 1,
+        cache=renders.cache_dir(),
     )
 
 

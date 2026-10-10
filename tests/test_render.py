@@ -305,3 +305,121 @@ def test_a_shift_is_cached_per_amount(tmp_path, cache):
 
     assert up != down
     assert render.shift_pitch(path, semitones=2, cache=cache) == up
+
+
+# --- speed as a render (step 8) ---------------------------------------------
+
+
+def length_of(path: Path) -> float:
+    from pydub import AudioSegment
+
+    return AudioSegment.from_file(path).duration_seconds
+
+
+def test_full_speed_at_no_shift_is_the_file_itself(tmp_path, cache):
+    path = sine(tmp_path / "a.wav")
+
+    assert render.render_audio(path, speed=1.0, cache=cache) == path
+    assert not cache.exists()
+
+
+def test_a_slower_render_is_longer_and_keeps_its_pitch(tmp_path, cache):
+    path = sine(tmp_path / "a.wav")
+
+    slow = render.render_audio(path, speed=0.5, cache=cache)
+
+    assert slow.parent == cache
+    assert length_of(slow) == pytest.approx(2.0, abs=0.05)
+    assert dominant_hz(slow) == pytest.approx(440, rel=0.03)
+
+
+def test_speed_and_pitch_are_one_render(tmp_path, cache):
+    path = sine(tmp_path / "a.wav")
+
+    both = render.render_audio(path, speed=0.8, semitones=12, cache=cache)
+
+    assert length_of(both) == pytest.approx(1.25, abs=0.05)
+    assert dominant_hz(both) == pytest.approx(880, rel=0.03)
+    assert len(list(cache.iterdir())) == 1
+
+
+@pytest.mark.parametrize("semitones", [0, 12, -12])
+def test_the_fallback_slows_down_without_rubberband_too(
+    tmp_path, cache, monkeypatch, semitones
+):
+    monkeypatch.setattr(render, "has_rubberband", lambda: False)
+    path = sine(tmp_path / "a.wav")
+
+    slow = render.render_audio(path, speed=0.5, semitones=semitones, cache=cache)
+
+    # chained `atempo` loses a few milliseconds at the tail of each stage
+    assert length_of(slow) == pytest.approx(2.0, rel=0.05)
+    assert dominant_hz(slow) == pytest.approx(440 * 2 ** (semitones / 12), rel=0.03)
+
+
+def test_atempo_is_chained_to_stay_inside_its_range():
+    assert render.atempo_chain(0.8) == ["atempo=0.8"]
+    assert render.atempo_chain(0.25) == ["atempo=0.5", "atempo=0.5"]
+    assert render.atempo_chain(3.0) == ["atempo=2.0", "atempo=1.5"]
+
+
+def test_a_set_member_is_rendered_mono(tmp_path, cache):
+    from pydub import AudioSegment
+
+    path = tmp_path / "stereo.wav"
+    AudioSegment.silent(duration=500).set_channels(2).export(path, format="wav")
+
+    mono = render.render_audio(path, mono=True, cache=cache)
+
+    assert mono.parent == cache
+    assert AudioSegment.from_file(mono).channels == 1
+    assert render.render_audio(path, cache=cache) == path  # stereo is untouched
+
+
+def test_speeds_are_cached_to_the_slider_step(tmp_path, cache):
+    path = sine(tmp_path / "a.wav", seconds=0.2)
+
+    first = render.render_audio(path, speed=0.8, cache=cache)
+
+    assert render.render_audio(path, speed=0.8000001, cache=cache) == first
+    assert render.render_audio(path, speed=0.81, cache=cache) != first
+
+
+@pytest.mark.parametrize("speed", [0.49, 1.01])
+def test_a_speed_off_the_slider_is_refused(tmp_path, cache, speed):
+    path = sine(tmp_path / "a.wav", seconds=0.2)
+
+    with pytest.raises(ValueError, match="speed"):
+        render.render_audio(path, speed=speed, cache=cache)
+
+
+def test_the_ladder_is_the_common_speeds_plus_the_exercises_own():
+    assert render.speed_ladder(None) == (0.6, 0.7, 0.8, 0.9)
+    assert render.speed_ladder(0.75) == (0.6, 0.7, 0.75, 0.8, 0.9)
+    assert render.speed_ladder(0.8) == (0.6, 0.7, 0.8, 0.9)
+    assert render.speed_ladder(1.0) == (0.6, 0.7, 0.8, 0.9)
+
+
+def test_prerendering_fills_the_cache_so_the_slider_hits_it(
+    tmp_path, cache, monkeypatch
+):
+    path = sine(tmp_path / "a.wav", seconds=0.2)
+    render.prerender([path], speeds=(0.6, 0.8), mono=True, cache=cache)
+    made = set(cache.iterdir())
+
+    calls = []
+    monkeypatch.setattr(render, "run_ffmpeg", lambda *args: calls.append(args))
+    assert render.playable_audio(path, speed=0.8, mono=True, cache=cache) in made
+    assert render.playable_audio(path, speed=0.6, mono=True, cache=cache) in made
+    assert calls == []
+    assert len(made) == 3  # both speeds, and mono at full speed
+
+
+def test_prerendering_skips_a_file_it_cannot_read(tmp_path, cache):
+    junk = tmp_path / "junk.mp4"
+    junk.write_bytes(b"not a video")
+    good = sine(tmp_path / "a.wav", seconds=0.2)
+
+    render.prerender([junk, good], speeds=(0.8,), mono=False, cache=cache)
+
+    assert len(list(cache.glob("*.wav"))) == 1

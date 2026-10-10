@@ -2995,6 +2995,91 @@ def test_a_file_ffmpeg_cannot_read_is_a_409_naming_it(
     assert "junk.mp4" in response.text
 
 
+# --- speed as a render, and the ladder (Phase 5b step 8) ---------------------
+
+
+def test_a_slower_audio_is_a_longer_render_in_the_cache(
+    client, conn, le_freak, loop_wav, cache
+):
+    from pydub import AudioSegment
+
+    source = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+
+    response = client.get(f"/media/{source.id}/audio?speed=0.8")
+
+    assert response.status_code == 200
+    rendered = next(cache.glob("*.wav"))
+    assert AudioSegment.from_file(rendered).duration_seconds == pytest.approx(
+        5.0, abs=0.05
+    )
+
+
+def test_a_set_member_is_asked_for_in_mono(client, conn, le_freak, loop_wav, cache):
+    source = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+
+    response = client.get(f"/media/{source.id}/audio?mono=1")
+
+    assert response.status_code == 200
+    assert len(list(cache.glob("*.wav"))) == 1
+
+
+def test_a_speed_off_the_slider_is_refused(client, conn, le_freak, loop_wav, cache):
+    source = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+
+    assert client.get(f"/media/{source.id}/audio?speed=0.4").status_code == 422
+    assert client.get(f"/media/{source.id}/audio?speed=1.5").status_code == 422
+
+
+def attach_by_form(client, exercise_id: int, path: Path, group_id: int | None = None):
+    data = {"kind": "file", "path": str(path)}
+    if group_id is not None:
+        data["group_id"] = str(group_id)
+    return client.post(f"/exercises/{exercise_id}/media", data=data, headers=hx())
+
+
+def test_attaching_a_file_renders_the_ladder_behind_the_answer(
+    app, client, conn, le_freak, loop_wav, cache
+):
+    app.state.prerender = True
+
+    assert attach_by_form(client, le_freak.id, loop_wav).status_code == 200
+
+    # the four common speeds, and the exercise's own 66%; full speed is the file
+    assert len(list(cache.glob("*.wav"))) == 5
+
+
+def test_a_second_track_renders_the_whole_set_in_mono(
+    app, client, conn, le_freak, loop_wav, roots, cache
+):
+    from pydub import AudioSegment
+
+    drums = roots / "S" / "le freak" / "drums.wav"
+    AudioSegment.silent(duration=4000).export(drums, format="wav")
+    first = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+    app.state.prerender = True
+
+    attach_by_form(client, le_freak.id, drums, group_id=first.group_id)
+
+    # the same silence twice is one content hash: five speeds and full, mono
+    assert len(list(cache.glob("*.wav"))) == 6
+
+
+def test_the_ladder_is_not_rendered_unless_the_app_asks_for_it(
+    client, conn, le_freak, loop_wav, cache
+):
+    attach_by_form(client, le_freak.id, loop_wav)
+
+    assert not cache.exists()
+
+
 # --- the speed slider writes back (Phase 5a step 6) --------------------------
 
 
