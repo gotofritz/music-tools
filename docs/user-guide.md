@@ -283,17 +283,20 @@ with a message rather than quietly read.
 
 ### The player
 
-For a single file the card shows the **waveform** with a red playhead. Click
-anywhere on it to jump there. **play**/**pause** and **loop** (the whole file)
-sit underneath, then:
+The card shows the **waveform** with a red playhead. Click anywhere on it to
+jump there; drag across it to pick a stretch to **loop**. **play**/**pause**,
+the time, and **loop** (your stretch, or the whole file) sit underneath, then:
 
 - **speed** — a slider from 50% to 100% of the row's target BPM. It plays the
   file slower **without changing its pitch**, and writes the new speed back to
   the row in the notation the row already uses: `66%` stays a percentage, `88`
   stays a BPM. With no target BPM on the row the slider is greyed out; fill the
-  target in first.
-- **volume** — a slider from silent to full, for a single file. It is the
-  player's own: not stored, and every load starts at full.
+  target in first. Let go of the slider and the app renders the new speed —
+  60%, 70%, 80%, 90% and the row's own speed are made when the file is
+  attached, so those are instant; anything else takes a few seconds the first
+  time. Playing carries on from where it was.
+- **volume** — a slider from silent to full, for everything on the card. It
+  is the player's own: not stored, and every load starts at full.
 - **pitch** — up or down by up to 12 semitones, at the same speed. The first
   time you pick one the app renders it, which takes a few seconds; the result is
   kept and reused. Playing resumes where it was.
@@ -317,9 +320,15 @@ within a quarter of a second, and there are eight at most. A file that
 disagrees is refused by name — a set plays as one thing, so a member from a
 different take is a mistake worth catching early.
 
-For now the members are stacked players, which are not in sync with each other;
-one transport with a mixer strip is the next phase of the work. Everything you
-set here — the names, the gains, the mutes — is what that will read.
+A set plays as one tune: one player with a lane per track, every track locked
+to the same clock. The waveforms are stacked with nothing between them; to
+the left of each are the track's name (hover over it to see a long one in
+full), **M** (mute), **S** (solo — with any track soloed you hear only the
+soloed ones) and its **gain**. Gain and mute are kept with the track,
+so the mix is the same next time; solo is not. Loading a set takes a moment (the card counts the tracks in), and a set
+plays in mono, which is what keeps eight tracks from filling the browser's
+memory. Play a set to the end and the card says how closely the tracks agreed.
+Without JavaScript a set is a stack of separate players, not in sync.
 
 ## How fast you are playing it
 

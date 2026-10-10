@@ -4,7 +4,7 @@ Architecture, boundaries and constraints. Read this before changing anything;
 update it in the same PR as any change to the architecture, the boundaries or
 the core patterns (`AGENTS.md`).
 
-Describing the repo as it stands at the end of Phase 5a of
+Describing the repo as it stands at the end of Phase 5 of
 `docs/plans/00-practice-app.md` plus Phase 10 (`docs/plans/10-today-panel.md`),
 not as that plan leaves it.
 
@@ -65,7 +65,8 @@ music_tools/
         templates/       base, today, module, and one fragment per swappable thing
                          (_now_playing, _picker, _picker_list, _day_block, ...)
         static/          htmx.min.js (vendored via pnpm, 2.0.4), app.css,
-                         player.js (the waveform player, no DOM beyond its card)
+                         transport.js (the Web Audio transport, no DOM in it),
+                         mixer.js (the player: lanes, strip, controls)
     loop.py              the loop tool: model, parsing, rendering, CLI
     main.py              rearrange: the CLI and the step interpreter
     config.py            rearrange: pydantic config models
@@ -371,19 +372,26 @@ track is soloed does not deserve to outlive the page. Ordering is two sequences
 in one namespace — a card's place in the exercise is its group's `position`, or
 its own when it has no group, and a member's `position` is its place in the set.
 
-### Playback (Phase 5a)
+### Playback (Phase 5)
 
-A lone audio or video file plays in the page as a waveform with a playhead,
-click to seek, a loop toggle, a speed slider and a semitone control
-(`static/player.js`, the app's first JS beyond htmx; A1 still holds — no
-framework, no Node). Track sets still render as stacked `<audio>` elements
-until Phase 5b. Four decisions are load-bearing:
+An audio or video file plays in the page, and a track set plays as one tune:
+a lane per track with its waveform, a shared playhead and time axis, click to
+seek, drag to loop a span, a speed slider, a semitone control, and for a set a
+mixer strip — name, M, S and gain in a column left of each lane, the waves
+stacked with nothing between them. A
+`pan` column exists from Phase 4 but nothing plays or edits it: the player
+did not want one. One engine for both: a lone
+file is a set of one without the strip. `static/transport.js` is the audio and
+has no DOM in it; `static/mixer.js` is the page around it. A1 still holds — no
+framework, no Node. Five decisions are load-bearing:
 
 - **The browser plays a URL, the server prepares it.** `GET /media/{id}/audio`
-  returns the file's audio: a plain file untouched, a video extracted to wav, and
-  `?semitones=N` (±12) transposed — the last two through the render cache.
-  `GET /media/{id}/peaks` returns the waveform as `buckets` min/max pairs plus
-  the duration. Both go through the same roots guard as `/file`, re-checked on
+  returns the file's audio: a plain file untouched, and through the render
+  cache a video extracted to wav, `?speed=` (0.5–1.0) slowed down at the same
+  pitch, `?semitones=N` (±12) transposed and `?mono=1` downmixed to mono at
+  22.05 kHz — speed, pitch and downmix in one ffmpeg pass. `GET
+  /media/{id}/peaks` returns the waveform as `buckets` min/max pairs plus the
+  duration. Both go through the same roots guard as `/file`, re-checked on
   every request; a file that has gone, or one ffmpeg cannot read, is a 409
   naming it. Ranges (206, 416) come from `FileResponse`.
 - **The render cache is disposable.** `domain/render.py` keys every derived file
@@ -391,19 +399,38 @@ until Phase 5b. Four decisions are load-bearing:
   `<db dir>/cache`. Writes go to a partial file renamed into place, a deleted
   entry is simply rendered again, and `evict` drops least-recently-used files
   without consulting the database, which holds no reference to any of them.
-  `rubberband` where the ffmpeg build has it, the `asetrate`/`aresample`/`atempo`
-  chain where not.
-- **Speed is `playbackRate` with `preservesPitch`, and it is the exercise's
-  speed.** The slider is bound to the row's ratio and `POST /exercises/{id}/speed`
-  writes it back through `tempo.write_ratio`, in the dialect the row already
-  uses: `66%` stays a percentage, `88` stays a BPM, a `/divisor` is carried over,
-  and free text becomes a percentage. No `target_bpm` means no ratio: the slider
-  sits at 1.0, disabled. The log entry's own `speed` is a snapshot and does not
-  follow the slider. Speed as a server render is 5b's problem, where Web Audio
-  has no `preservesPitch`.
+  `rubberband` where the ffmpeg build has it, `asetrate`/`aresample` and a
+  chain of `atempo` where not.
+- **One clock: Web Audio, not `<audio>` elements.** Separate media elements each
+  run their own clock and drift apart audibly. The transport decodes every
+  track into an `AudioBuffer`, and starts one `AudioBufferSourceNode` per track
+  with the same `start(when, offset)` on one `AudioContext`; seek stops them all
+  and starts them again, loop is the same `loopStart`/`loopEnd` on all of them.
+  The playhead is read off the context clock. A track that plays to its end
+  reports how far it was from the clock (the drift check the plan asks for).
+- **Speed is a render, and it is the exercise's speed.** Web Audio has no
+  `preservesPitch`, so moving the slider fetches every track again at the new
+  speed and swaps the buffers in at the same place in the tune; the page keeps
+  time in the original file's seconds. Attaching a file renders its set at
+  60–90% and the exercise's own speed behind the answer (FastAPI background
+  task; `create_app(prerender=True)`, which `serve` sets and tests leave off),
+  so the common moves are cache hits. The slider is bound to the row's ratio
+  and `POST /exercises/{id}/speed` writes it back through `tempo.write_ratio`,
+  in the dialect the row already uses: `66%` stays a percentage, `88` stays a
+  BPM, a `/divisor` is carried over, and free text becomes a percentage. No
+  `target_bpm` means no ratio: the slider sits at 1.0, disabled. The log
+  entry's own `speed` is a snapshot and does not follow the slider.
+- **Decoded audio is the budget.** A set is fetched mono at 22.05 kHz and
+  decoded through an `OfflineAudioContext` at that rate (an `AudioContext`
+  would decode at the device's); a lone file keeps its stereo. The eight-track
+  cap is `media.MAX_TRACKS`, enforced on attach. Gain and mute are the
+  member's own columns, written through `PATCH /media/{id}` — the same handler
+  as the attachment list, which follows the strip and which the strip follows;
+  solo is a view and is not stored. A card swapped off the page closes its
+  context.
 - **The JS has no suite.** There is no Node toolchain to run one; the Python
-  side (routes, cache, tempo write-back, markup) is tested and the player is
-  checked by hand.
+  side (routes, cache, renders, tempo write-back, markup) is tested and the
+  player is checked by hand against the list in the plan.
 
 ### Storage
 
@@ -558,12 +585,11 @@ reads the running entry, its exercise and that exercise's cards, so every page
 can draw it. A module row carries **start** and **stop** at all times — the
 buttons do not move about as rows change state, and the server decides what a
 click means (`start_exercise` and `stop_exercise` above) — plus **discard**
-while it is the one running. Display is minimal by design — a bare
-`<audio>` per file served from `GET /media/{id}/file`, the YouTube embed with the
+while it is the one running. A file card is the player above; with the
+JavaScript off it is a bare `<audio>` per track, stacked and unsynchronised.
+The rest is minimal by design — the YouTube embed with the
 plain link behind it (the one thing in the app that reaches the network, and
-what it degrades to with the network off), a link for a score, text as text. A
-track set renders as stacked players, which is honest about being
-unsynchronised; Phase 5b is the one transport with a mixer.
+what it degrades to with the network off), a link for a score, text as text.
 
 ## How `loop` is put together
 

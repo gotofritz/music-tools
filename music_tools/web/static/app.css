@@ -133,16 +133,18 @@ tr.active {
   max-width: 32rem;
 }
 
-/* The player: the waveform, then one row of controls. Until player.js has run
-   (or with it off) only the native <audio controls> shows. */
+/* The player: a lane per track, then one row of controls. Until mixer.js has
+   run (or with it off) only the native <audio controls> show, one per track. */
 .player {
   --wave: #5b7a99;
   --playhead: #d33;
-  max-width: 32rem;
+  --loop: rgba(91, 122, 153, 0.18);
+  --side: 4.6rem;
 }
 
 .player:not([data-ready]) canvas,
-.player:not([data-ready]) .player-controls {
+.player:not([data-ready]) .player-controls,
+.player:not([data-ready]) .side label {
   display: none;
 }
 
@@ -150,13 +152,92 @@ tr.active {
   display: none;
 }
 
+/* The lanes run the width of the card. A lone file's name sits over its
+   wave. A set's lanes are its waves stacked a few pixels apart, with the
+   name (clipped; the tooltip has it whole), M, S and the gain in a narrow
+   column to the left, and the time axis indented by that column. */
+.player .tracks {
+  display: block;
+}
+
+.player .track {
+  display: block;
+  margin-bottom: 3px;
+}
+
+.player:not(.set) .track-name {
+  display: block;
+  font-size: 0.75rem;
+}
+
+.player.set .track {
+  display: grid;
+  grid-template-columns: var(--side) minmax(0, 1fr);
+  column-gap: 0.4rem;
+}
+
+.player.set .side {
+  grid-column: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  min-width: 0;
+  font-size: 0.7rem;
+  line-height: 1.1;
+}
+
+.player.set .side .track-name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  cursor: default;
+}
+
+.player.set .side label {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  white-space: nowrap;
+}
+
+.player.set .side input {
+  margin: 0;
+}
+
+.player.set .side input[type="range"] {
+  width: 100%;
+  height: 0.8rem;
+}
+
+.player.set canvas.wave,
+.player.set audio {
+  grid-column: 2;
+}
+
+.player canvas.axis {
+  display: block;
+  width: 100%;
+  height: 18px;
+  color: var(--muted);
+}
+
+.player.set canvas.axis {
+  margin-left: calc(var(--side) + 0.4rem);
+  width: calc(100% - var(--side) - 0.4rem);
+}
+
 .player canvas.wave {
   display: block;
   width: 100%;
-  height: 80px;
-  margin: 0.2rem 0;
+  height: 96px;
+  margin: 0;
   background: color-mix(in srgb, var(--muted) 12%, transparent);
   cursor: pointer;
+}
+
+.player.set canvas.wave {
+  height: 72px;
 }
 
 .player-controls {
@@ -170,6 +251,11 @@ tr.active {
 .player-controls output {
   min-width: 7rem;
   display: inline-block;
+}
+
+.player-controls output.clock {
+  min-width: 5.5rem;
+  font-variant-numeric: tabular-nums;
 }
 
 iframe.youtube {

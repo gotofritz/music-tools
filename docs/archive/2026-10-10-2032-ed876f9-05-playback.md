@@ -7,10 +7,11 @@ red/green detail when the phase starts.
 
 The phase splits in two, and 5a is worth stopping at.
 
-**Status: 5a is built (steps 1–7); 5b (steps 8–12) is not started.** Step 7's
-quality look: `rubberband` is present in the dev ffmpeg and is clean for a
+**Status: built, 5a (steps 1–7) and 5b (steps 8–12).** Step 7's quality
+look: `rubberband` is present in the dev ffmpeg and is clean for a
 ±3-semitone move on a sine; judge it on real music before relying on it. The
-plan stays active until 5b lands or is cut.
+5b measurements are under "Measured" below; the verification list still wants
+a pass by ear on real stems.
 
 ## Goal
 
@@ -188,10 +189,12 @@ music_tools/
     domain/waveform.py         # peaks: min/max pairs, cached, per track
     web/routes/media.py        # serving, ranges, the roots guard
     web/static/player.js       # 5a: waveform, playhead, transport, sliders —
-                               # the app's first JS island beyond htmx
+                               # the app's first JS island beyond htmx;
+                               # absorbed by mixer.js in 5b
     web/static/transport.js    # 5b: the AudioContext, scheduling, seek, loop —
                                # no DOM in it, so it can be read on its own
-    web/static/mixer.js        # 5b: the strip, the lanes, mute/solo/gain/pan
+    web/static/mixer.js        # 5b: the strip, the lanes, mute/solo/gain/pan,
+                               # and every control player.js had
 ```
 
 ## Steps
@@ -237,6 +240,31 @@ music_tools/
 12. **The budget** — mono downmix and the reduced decode rate for set members,
     the eight-track cap enforced on attach, and a measurement of what eight
     four-minute stems actually cost in a real browser.
+
+## Measured
+
+Taken while building 5b, on a 4-core Linux container (ffmpeg 6.1 with
+`rubberband`) and headless Chromium 141 — not a laptop with speakers, so
+treat them as orders of magnitude.
+
+- **One render (step 8's gate).** A four-minute stereo stem at 80%:
+  `rubberband` 10 s stereo, 6.3 s when downmixed to mono first — 24× and 38×
+  realtime, better than the 5–15× guessed above. The `asetrate`/`atempo`
+  fallback is about 1.2 s. A set of eight across the four ladder speeds is
+  roughly 200 s of background work once, at attach. The phase carried on; the
+  sidecar was not needed.
+- **Eight four-minute stems (step 12)** at 80%, so 300 s per track after the
+  stretch, mono at 22.05 kHz: 13 MB a track on the wire, 212 MB of decoded
+  PCM, and the renderer grew by about 380 MB over a page with no player.
+  Ready to play in 2.1 s from the cache, 19 s cold when all eight renders
+  had to be made on request (the ladder exists so that is rare). A speed
+  change holds the old and the new buffers for a moment, so the peak is
+  briefly double.
+- **The drift check.** Two tracks played to the end reported 0 ms between
+  them on the context clock; seek while playing, loop over a dragged span,
+  mute while playing and a speed change while playing all behaved, driven
+  headless. What headless cannot say is whether it *sounds* right — the list
+  below is still to be run by ear.
 
 ## Verification
 
