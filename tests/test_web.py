@@ -3195,3 +3195,64 @@ def test_a_track_sets_labels_and_players_sit_in_one_grid(
     assert grid.count('class="track"') == 2
     assert grid.count("<audio") == 2
     assert grid.count('class="track-name"') == 2
+
+
+# --- correcting a time across midnight ---------------------------------------
+
+
+@pytest.fixture
+def past_midnight(app):
+    """Twelve minutes past midnight: still the evening of TODAY."""
+    app.dependency_overrides[get_now] = lambda: datetime(2026, 7, 6, 0, 17)
+    return datetime(2026, 7, 6, 0, 17)
+
+
+@pytest.fixture
+def ran_past_midnight(conn):
+    """A line from 23:40 that was stopped five minutes into the next date."""
+    day = repo.create_day(conn, day=TODAY)
+    return repo.create_entry(
+        conn,
+        day_id=day.id,
+        started_at=datetime(2026, 7, 5, 23, 40),
+        ended_at=datetime(2026, 7, 6, 0, 5),
+        description="warm-up",
+    )
+
+
+def test_an_end_moved_back_before_midnight_lands_on_the_evening(
+    client, conn, past_midnight, ran_past_midnight
+):
+    client.patch(
+        f"/entries/{ran_past_midnight.id}", data={"ended_at": "23:58"}, headers=hx()
+    )
+
+    after = repo.get_entry(conn, ran_past_midnight.id)
+    assert after is not None
+    assert after.ended_at == datetime(2026, 7, 5, 23, 58)  # not tomorrow night
+
+
+def test_an_end_moved_past_midnight_lands_on_the_next_date(client, conn, sample_block):
+    entry = repo.entries_for_day(conn, sample_block.id)[-1]
+
+    client.patch(f"/entries/{entry.id}", data={"ended_at": "00:10"}, headers=hx())
+
+    after = repo.get_entry(conn, entry.id)
+    assert after is not None
+    assert after.ended_at == datetime(2026, 7, 6, 0, 10)
+
+
+def test_stop_after_moving_an_end_back_before_midnight_follows_on_from_it(
+    client, conn, le_freak, past_midnight, ran_past_midnight
+):
+    client.patch(
+        f"/entries/{ran_past_midnight.id}", data={"ended_at": "23:58"}, headers=hx()
+    )
+
+    response = stop(client, le_freak.id)
+
+    assert response.status_code == 200
+    logged = repo.entries_for_day(conn, ran_past_midnight.day_id)[-1]
+    assert logged.description == "le freak"
+    assert logged.started_at == datetime(2026, 7, 5, 23, 58, 0, 1)
+    assert logged.ended_at == past_midnight
