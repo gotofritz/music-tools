@@ -1,0 +1,73 @@
+{# A module row's attachments, in its name cell. `exercise` and its `cards`.
+
+   A frame round one line per item: edit, remove, what kind it is, and its
+   label (the file's name when it has none); the path only shows in the edit
+   box. The last line adds another. Adding and editing happen in a small
+   dialog of two boxes (`_media_form.html`); `data-opens` in app.js shows it.
+   With nothing attached there is only the add button. Every write here
+   answers with this block (`HX-Target: row-media-N`). #}
+{% from "_media_form.html" import media_form %}
+{% set list_id = "row-media-" ~ exercise.id %}
+{% set add_id = "media-add-" ~ exercise.id %}
+<div class="row-media" id="{{ list_id }}">
+  {% if cards %}
+  <div class="media-box">
+    {% for card in cards %}
+    {% if card.is_set %}
+    <div class="set-name muted">{{ card.group.label or "track set" }}</div>
+    {% endif %}
+    {% for source in card.sources %}
+    {% if source.kind in ("file", "score") %}
+    {% set shown = source.label or file_name(source.path) %}
+    {% set icon = "📄" if source.kind == "score" else "♪" %}
+    {% elif source.kind == "youtube" %}
+    {% set shown = source.label or "YouTube" %}
+    {% set icon = "▶" %}
+    {% else %}
+    {% set shown = source.label or (source.body | truncate(30, True, "…")) %}
+    {% set icon = "¶" %}
+    {% endif %}
+    {% set edit_id = "media-edit-" ~ source.id %}
+    <div class="media-item{% if card.is_set %} member{% endif %}" id="row-media-item-{{ source.id }}">
+      <button type="button" class="edit" data-opens="{{ edit_id }}"
+              aria-label="edit {{ shown }}" title="edit">✎</button>
+      <form action="/media/{{ source.id }}/delete" method="post"
+            hx-delete="/media/{{ source.id }}"
+            hx-target="#{{ list_id }}" hx-swap="outerHTML"
+            hx-confirm="Remove {{ shown }}? The file itself stays where it is.">
+        <button type="submit" class="remove" aria-label="remove {{ shown }}" title="remove">×</button>
+      </form>
+      <span class="kind" title="{{ source.kind }}">{{ icon }}</span>
+      <span class="label" title="{{ shown }}">{{ shown }}</span>
+    </div>
+    <dialog id="{{ edit_id }}" class="media-dialog">
+      {{ media_form("/media/" ~ source.id ~ "/edit", list_id,
+                    value=source.path or source.url or source.body,
+                    label=source.label or "", submit="save") }}
+    </dialog>
+    {% endfor %}
+    {% if card.kind == "file" and card.group %}
+    {% set track_id = "media-track-" ~ card.group.id %}
+    <div class="media-item member">
+      <button type="button" class="add" data-opens="{{ track_id }}"
+              title="add a stem or a click to this set">+ track</button>
+    </div>
+    <dialog id="{{ track_id }}" class="media-dialog">
+      {{ media_form("/exercises/" ~ exercise.id ~ "/media", list_id,
+                    group_id=card.group.id) }}
+    </dialog>
+    {% endif %}
+    {% endfor %}
+    <div class="media-item">
+      <button type="button" class="add" data-opens="{{ add_id }}"
+              title="attach a sound file, a video, a score, a YouTube link or a note">+ add</button>
+    </div>
+  </div>
+  {% else %}
+  <button type="button" class="add" data-opens="{{ add_id }}"
+          title="attach a sound file, a video, a score, a YouTube link or a note">+ add</button>
+  {% endif %}
+  <dialog id="{{ add_id }}" class="media-dialog">
+    {{ media_form("/exercises/" ~ exercise.id ~ "/media", list_id) }}
+  </dialog>
+</div>

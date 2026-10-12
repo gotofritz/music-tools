@@ -370,11 +370,13 @@ def _redraw(
     if picker and context["running"] is None:
         context |= views.picker_context(conn, now=now) | {"picker_open": True}
     if row is not None and not _is_today_page(request):
+        exercises = views.running_first(
+            repo.exercises_due(conn, module_id=row.module_id), conn=conn, now=now
+        )
         return render(
             "_queue.html",
-            exercises=views.running_first(
-                repo.exercises_due(conn, module_id=row.module_id), conn=conn, now=now
-            ),
+            exercises=exercises,
+            row_media=views.row_media(conn, exercises),
             modules_by_id=context["modules_by_id"],
             today=context["today"],
             running=context["running"],
