@@ -3472,7 +3472,8 @@ def test_stop_after_moving_an_end_back_before_midnight_follows_on_from_it(
     assert logged.description == "le freak"
     assert logged.started_at == datetime(2026, 7, 5, 23, 58, 0, 1)
     assert logged.ended_at == past_midnight
-=======
+
+
 @pytest.mark.parametrize(
     ("typed", "kind"),
     [
