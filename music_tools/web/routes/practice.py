@@ -8,7 +8,7 @@ reload per exercise.
 
 import random
 import sqlite3
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
@@ -278,7 +278,7 @@ async def amend_entry(
             conn,
             entry_id=entry_id,
             started_at=_at(posted.get("started_at"), entry.started_at),
-            ended_at=_at(posted.get("ended_at"), entry.ended_at),
+            ended_at=_at(posted.get("ended_at"), entry.started_at),
             description=description,
             speed=posted.get("speed"),
             log_group=posted.get("log_group"),
@@ -411,18 +411,25 @@ def _day_view(
     return HTMLResponse(render(fragment, **context))
 
 
-def _at(written: str | None, current: datetime | None) -> datetime | None:
-    """`22:46` on the date the entry already had, so midnight is not crossed.
+def _at(written: str | None, anchor: datetime | None) -> datetime | None:
+    """`22:46` in the practice day `anchor` falls in, which runs 4am to 4am.
 
-    An entry keeps the day it happened on: only the time of day is editable,
-    and an entry that ran to 00:20 keeps that end on the following date.
+    An entry keeps the day it happened on: only the time of day is editable.
+    A time before 4am is past midnight, so it lands on the following date and
+    any other on the day's own — whichever date the entry had before. Taking
+    the old date instead would put an end moved back from 00:05 to 23:58 on
+    the next evening, a day in the future.
     """
-    if written is None or current is None:
+    if written is None or anchor is None:
         return None
     try:
-        return datetime.combine(current.date(), time.fromisoformat(written.strip()))
+        at = time.fromisoformat(written.strip())
     except ValueError:
         raise ValueError(f"cannot read the time {written!r}") from None
+    day = practice_day_for(anchor)
+    if at.hour < session.END_OF_DAY_HOUR:
+        day += timedelta(days=1)
+    return datetime.combine(day, at)
 
 
 def _log_fragments(conn: sqlite3.Connection, *, now: datetime) -> str:

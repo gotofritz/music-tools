@@ -294,8 +294,10 @@ and a wrong correction costs a wrong number about a tune:
 
 - **An entry keeps the day it happened on.** Moving one between days would
   change two days' totals from one edit, which is more surprise than the edit
-  is worth. Only the time of day is editable, so an entry that crossed
-  midnight keeps both its dates.
+  is worth. Only the time of day is editable, and a typed time is read within
+  the entry's practice day: before 4am is past midnight, on the next date. So
+  an entry that crossed midnight keeps both its dates, and an end moved back
+  from 00:05 to 23:58 lands on the same evening, not the next one.
 - **The running entry is refused** (`EntryRunning`). That one is what is being
   practised; `finish_entry` and `discard_entry` write it, and a hand-edit would
   put the two out of step. A finished line refuses the opposite way
