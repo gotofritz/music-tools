@@ -138,7 +138,10 @@ starts it without opening a window.
   rows appear in a panel under the buttons, due ones first. Click a row to
   start it; click the module again, or **close**, to hide the list. Any stop
   (and discard) puts you back on the module buttons, so the next tune is one
-  click away.
+  click away. **just start**, after the module buttons, is for when the clock
+  should begin before you have decided what to play: it opens a line called
+  `Practice` from now. A stop on the card closes it as it is (click its name in
+  the log to rename it); **stop** on a row's module page makes it that row's.
 - **Log** is today, line by line, with the entry that is running now counting
   up. **Totals** underneath is the subtotal per log group and the total for the
   day — the same numbers as `practice log`.

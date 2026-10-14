@@ -563,8 +563,9 @@ stop because they are still useful.
   per live module, in tab order. `GET /picker/{slug}` is the same block with
   that module's live rows, read-only, under the buttons; a row posts the
   ordinary `/exercises/{id}/start`. A line opens when a row is picked, so a
-  false start leaves nothing behind. `POST /entries` is gone; `start_ad_hoc`
-  stays for the CLI.
+  false start leaves nothing behind. The one exception is the picker's
+  **just start**, `POST /entries`: an untitled `Practice` line from now
+  (`start_ad_hoc`), for a session whose tune is not chosen yet.
 - **Any stop is a start for the next one.** The running card carries the five
   stop buttons, each posting its `algorithm` to `/entries/{id}/done`; stop,
   done and discard answer from the today page with the log redrawn and the

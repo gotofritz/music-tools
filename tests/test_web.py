@@ -815,11 +815,51 @@ def test_with_nothing_running_start_reveals_the_picker_and_opens_no_line(
     assert repo.get_day(conn, TODAY) is None  # a false start leaves nothing behind
 
 
-def test_the_bare_post_entries_start_is_gone(client, conn):
-    response = client.post("/entries", headers=hx())
+def test_the_picker_offers_starting_the_clock_before_picking_a_row(client, songs):
+    page = client.get("/picker", headers=hx()).text
 
-    assert response.status_code in (404, 405)
-    assert running(conn) is None
+    assert 'hx-post="/entries"' in page
+    assert 'action="/entries"' in page  # and with no JS
+    assert "just start" in page
+
+
+def test_just_start_opens_an_untitled_practice_line_and_shows_it_running(
+    client, conn, songs
+):
+    response = client.post("/entries", headers=hx(referer="http://localhost/"))
+
+    assert response.status_code == 200
+    entry = running(conn)
+    assert entry is not None
+    assert (entry.description, entry.exercise_id) == ("Practice", None)
+    assert '<section id="day-log"' in response.text
+    assert 'id="picker"' not in response.text
+    assert f'hx-post="/entries/{entry.id}/done"' in response.text
+
+
+def test_just_start_closes_whatever_was_running(client, conn, songs, le_freak):
+    start(client, le_freak.id)
+
+    client.post("/entries", headers=hx(referer="http://localhost/"))
+
+    day = repo.get_day(conn, TODAY)
+    assert day is not None
+    assert [e.description for e in repo.entries_for_day(conn, day.id)] == [
+        "le freak",
+        "Practice",
+    ]
+    assert running(conn).description == "Practice"
+
+
+def test_just_start_on_an_ended_day_brings_the_day_back(client, conn, le_freak):
+    start(client, le_freak.id)
+    client.post(f"/entries/{running(conn).id}/done", headers=hx())
+    client.post("/day/end", headers=hx())
+
+    response = client.post("/entries", headers=hx(referer="http://localhost/"))
+
+    assert "le freak" in response.text  # the log is today's again
+    assert running(conn).description == "Practice"
 
 
 def test_the_picker_without_htmx_is_a_page_of_its_own(client, songs, le_freak):

@@ -163,6 +163,26 @@ def start(
     )
 
 
+@router.post("/entries")
+def just_start(
+    request: Request,
+    conn: sqlite3.Connection = Depends(get_conn),
+    now: datetime = Depends(get_now),
+    rng: random.Random = Depends(get_rng),
+) -> Response:
+    """The clock first, the tune later: a line called `Practice` from now.
+
+    The picker's **just start**, for when the session should begin before
+    anyone has said what is being played. A row's stop later makes the line
+    that row's; a stop on the card closes it as it is, to be named afterwards.
+    """
+    was_ended = views.day_ended(conn, now=now)
+    session.start_ad_hoc(conn, rng=rng, description="Practice", now=now)
+    return fragment_or_redirect(
+        request, _redraw(request, conn, now=now, history=was_ended)
+    )
+
+
 @router.post("/exercises/{exercise_id}/stop")
 async def stop(
     request: Request,
