@@ -7,11 +7,12 @@ app goes through: a source's path is re-checked against the configured roots as
 it is served, not only as it was attached, because the roots can be narrowed
 after the fact and a stored path is not a promise.
 
-The attaching half is a page per exercise. Paths are typed rather than picked
-from a tree — browsing the filesystem from the browser belongs to the parked
-loop-editor plan — so the page says which roots a path may point into and the
-domain refuses anything else. A refusal is a message on the page: a mistyped
-path is a mistake to fix, not an error to hide.
+The attaching half lives on each module row, under the exercise's name
+(`_row_media.html`). Paths are typed rather than picked from a tree —
+browsing the filesystem from the browser belongs to the parked loop-editor
+plan — so the box says which roots a path may point into and the domain
+refuses anything else. A refusal is a message on the page: a mistyped path is
+a mistake to fix, not an error to hide.
 """
 
 import sqlite3
@@ -20,20 +21,37 @@ from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
-from fastapi.responses import FileResponse, HTMLResponse, Response
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+)
+from fastapi.responses import FileResponse, Response
 
 from music_tools.db import repository as repo
 from music_tools.domain import media, waveform
 from music_tools.domain import render as renders
 from music_tools.domain.models import Exercise, MediaSource
 from music_tools.web import views
-from music_tools.web.deps import fragment_or_redirect, get_conn, get_now, render
+from music_tools.web.deps import (
+    exercise_ratio,
+    fragment_or_redirect,
+    get_conn,
+    get_now,
+    render,
+)
 
 router = APIRouter()
 
 #: The element id (as HTMX sends it in `HX-Target`) of the running card's list.
 NOW_MEDIA_LIST = "now-media-list"
+
+#: The prefix of a module row's attachment list, `row-media-<exercise id>`.
+ROW_MEDIA = "row-media-"
 
 
 def _playable_path(conn: sqlite3.Connection, source_id: int) -> Path:
@@ -74,19 +92,26 @@ def media_file(
 @router.get("/media/{source_id}/audio")
 def media_audio(
     source_id: int,
+    speed: float = Query(1.0, ge=renders.MIN_SPEED, le=renders.MAX_SPEED),
     semitones: int = Query(0, ge=-renders.MAX_SEMITONES, le=renders.MAX_SEMITONES),
+    mono: bool = Query(False),
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> FileResponse:
-    """What the player plays: the file's audio, transposed by `semitones`.
+    """What the player plays: the file's audio, at `speed` and `semitones`.
 
-    A video is extracted and a shift is rendered, both through the cache; a
-    plain audio file at zero is served as it sits. Ranges come with
-    `FileResponse`, from the cache as from the roots.
+    A video is extracted, and speed, pitch and a `mono` downmix (what a member
+    of a set is played as) are one render, all through the cache; a plain
+    audio file at full speed, no shift and stereo is served as it sits. Ranges
+    come with `FileResponse`, from the cache as from the roots.
     """
     path = _playable_path(conn, source_id)
     with _rendering(path):
         audio = renders.playable_audio(
-            path, semitones=semitones, cache=renders.cache_dir()
+            path,
+            speed=speed,
+            semitones=semitones,
+            mono=mono,
+            cache=renders.cache_dir(),
         )
     return FileResponse(audio, filename=audio.name)
 
@@ -106,31 +131,13 @@ def media_peaks(
         }
 
 
-@router.get("/exercises/{exercise_id}/media", response_class=HTMLResponse)
-def media_page(
-    exercise_id: int,
-    conn: sqlite3.Connection = Depends(get_conn),
-    now: datetime = Depends(get_now),
-) -> HTMLResponse:
-    """Everything attached to one exercise, and the forms that add more."""
-    exercise = _exercise(conn, exercise_id)
-    return HTMLResponse(
-        render(
-            "media.html",
-            exercise=exercise,
-            module=views.modules_by_id(conn)[exercise.module_id],
-            roots=media.media_roots(),
-            cards=media.exercise_media(conn, exercise_id=exercise.id),
-            **views.chrome(conn, now=now),
-        )
-    )
-
-
 @router.post("/exercises/{exercise_id}/media")
 def attach(
     request: Request,
+    background: BackgroundTasks,
     exercise_id: int,
-    kind: str = Form(...),
+    kind: str | None = Form(None),
+    value: str | None = Form(None),
     path: str | None = Form(None),
     url: str | None = Form(None),
     body: str | None = Form(None),
@@ -142,10 +149,19 @@ def attach(
     """Attach one thing to an exercise: a file, a URL, a score, some text.
 
     A file with a `group_id` joins that track set, which is where the two
-    checks on a set live; without one it gets a group of its own.
+    checks on a set live; without one it gets a group of its own. Its set is
+    then rendered at the common speeds behind the answer (`_prerender`).
+
+    The row's add box sends one `value` and no `kind`: the kind is worked out
+    from what was typed (`media.classify`) and the value goes in its column.
     """
+    if kind is None and value:
+        kind = media.classify(value)
+        path, url, body = _columns(kind, value)
+    if kind is None:
+        raise HTTPException(status_code=400, detail="type a path, a link or a note")
     with _reporting():
-        media.attach(
+        source = media.attach(
             conn,
             exercise_id=exercise_id,
             kind=kind,
@@ -156,8 +172,36 @@ def attach(
             group_id=group_id,
             now=now,
         )
+    if request.app.state.prerender and source.group_id is not None:
+        _prerender(conn, background, group_id=source.group_id)
     return fragment_or_redirect(
         request, _list(request, conn, exercise_id, players=True, now=now)
+    )
+
+
+def _prerender(
+    conn: sqlite3.Connection, background: BackgroundTasks, *, group_id: int
+) -> None:
+    """Render a set at the speeds the slider will ask for, after answering.
+
+    Every member, because a second track turns a stereo lone file into a mono
+    member of a set and its renders with it. The speeds are `LADDER` plus the
+    exercise's own, so the slider's first position is a hit too.
+    """
+    members = repo.media_sources_in_group(conn, group_id=group_id)
+    paths = []
+    for member in members:
+        try:
+            paths.append(_playable_path(conn, member.id))
+        except HTTPException:
+            continue  # gone or out of bounds: the player will say so when asked
+    ratio = exercise_ratio(repo.get_exercise(conn, members[0].exercise_id))
+    background.add_task(
+        renders.prerender,
+        paths,
+        speeds=renders.speed_ladder(ratio),
+        mono=len(members) > 1,
+        cache=renders.cache_dir(),
     )
 
 
@@ -227,6 +271,46 @@ def describe(
             muted=muted,
         )
     return fragment_or_redirect(request, _list(request, conn, source.exercise_id))
+
+
+def _columns(kind: str, value: str) -> tuple[str | None, str | None, str | None]:
+    """One typed value as the (path, url, body) its kind carries it in."""
+    if kind in media.PATH_KINDS:
+        return value, None, None
+    if kind == "youtube":
+        return None, value, None
+    return None, None, value
+
+
+@router.post("/media/{source_id}/edit")
+def edit(
+    request: Request,
+    source_id: int,
+    value: str | None = Form(None),
+    label: str | None = Form(None),
+    conn: sqlite3.Connection = Depends(get_conn),
+    now: datetime = Depends(get_now),
+) -> Response:
+    """The row's edit box: what an attachment points at, and its name.
+
+    The value is held to an attach's rules (`media.replace`) only when it
+    changed, and is checked before the label is written, so a refused path
+    leaves the name as it was. Not `PATCH /media/{id}`: that is the mix
+    form's, where an unticked `muted` box means unmuted.
+    """
+    source = _source(conn, source_id)
+    current = source.path or source.url or source.body
+    changed = bool(value) and value != current
+    if changed:
+        assert value is not None  # `changed`; this is for the type checker
+        path, url, body = _columns(source.kind, value)
+        with _reporting():
+            media.replace(conn, source_id=source_id, path=path, url=url, body=body)
+    repo.update_media_source(conn, source.id, label=label or None)
+    return fragment_or_redirect(
+        request,
+        _list(request, conn, source.exercise_id, players=changed, now=now),
+    )
 
 
 @router.post("/groups/{group_id}/label")
@@ -316,6 +400,8 @@ def _list(
     """
     exercise = _exercise(conn, exercise_id)
     cards = media.exercise_media(conn, exercise_id=exercise_id)
+    if request.headers.get("HX-Target", "").startswith(ROW_MEDIA):
+        return render("_row_media.html", exercise=exercise, cards=cards)
     if request.headers.get("HX-Target") != NOW_MEDIA_LIST:
         return render("_media_list.html", exercise=exercise, cards=cards)
     html = render(

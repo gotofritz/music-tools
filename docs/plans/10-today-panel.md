@@ -22,9 +22,10 @@ usable after weeks of history because earlier days are collapsed.
 
 - **START does not open a line.** It reveals the module picker only. A log
   line opens when a row is clicked in the picker, so a false start leaves
-  nothing behind. (The untitled "from now, for anything" line, and ad-hoc
-  typed practice, are dropped from this page; `practice` CLI keeps
-  `start_ad_hoc`.)
+  nothing behind. Ad-hoc typed practice is dropped from this page;
+  `practice` CLI keeps `start_ad_hoc`. (Revised: the untitled "from now, for
+  anything" line came back as **just start** in the picker, because a session
+  sometimes starts before the tune is chosen.)
 - **Any stop is a start for the next one.** Clicking one of the five stop
   buttons (normal / short / long / rotate / hold) on the current exercise
   finishes it exactly as today and then shows the picker, the same state as

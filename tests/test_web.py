@@ -815,11 +815,51 @@ def test_with_nothing_running_start_reveals_the_picker_and_opens_no_line(
     assert repo.get_day(conn, TODAY) is None  # a false start leaves nothing behind
 
 
-def test_the_bare_post_entries_start_is_gone(client, conn):
-    response = client.post("/entries", headers=hx())
+def test_the_picker_offers_starting_the_clock_before_picking_a_row(client, songs):
+    page = client.get("/picker", headers=hx()).text
 
-    assert response.status_code in (404, 405)
-    assert running(conn) is None
+    assert 'hx-post="/entries"' in page
+    assert 'action="/entries"' in page  # and with no JS
+    assert "just start" in page
+
+
+def test_just_start_opens_an_untitled_practice_line_and_shows_it_running(
+    client, conn, songs
+):
+    response = client.post("/entries", headers=hx(referer="http://localhost/"))
+
+    assert response.status_code == 200
+    entry = running(conn)
+    assert entry is not None
+    assert (entry.description, entry.exercise_id) == ("Practice", None)
+    assert '<section id="day-log"' in response.text
+    assert 'id="picker"' not in response.text
+    assert f'hx-post="/entries/{entry.id}/done"' in response.text
+
+
+def test_just_start_closes_whatever_was_running(client, conn, songs, le_freak):
+    start(client, le_freak.id)
+
+    client.post("/entries", headers=hx(referer="http://localhost/"))
+
+    day = repo.get_day(conn, TODAY)
+    assert day is not None
+    assert [e.description for e in repo.entries_for_day(conn, day.id)] == [
+        "le freak",
+        "Practice",
+    ]
+    assert running(conn).description == "Practice"
+
+
+def test_just_start_on_an_ended_day_brings_the_day_back(client, conn, le_freak):
+    start(client, le_freak.id)
+    client.post(f"/entries/{running(conn).id}/done", headers=hx())
+    client.post("/day/end", headers=hx())
+
+    response = client.post("/entries", headers=hx(referer="http://localhost/"))
+
+    assert "le freak" in response.text  # the log is today's again
+    assert running(conn).description == "Practice"
 
 
 def test_the_picker_without_htmx_is_a_page_of_its_own(client, songs, le_freak):
@@ -1006,17 +1046,8 @@ def test_the_card_embeds_the_media_list_and_the_attach_forms(
     assert 'id="now-media-list"' in card
     assert 'id="media-list"' not in card
     assert 'hx-target="#now-media-list"' in card
-    for kind in ("file", "youtube", "score", "text"):
-        assert f'<input type="hidden" name="kind" value="{kind}">' in card
+    assert 'name="value"' in card  # the one box: path, link or note
     assert "<audio" in card  # the player is still the card's
-
-
-def test_the_media_page_keeps_its_own_list_and_forms(client, le_freak, roots):
-    page = client.get(f"/exercises/{le_freak.id}/media").text
-
-    assert 'id="media-list"' in page
-    assert 'id="now-media-list"' not in page
-    assert 'hx-target="#media-list"' in page
 
 
 def _from_card(**headers: str) -> dict[str, str]:
@@ -1772,7 +1803,9 @@ def test_a_single_track_player_has_a_volume_slider(client, conn, le_freak, loop_
     assert player  # inside the player's own controls, not beside it
 
 
-def test_a_track_set_gets_no_volume_slider_of_its_own(client, conn, le_freak, loop_wav):
+def test_a_track_set_has_one_volume_over_the_whole_mix(
+    client, conn, le_freak, loop_wav
+):
     from pydub import AudioSegment
 
     drums = loop_wav.with_name("drums.wav")
@@ -1790,7 +1823,10 @@ def test_a_track_set_gets_no_volume_slider_of_its_own(client, conn, le_freak, lo
     )
     start(client, le_freak.id)
 
-    assert 'class="volume"' not in client.get("/").text
+    page = client.get("/").text
+
+    assert page.count('class="volume"') == 1  # the master; each track has a gain
+    assert page.count('class="gain"') == 2
 
 
 def test_a_youtube_attachment_is_an_embed_with_the_link_behind_it(
@@ -2102,11 +2138,11 @@ def test_starting_the_row_that_is_already_running_does_not_restart_it(
 # --- attaching media from the page ------------------------------------------
 
 
-def test_the_media_page_lists_the_roots_paths_are_confined_to(client, le_freak, roots):
-    page = client.get(f"/exercises/{le_freak.id}/media").text
+def test_the_attach_box_lists_the_roots_paths_are_confined_to(client, le_freak, roots):
+    page = client.get("/modules/songs").text
+    box = page.split(f'<dialog id="media-add-{le_freak.id}"')[1].split("</dialog>")[0]
 
-    assert "le freak" in page
-    assert str(roots) in page  # a path is typed in, so say where it may point
+    assert str(roots) in box  # a path is typed in, so say where it may point
 
 
 def test_a_path_pasted_in_quotes_is_attached_without_them(
@@ -2242,7 +2278,7 @@ def test_a_refusal_without_htmx_is_a_page_rather_than_json(
 
 
 def test_the_page_carries_the_slot_a_refusal_lands_in(client, le_freak, roots):
-    page = client.get(f"/exercises/{le_freak.id}/media").text
+    page = client.get("/modules/songs").text
 
     assert 'id="problem"' in page
     # htmx throws a 4xx body away unless the page's own config says otherwise
@@ -2426,29 +2462,48 @@ def test_a_set_is_labelled_as_a_whole_from_the_page(client, conn, le_freak, loop
     assert media.exercise_media(conn, exercise_id=le_freak.id)[0].label == "stems"
 
 
-def test_the_module_page_links_to_an_exercises_media(client, songs, le_freak):
+def test_a_module_row_lists_its_media_in_place_of_a_link(
+    client, conn, songs, le_freak, loop_wav
+):
+    media.attach(
+        conn,
+        exercise_id=le_freak.id,
+        kind="file",
+        path=str(loop_wav),
+        label="the loop",
+        now=NOW,
+    )
+
     page = client.get("/modules/songs").text
+    row = page.split(f'id="exercise-{le_freak.id}"')[1].split("</tr>")[0]
+    shown = row.split("<dialog")[0]
 
-    assert f'href="/exercises/{le_freak.id}/media"' in page
+    assert f'id="row-media-{le_freak.id}"' in row
+    assert f'href="/exercises/{le_freak.id}/media"' not in row
+    assert ">the loop<" in shown
+    # the path is in the edit dialog, not on show
+    assert str(loop_wav) not in shown
+    assert str(loop_wav) in row.split('<dialog id="media-edit-')[1]
+    assert "+ add" in row
 
 
-def test_attaching_without_htmx_redirects_back_to_the_media_page(
+def test_attaching_without_htmx_redirects_back_to_the_module_page(
     client, le_freak, roots
 ):
     """No JavaScript: a real form, a real redirect, a working app."""
     response = client.post(
         f"/exercises/{le_freak.id}/media",
         data={"kind": "text", "body": "two octaves"},
-        headers={"Referer": f"http://testserver/exercises/{le_freak.id}/media"},
+        headers={"Referer": "http://testserver/modules/songs"},
         follow_redirects=False,
     )
 
     assert response.status_code == 303
-    assert response.headers["location"] == f"/exercises/{le_freak.id}/media"
+    assert response.headers["location"] == "/modules/songs"
 
 
-def test_the_media_page_is_404_for_an_exercise_that_is_not_there(client):
-    assert client.get("/exercises/404/media").status_code == 404
+def test_there_is_no_separate_media_page_any_more(client, le_freak):
+    assert client.get(f"/exercises/{le_freak.id}/media").status_code == 405
 
 
 # --- Moving rows between modules (#29) --------------------------------------
@@ -2667,7 +2722,7 @@ def test_the_target_bpm_boxes_ask_the_browser_for_a_number(client, songs, le_fre
 def test_notes_are_a_textarea_on_the_row_and_on_the_add_form(client, songs, le_freak):
     page = client.get("/modules/songs").text
 
-    assert page.count("<textarea") == 2
+    assert len(re.findall(r'<textarea[^>]*name="notes"', page)) == 2
     assert 'input type="text" name="notes"' not in page
 
 
@@ -2717,7 +2772,8 @@ def test_a_track_saves_on_change_with_no_save_button(client, conn, le_freak, loo
     source = media.attach(
         conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
     )
-    page = client.get(f"/exercises/{le_freak.id}/media").text
+    start(client, le_freak.id)
+    page = client.get("/").text
 
     assert f'hx-patch="/media/{source.id}"' in page
     assert ">save<" not in page
@@ -2758,7 +2814,9 @@ def test_a_track_shows_text_until_a_click(client, conn, le_freak, loop_wav):
         conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
     )
 
-    drawn = outside_templates(client.get(f"/exercises/{le_freak.id}/media").text)
+    start(client, le_freak.id)
+    drawn = outside_templates(client.get("/").text)
+    drawn = drawn.split('id="now-media-list"')[1]
 
     assert 'name="gain"' not in drawn
     assert 'name="muted"' in drawn  # a checkbox is already a click
@@ -2995,6 +3053,91 @@ def test_a_file_ffmpeg_cannot_read_is_a_409_naming_it(
     assert "junk.mp4" in response.text
 
 
+# --- speed as a render, and the ladder (Phase 5b step 8) ---------------------
+
+
+def test_a_slower_audio_is_a_longer_render_in_the_cache(
+    client, conn, le_freak, loop_wav, cache
+):
+    from pydub import AudioSegment
+
+    source = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+
+    response = client.get(f"/media/{source.id}/audio?speed=0.8")
+
+    assert response.status_code == 200
+    rendered = next(cache.glob("*.wav"))
+    assert AudioSegment.from_file(rendered).duration_seconds == pytest.approx(
+        5.0, abs=0.05
+    )
+
+
+def test_a_set_member_is_asked_for_in_mono(client, conn, le_freak, loop_wav, cache):
+    source = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+
+    response = client.get(f"/media/{source.id}/audio?mono=1")
+
+    assert response.status_code == 200
+    assert len(list(cache.glob("*.wav"))) == 1
+
+
+def test_a_speed_off_the_slider_is_refused(client, conn, le_freak, loop_wav, cache):
+    source = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+
+    assert client.get(f"/media/{source.id}/audio?speed=0.4").status_code == 422
+    assert client.get(f"/media/{source.id}/audio?speed=1.5").status_code == 422
+
+
+def attach_by_form(client, exercise_id: int, path: Path, group_id: int | None = None):
+    data = {"kind": "file", "path": str(path)}
+    if group_id is not None:
+        data["group_id"] = str(group_id)
+    return client.post(f"/exercises/{exercise_id}/media", data=data, headers=hx())
+
+
+def test_attaching_a_file_renders_the_ladder_behind_the_answer(
+    app, client, conn, le_freak, loop_wav, cache
+):
+    app.state.prerender = True
+
+    assert attach_by_form(client, le_freak.id, loop_wav).status_code == 200
+
+    # the four common speeds, and the exercise's own 66%; full speed is the file
+    assert len(list(cache.glob("*.wav"))) == 5
+
+
+def test_a_second_track_renders_the_whole_set_in_mono(
+    app, client, conn, le_freak, loop_wav, roots, cache
+):
+    from pydub import AudioSegment
+
+    drums = roots / "S" / "le freak" / "drums.wav"
+    AudioSegment.silent(duration=4000).export(drums, format="wav")
+    first = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+    app.state.prerender = True
+
+    attach_by_form(client, le_freak.id, drums, group_id=first.group_id)
+
+    # the same silence twice is one content hash: five speeds and full, mono
+    assert len(list(cache.glob("*.wav"))) == 6
+
+
+def test_the_ladder_is_not_rendered_unless_the_app_asks_for_it(
+    client, conn, le_freak, loop_wav, cache
+):
+    attach_by_form(client, le_freak.id, loop_wav)
+
+    assert not cache.exists()
+
+
 # --- the speed slider writes back (Phase 5a step 6) --------------------------
 
 
@@ -3068,7 +3211,8 @@ def test_a_lone_file_gets_a_player_wired_to_its_urls(client, conn, le_freak, loo
     assert f'data-peaks-url="/media/{source.id}/peaks"' in page
     assert f'data-audio-url="/media/{source.id}/audio"' in page
     assert f'data-speed-url="/exercises/{le_freak.id}/speed"' in page
-    assert "/static/player.js" in page
+    assert "/static/transport.js" in page
+    assert "/static/mixer.js" in page
 
 
 def test_the_slider_starts_at_the_exercises_ratio(client, conn, songs, loop_wav):
@@ -3099,9 +3243,9 @@ def test_with_no_target_the_slider_sits_at_one_and_is_disabled(
     assert "target" in slider  # says why
 
 
-def test_a_track_set_keeps_its_stacked_players_until_5b(
-    client, conn, le_freak, loop_wav, roots
-):
+@pytest.fixture
+def stems(conn, le_freak, loop_wav, roots):
+    """A set of two: the loop, and four seconds of drums beside it."""
     from pydub import AudioSegment
 
     drums = roots / "S" / "le freak" / "drums.wav"
@@ -3109,42 +3253,154 @@ def test_a_track_set_keeps_its_stacked_players_until_5b(
     first = media.attach(
         conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
     )
-    media.attach(
+    second = media.attach(
         conn,
         exercise_id=le_freak.id,
         kind="file",
         path=str(drums),
         group_id=first.group_id,
+        label="drums",
         now=NOW,
+    )
+    return [first, second]
+
+
+def test_a_track_set_is_one_player_with_a_lane_per_track(client, conn, le_freak, stems):
+    start(client, le_freak.id)
+
+    page = client.get("/").text
+
+    assert page.count('class="player set"') == 1
+    assert 'data-set="1"' in page
+    player = page.split('class="player set"')[1].split("</article>")[0]
+    assert player.count('class="track"') == 2
+    assert player.count('class="wave"') == 2
+    assert player.count('class="axis"') == 1  # one time axis for every lane
+    assert player.count('class="play"') == 1  # one transport
+    for track in stems:
+        assert f'data-audio-url="/media/{track.id}/audio"' in player
+        assert f'data-peaks-url="/media/{track.id}/peaks"' in player
+        assert f'data-describe-url="/media/{track.id}"' in player
+
+
+def test_without_javascript_a_set_is_still_its_stacked_players(
+    client, conn, le_freak, stems
+):
+    start(client, le_freak.id)
+
+    page = client.get("/").text
+
+    assert page.count("<audio controls") == 2
+
+
+def test_each_lane_carries_its_strip_at_the_saved_mix(client, conn, le_freak, stems):
+    media.describe(conn, source_id=stems[1].id, gain=0.5, muted=True)
+    start(client, le_freak.id)
+
+    page = client.get("/").text
+    lane = page.split(f'data-id="{stems[1].id}"')[1].split('class="track"')[0]
+
+    assert 'data-gain="0.5"' in lane
+    assert 'data-muted="1"' in lane
+    assert "checked" in lane.split('class="solo"')[0]  # the mute box
+    assert 'value="0.5" aria-label="gain"' in lane
+
+
+def test_a_lanes_name_and_strip_sit_to_the_left_of_its_wave(
+    client, conn, le_freak, stems
+):
+    start(client, le_freak.id)
+
+    page = client.get("/").text
+    lane = page.split(f'data-id="{stems[1].id}"')[1].split('class="track"')[0]
+    side = lane.split('class="side"')[1].split("</div>")[0]
+
+    assert 'title="drums"' in side  # clipped on the page, whole on hover
+    for control in ('class="mute"', 'class="solo"', 'class="gain"'):
+        assert control in side
+    assert lane.index('class="side"') < lane.index('class="wave"')
+    assert "lane-head" not in lane  # nothing between one wave and the next
+
+
+def test_the_player_has_no_pan(client, conn, le_freak, stems):
+    start(client, le_freak.id)
+
+    page = client.get("/").text
+
+    assert 'aria-label="pan"' not in page
+    assert 'class="pan"' not in page
+
+
+def test_a_lone_file_is_a_set_of_one_with_no_strip(client, conn, le_freak, loop_wav):
+    media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
     )
     start(client, le_freak.id)
 
     page = client.get("/").text
 
-    assert page.count("<audio") == 2
-    assert 'class="player"' not in page
+    assert 'class="player"' in page
+    assert 'data-set="0"' in page
+    assert page.count('class="track"') == 1
+    assert 'class="strip"' not in page
 
 
-def test_the_media_page_says_how_to_add_a_sound_file(client, le_freak, roots):
-    page = client.get(f"/exercises/{le_freak.id}/media").text
+def test_the_strip_saves_through_the_tracks_own_columns(client, conn, le_freak, stems):
+    response = client.patch(
+        f"/media/{stems[0].id}",
+        data={"gain": "1.5", "muted": "on"},
+        headers=hx(**{"HX-Target": "now-media-list"}),
+    )
 
-    assert 'id="how-to-attach"' in page
-    assert "absolute path" in page  # what to type
-    assert "Finder" in page  # and how to get one
-    assert "start" in page  # and where it plays afterwards
-    assert "semitones" in page or "pitch" in page
-
-
-def test_an_empty_media_page_points_at_the_instructions(client, le_freak, roots):
-    page = client.get(f"/exercises/{le_freak.id}/media").text
-
-    assert 'href="#how-to-attach"' in page
+    assert response.status_code == 200
+    saved = repo.get_media_source(conn, stems[0].id)
+    assert saved is not None
+    assert (saved.gain, saved.muted) == (1.5, True)
+    assert "media-players" not in response.text  # the audio plays on
 
 
-def test_the_media_link_on_a_row_says_what_it_is_for(client, le_freak):
-    page = client.get("/modules/songs").text
+def row_target(exercise_id: int) -> dict[str, str]:
+    return hx(**{"HX-Target": f"row-media-{exercise_id}"})
 
-    assert "attach or play a sound file" in page  # the link's tooltip
+
+def test_an_unlabelled_file_reads_as_its_name_on_the_row(
+    client, conn, le_freak, loop_wav
+):
+    media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+
+    row = client.get("/modules/songs").text.split(f'id="row-media-{le_freak.id}"')[1]
+
+    assert '<span class="label" title="loop.wav">loop.wav</span>' in row
+
+
+def test_attaching_and_removing_from_the_row_redraw_the_row_list(
+    client, conn, le_freak, roots
+):
+    added = client.post(
+        f"/exercises/{le_freak.id}/media",
+        data={"kind": "text", "body": "two octaves"},
+        headers=row_target(le_freak.id),
+    )
+    source = repo.media_sources_for_exercise(conn, exercise_id=le_freak.id)[0]
+    removed = client.delete(f"/media/{source.id}", headers=row_target(le_freak.id))
+
+    assert f'id="row-media-{le_freak.id}"' in added.text
+    assert "two octaves" in added.text
+    assert f'id="row-media-{le_freak.id}"' in removed.text
+    assert "two octaves" not in removed.text
+
+
+def test_a_set_on_the_row_lists_its_members_and_takes_another_track(
+    client, conn, le_freak, stems
+):
+    row = client.get("/modules/songs").text.split(f'id="row-media-{le_freak.id}"')[1]
+
+    assert 'class="set-name' in row
+    assert row.count('class="media-item member" id=') == 2
+    assert "+ track" in row
+    assert 'name="group_id"' in row
 
 
 def test_the_speed_and_target_are_edited_in_the_speed_column(client, le_freak):
@@ -3256,3 +3512,135 @@ def test_stop_after_moving_an_end_back_before_midnight_follows_on_from_it(
     assert logged.description == "le freak"
     assert logged.started_at == datetime(2026, 7, 5, 23, 58, 0, 1)
     assert logged.ended_at == past_midnight
+
+
+@pytest.mark.parametrize(
+    ("typed", "kind"),
+    [
+        ("https://youtu.be/Kt2GdFbdVxo", "youtube"),
+        ("two octaves", "text"),
+    ],
+)
+def test_attaching_from_one_box_works_out_the_kind(client, conn, le_freak, typed, kind):
+    response = client.post(
+        f"/exercises/{le_freak.id}/media",
+        data={"value": typed, "label": "it"},
+        headers=row_target(le_freak.id),
+    )
+
+    assert response.status_code == 200
+    (source,) = repo.media_sources_for_exercise(conn, exercise_id=le_freak.id)
+    assert (source.kind, source.label) == (kind, "it")
+
+
+def test_a_path_in_the_one_box_is_a_file(client, conn, le_freak, loop_wav):
+    client.post(
+        f"/exercises/{le_freak.id}/media",
+        data={"value": str(loop_wav)},
+        headers=row_target(le_freak.id),
+    )
+
+    (source,) = repo.media_sources_for_exercise(conn, exercise_id=le_freak.id)
+    assert (source.kind, source.path) == ("file", str(loop_wav))
+
+
+def test_an_empty_row_offers_only_an_add_button(client, le_freak):
+    row = client.get("/modules/songs").text.split(f'id="row-media-{le_freak.id}"')[1]
+    row = row.split("</dialog>")[0]
+
+    assert "media-box" not in row
+    assert 'data-opens="media-add-' in row
+    assert "<details" not in row
+
+
+def test_the_row_list_is_a_framed_list_of_labels_with_edit_and_delete(
+    client, conn, le_freak, loop_wav
+):
+    media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+    media.attach(
+        conn,
+        exercise_id=le_freak.id,
+        kind="youtube",
+        url="https://youtu.be/Kt2GdFbdVxo",
+        now=NOW,
+    )
+
+    row = client.get("/modules/songs").text.split(f'id="row-media-{le_freak.id}"')[1]
+    row = row.split(f'<dialog id="media-add-{le_freak.id}"')[0]
+
+    assert 'class="media-box"' in row
+    assert "<ul" not in row and "<details" not in row
+    assert row.count('class="edit"') == 2
+    assert row.count('class="remove"') == 2
+    assert 'title="file"' in row and 'title="youtube"' in row
+    assert ">loop.wav<" in row
+    assert row.count(f'data-opens="media-add-{le_freak.id}"') == 1
+
+
+def test_adding_and_editing_happen_in_a_small_dialog_of_two_boxes(
+    client, conn, le_freak, loop_wav, roots
+):
+    source = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+
+    row = client.get("/modules/songs").text.split(f'id="row-media-{le_freak.id}"')[1]
+    add = row.split(f'<dialog id="media-add-{le_freak.id}"')[1].split("</dialog>")[0]
+    edit = row.split(f'<dialog id="media-edit-{source.id}"')[1].split("</dialog>")[0]
+
+    for dialog in (add, edit):
+        assert dialog.count("<input") - dialog.count('type="hidden"') == 2
+        assert 'name="value"' in dialog and 'name="label"' in dialog
+        assert 'class="help"' in dialog
+    assert f'value="{loop_wav}"' in edit
+    help_text = add.split('class="help"')[1].split(">?<")[0]
+    assert "absolute path" in help_text and "Finder" in help_text
+    assert str(roots) in help_text
+
+
+def test_editing_from_the_row_sets_path_and_label_and_keeps_the_mute(
+    client, conn, le_freak, loop_wav, roots
+):
+    from pydub import AudioSegment
+
+    take2 = loop_wav.with_name("take2.wav")
+    AudioSegment.silent(duration=4000).export(take2, format="wav")
+    source = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+    media.describe(conn, source_id=source.id, muted=True)
+
+    response = client.post(
+        f"/media/{source.id}/edit",
+        data={"value": str(take2), "label": "groove"},
+        headers=row_target(le_freak.id),
+    )
+
+    assert response.status_code == 200
+    assert response.text.startswith(
+        f'<div class="row-media" id="row-media-{le_freak.id}"'
+    )
+    saved = repo.get_media_source(conn, source.id)
+    assert saved is not None
+    assert (saved.path, saved.label, saved.muted) == (str(take2), "groove", True)
+
+
+def test_an_edit_outside_the_roots_is_a_message_and_keeps_the_label(
+    client, conn, le_freak, loop_wav
+):
+    source = media.attach(
+        conn, exercise_id=le_freak.id, kind="file", path=str(loop_wav), now=NOW
+    )
+
+    response = client.post(
+        f"/media/{source.id}/edit",
+        data={"value": "/etc/passwd", "label": "nope"},
+        headers=row_target(le_freak.id),
+    )
+
+    assert response.status_code == 400
+    assert "outside the configured roots" in response.text
+    saved = repo.get_media_source(conn, source.id)
+    assert saved is not None and saved.label is None

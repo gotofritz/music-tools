@@ -15,7 +15,7 @@ import json
 import os
 import subprocess
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from functools import lru_cache
 from pathlib import Path
 
@@ -157,26 +157,74 @@ def has_rubberband() -> bool:
 
 
 def shift_pitch(source: Path, /, *, semitones: int, cache: Path) -> Path:
-    """`source` transposed by `semitones` at the same speed, as a cached render.
+    """`source` transposed by `semitones` at the same speed, as a cached render."""
+    return render_audio(source, semitones=semitones, cache=cache)
 
-    `rubberband` where the build has it. Otherwise `asetrate` moves pitch and
-    speed together and `atempo` takes the speed back out: lower quality, same
-    result. Zero is the file itself — nothing to render, nothing cached.
+
+#: The speed slider's range, as a fraction of the target. Slower than half is
+#: not playing along any more, and faster than the target is not a ratio the
+#: schedule can read (`tempo.py` caps it at 1.0).
+MIN_SPEED = 0.5
+MAX_SPEED = 1.0
+
+#: The rate a member of a set is played at. Decoded audio is the browser's
+#: budget — float32, held whole — and mono at half the CD rate brings eight
+#: four-minute stems from around 680 MB to under 200 MB.
+SET_RATE = 22050
+
+#: The speeds that get used, rendered when the media is attached so the common
+#: moves of the slider are cache hits rather than a wait. Full speed is the
+#: file itself.
+LADDER = (0.6, 0.7, 0.8, 0.9)
+
+
+def render_audio(
+    source: Path,
+    /,
+    *,
+    speed: float = 1.0,
+    semitones: int = 0,
+    mono: bool = False,
+    cache: Path,
+) -> Path:
+    """`source` at `speed` and transposed by `semitones`, as one cached render.
+
+    Speed is a render rather than `playbackRate` because Web Audio has no
+    `preservesPitch` (docs/plans/05-playback.md, 5b): slower here means longer
+    at the same pitch. Speed and pitch are one ffmpeg pass, so a set member
+    goes through one job whatever is asked of it. `mono` is how a member of a
+    set is played: downmixed first, which halves the stretch's work, and
+    resampled to `SET_RATE`, which halves what the browser fetches and holds.
+
+    Speed is rounded to the slider's step, so 0.8 and 0.8000001 are one entry.
+    Full speed, no shift and stereo is the file itself: nothing rendered.
     """
+    speed = round(speed, 2)
+    if not MIN_SPEED <= speed <= MAX_SPEED:
+        raise ValueError(f"a speed runs from {MIN_SPEED} to {MAX_SPEED}, not {speed}")
     if not -MAX_SEMITONES <= semitones <= MAX_SEMITONES:
         raise ValueError(f"pitch shifts are limited to ±{MAX_SEMITONES} semitones")
-    if semitones == 0:
+    if speed == 1.0 and semitones == 0 and not mono:
         return source
     factor = 2 ** (semitones / 12)
 
     def produce(source: Path, out: Path) -> None:
-        if has_rubberband():
-            filters = f"rubberband=pitch={factor}"
+        chain = ["aformat=channel_layouts=mono"] if mono else []
+        if speed == 1.0 and semitones == 0:
+            pass
+        elif has_rubberband():
+            chain.append(f"rubberband=tempo={speed}:pitch={factor}")
         else:
-            rate = int(mediainfo(str(source))["sample_rate"])
-            filters = f"asetrate={rate * factor},aresample={rate},atempo={1 / factor}"
+            # `asetrate` moves pitch and speed together and `atempo` takes the
+            # unwanted half back out: lower quality, same result.
+            if semitones:
+                rate = int(mediainfo(str(source))["sample_rate"])
+                chain += [f"asetrate={rate * factor}", f"aresample={rate}"]
+            chain += atempo_chain(speed / factor)
+        if mono:
+            chain.append(f"aresample={SET_RATE}")
         try:
-            run_ffmpeg("-i", source, "-vn", "-af", filters, out)
+            run_ffmpeg("-i", source, "-vn", "-af", ",".join(chain), out)
         except RenderError as failed:
             raise RenderError(f"{source}: {failed}") from None
 
@@ -185,10 +233,60 @@ def shift_pitch(source: Path, /, *, semitones: int, cache: Path) -> Path:
         cache=cache,
         suffix=".wav",
         produce=produce,
-        op="pitch",
+        op="render",
+        speed=speed,
         semitones=semitones,
-        engine="rubberband" if has_rubberband() else "asetrate",
+        mono=mono,
+        rate=SET_RATE if mono else None,
+        engine="rubberband" if has_rubberband() else "atempo",
     )
+
+
+def atempo_chain(ratio: float) -> list[str]:
+    """`atempo` filters whose product is `ratio`, each inside 0.5–2.
+
+    Older ffmpeg builds only accept that range in one instance, and a
+    semitone shift on top of a slow speed goes below it.
+    """
+    chain: list[str] = []
+    while ratio < 0.5:
+        chain.append("atempo=0.5")
+        ratio /= 0.5
+    while ratio > 2.0:
+        chain.append("atempo=2.0")
+        ratio /= 2.0
+    chain.append(f"atempo={ratio:g}")
+    return chain
+
+
+def speed_ladder(ratio: float | None) -> tuple[float, ...]:
+    """What to render on attach: `LADDER`, plus the exercise's own speed.
+
+    The exercise's own speed is where the slider will sit when the card is
+    drawn, so it is the render most likely to be wanted first.
+    """
+    speeds = set(LADDER)
+    if ratio is not None and MIN_SPEED <= round(ratio, 2) < MAX_SPEED:
+        speeds.add(round(ratio, 2))
+    return tuple(sorted(speeds))
+
+
+def prerender(
+    sources: Iterable[Path], /, *, speeds: Iterable[float], mono: bool, cache: Path
+) -> None:
+    """Render every source at every speed, ahead of being asked.
+
+    Run in the background after an attach. A file that will not render is
+    skipped: the player asks for it again and gets the message then. Mono at
+    full speed comes along for a set, since that is what it plays first.
+    """
+    wanted = tuple(speeds) + ((1.0,) if mono else ())
+    for source in sources:
+        for speed in wanted:
+            try:
+                playable_audio(source, speed=speed, mono=mono, cache=cache)
+            except RenderError:
+                break
 
 
 #: What ffmpeg is handed that carries a picture the app never shows.
@@ -199,15 +297,23 @@ def is_video(path: Path) -> bool:
     return path.suffix.lower() in VIDEO_SUFFIXES
 
 
-def playable_audio(source: Path, /, *, semitones: int = 0, cache: Path) -> Path:
-    """What the player should be given for `source`: audio, at this pitch.
+def playable_audio(
+    source: Path,
+    /,
+    *,
+    speed: float = 1.0,
+    semitones: int = 0,
+    mono: bool = False,
+    cache: Path,
+) -> Path:
+    """What the player should be given for `source`: audio, at this speed and pitch.
 
-    A plain audio file at zero shift is the file itself — no render, no cache
-    entry. A video goes through extraction first, and a shift is applied to
-    whatever that returns.
+    A plain audio file at full speed and no shift is the file itself — no
+    render, no cache entry. A video goes through extraction first, and the
+    render is applied to whatever that returns.
     """
     audio = extract_audio(source, cache=cache) if is_video(source) else source
-    return shift_pitch(audio, semitones=semitones, cache=cache)
+    return render_audio(audio, speed=speed, semitones=semitones, mono=mono, cache=cache)
 
 
 def duration_seconds(path: Path, /) -> float:

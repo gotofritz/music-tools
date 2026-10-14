@@ -131,6 +131,25 @@ class MediaCard(BaseModel):
         return self.group.position if self.group else self.sources[0].position
 
 
+#: What a typed path ends in when it is a score rather than something to hear.
+SCORE_SUFFIXES = (".pdf", ".mscz")
+
+
+def classify(value: str) -> str:
+    """The kind of thing one typed box holds, so the form needs only the one.
+
+    A link is YouTube (the only link there is), a path — absolute or from
+    home, quoted or not — is a score by its suffix and a file otherwise, and
+    anything else is a note.
+    """
+    typed = value.strip().strip("'\"")
+    if typed.startswith(("http://", "https://")):
+        return "youtube"
+    if typed.startswith(("/", "~")):
+        return "score" if typed.lower().endswith(SCORE_SUFFIXES) else "file"
+    return "text"
+
+
 def youtube_embed(url: str | None) -> str | None:
     """The embed URL for a YouTube link, or `None` if it is not one.
 
@@ -375,17 +394,7 @@ def add_to_set(
     members = repo.media_sources_in_group(conn, group_id=group.id)
     if len(members) >= MAX_TRACKS:
         raise SetTooBig(f"a track set holds {MAX_TRACKS} at most, and this one is full")
-    joining = probe_duration(resolved)
-    for member in members:
-        if member.path is None:  # pragma: no cover - a file always has a path
-            continue
-        length = probe_duration(Path(member.path))
-        if abs(length - joining) > DURATION_TOLERANCE:
-            raise MembersDisagree(
-                f"{resolved.name} is {joining:.2f}s and"
-                f" {Path(member.path).name} is {length:.2f}s;"
-                " a set plays as one thing, so its members have to match"
-            )
+    _check_agrees(resolved, members)
 
     with transaction(conn):
         return repo.create_media_source(
@@ -398,6 +407,74 @@ def add_to_set(
             path=str(resolved),
             label=label,
         )
+
+
+def _check_agrees(joining: Path, members: list[MediaSource]) -> None:
+    """`MembersDisagree` unless `joining` is as long as every member of a set."""
+    length = probe_duration(joining)
+    for member in members:
+        if member.path is None:  # pragma: no cover - a file always has a path
+            continue
+        theirs = probe_duration(Path(member.path))
+        if abs(theirs - length) > DURATION_TOLERANCE:
+            raise MembersDisagree(
+                f"{joining.name} is {length:.2f}s and"
+                f" {Path(member.path).name} is {theirs:.2f}s;"
+                " a set plays as one thing, so its members have to match"
+            )
+
+
+def replace(
+    conn: sqlite3.Connection,
+    *,
+    source_id: int,
+    path: str | None = None,
+    url: str | None = None,
+    body: str | None = None,
+    roots: tuple[Path, ...] | None = None,
+) -> MediaSource:
+    """Point an attachment at something else, keeping its place and its name.
+
+    The new value is the one its kind carries — a path for a file or a score,
+    a URL for YouTube, the text for text — and is held to the same rules as an
+    attach: inside the roots, there on disk, not already on this exercise, and
+    for a member of a set, as long as the others. The label, the mix and the
+    position stay, so a re-exported stem drops into the set it was in.
+    """
+    source = _source(conn, source_id)
+    wanted = {"file": "path", "score": "path", "youtube": "url", "text": "body"}[
+        source.kind
+    ]
+    given = {"path": path, "url": url, "body": body}
+    for name, value in given.items():
+        if name != wanted and value:
+            raise BadMedia(f"a {source.kind} attachment has no {name}")
+    if not given[wanted]:
+        raise BadMedia(f"a {source.kind} attachment needs a {wanted}")
+
+    if source.kind not in PATH_KINDS:
+        return repo.update_media_source(conn, source.id, **{wanted: given[wanted]})
+
+    assert path is not None  # the check above; this is for the type checker
+    resolved = resolve_within_roots(path, roots=roots)
+    if not resolved.is_file():
+        raise MissingFile(f"there is nothing at {resolved}")
+    if any(
+        other.path == str(resolved) and other.id != source.id
+        for other in repo.media_sources_for_exercise(
+            conn, exercise_id=source.exercise_id
+        )
+    ):
+        raise DuplicateMedia(f"{resolved.name} is already attached to this one")
+    if source.group_id is not None:
+        others = [
+            member
+            for member in repo.media_sources_in_group(conn, group_id=source.group_id)
+            if member.id != source.id
+        ]
+        if others:
+            _check_agrees(resolved, others)
+    return repo.update_media_source(conn, source.id, path=str(resolved))
 
 
 def probe_duration(path: Path) -> float:

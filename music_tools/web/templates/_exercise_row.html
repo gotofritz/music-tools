@@ -18,8 +18,7 @@
   <td>{{ module.name }}</td>
   <td class="name">
     {{ name_form(exercise, "#exercise-" ~ exercise.id) }}
-    <a class="media-link" href="/exercises/{{ exercise.id }}/media"
-       title="attach or play a sound file, a score, a YouTube link or a note">media</a>
+    {% with cards = row_media[exercise.id] %}{% include "_row_media.html" %}{% endwith %}
   </td>
   <td>
     {# Its own form: one cannot span two cells. #}

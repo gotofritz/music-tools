@@ -16,14 +16,15 @@
   {% with cards = running_media %}
   {% include "_media_players.html" %}
   {% endwith %}
-  {# The media page, inline: the same list and the same four forms, answering
-     into this card instead of that page. #}
+  {# The list, and the same add dialog a module row has, answering into this
+     card. #}
   {% with exercise = running_exercise, cards = running_media, list_id = "now-media-list" %}
   {% include "_media_list.html" %}
-  <details class="attach">
-    <summary>attach something</summary>
+  <button type="button" class="add" data-opens="media-add-now"
+          title="attach a sound file, a video, a score, a YouTube link or a note">+ add</button>
+  <dialog id="media-add-now" class="media-dialog">
     {% include "_media_attach.html" %}
-  </details>
+  </dialog>
   {% endwith %}
   {% endif %}
   {# The stops: one button per way it comes back, each sending its own
