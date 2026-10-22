@@ -90,6 +90,46 @@ def test_a_score_attached_before_the_rename_is_carried_over(memory_db):
     assert kinds == ["score"]
 
 
+def test_an_end_a_day_out_from_its_start_is_brought_back(memory_db):
+    # Before an edited time was read within its practice day, moving an end
+    # back across midnight (00:05 to 23:58) wrote it a day in the future, and
+    # one forward across it (23:55 to 00:10) a day in the past. 005 puts both
+    # back within a day of the start; a line that was right is left alone.
+    memory_db.executescript(
+        "BEGIN;"
+        + "".join(
+            (MIGRATIONS_DIR / name).read_text()
+            for name in (
+                "001_initial.sql",
+                "002_media.sql",
+                "003_score_kind.sql",
+                "004_day_ended.sql",
+            )
+        )
+        + "PRAGMA user_version = 4;COMMIT;"
+    )
+    with transaction(memory_db):
+        memory_db.execute("INSERT INTO practice_day (day) VALUES ('2026-10-12')")
+        memory_db.executemany(
+            "INSERT INTO practice_entry (day_id, started_at, ended_at, description)"
+            " VALUES (1, ?, ?, ?)",
+            [
+                ("2026-10-12T23:40:00", "2026-10-13T23:58:00", "future"),
+                ("2026-10-12T23:30:00", "2026-10-12T00:10:00", "past"),
+                ("2026-10-12T23:59:00", "2026-10-13T00:20:00.000001", "right"),
+            ],
+        )
+
+    migrate(memory_db)
+
+    ends = dict(memory_db.execute("SELECT description, ended_at FROM practice_entry"))
+    assert ends == {
+        "future": "2026-10-12T23:58:00",
+        "past": "2026-10-13T00:10:00",
+        "right": "2026-10-13T00:20:00.000001",
+    }
+
+
 def test_migrate_is_idempotent(memory_db):
     migrate(memory_db)
     before = user_version(memory_db)

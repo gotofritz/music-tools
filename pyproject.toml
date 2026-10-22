@@ -57,6 +57,13 @@ sequence = [{ cmd = "ruff check ." }, { cmd = "ruff format --check ." }]
 help = "Everything CI runs"
 sequence = [{ ref = "lint" }, { ref = "types" }, { ref = "test" }]
 
+[tool.poe.tasks.lint-fix]
+help = "Lint the project and fix issues"
+sequence = [
+  {cmd = "ruff check . --fix"},
+  {cmd = "ruff format ."}
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 

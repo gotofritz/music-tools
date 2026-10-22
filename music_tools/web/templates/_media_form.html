@@ -1,0 +1,19 @@
+{# The one form media is added or edited with: what it is, typed into one box
+   (a path, a YouTube link or a note — the server works out which), and a
+   label. How to get a path sits behind "?", as a tooltip. #}
+{% macro media_form(action, list_id, value="", label="", group_id=None, submit="add") %}
+<form class="media-form" action="{{ action }}" method="post"
+      hx-post="{{ action }}" hx-target="#{{ list_id }}" hx-swap="outerHTML">
+  {% if group_id %}<input type="hidden" name="group_id" value="{{ group_id }}">{% endif %}
+  <input type="text" name="value" size="40" required aria-label="path, link or note"
+         value="{{ value }}" placeholder="/absolute/path/to/loop.wav, a YouTube link or a note">
+  <button type="button" class="help" title="A file is typed as its absolute path, the one starting with /: in Finder select it and press ⌥⌘C; on Linux use “Copy path” or realpath. It is never copied, and has to be inside {{ media_roots() | join(', ') }}. A .pdf or .mscz is a score; a video plays as sound only. A YouTube link is embedded; anything else is kept as a note.">?</button>
+  <input type="text" name="label" size="14" aria-label="label" value="{{ label }}"
+         placeholder="label">
+  <p class="problem" role="alert"></p>
+  <div class="dialog-buttons">
+    <button type="button" data-closes>cancel</button>
+    <button type="submit">{{ submit }}</button>
+  </div>
+</form>
+{% endmacro %}

@@ -172,6 +172,17 @@ def picker_context(
     }
 
 
+def row_media(
+    conn: sqlite3.Connection, exercises: list[Exercise]
+) -> dict[int, list[media.MediaCard]]:
+    """Each row's attachments, for the list a module row carries in place of a
+    separate media page."""
+    return {
+        exercise.id: media.exercise_media(conn, exercise_id=exercise.id)
+        for exercise in exercises
+    }
+
+
 def group_order(conn: sqlite3.Connection) -> list[str]:
     """The log groups of the live modules, once each, in tab order.
 

@@ -146,3 +146,28 @@ function rescaleBars() {
 
 document.addEventListener("htmx:afterSettle", rescaleBars);
 document.addEventListener("DOMContentLoaded", rescaleBars);
+
+// Adding or editing media is a small dialog. A button with `data-opens` shows
+// the <dialog> it names as a modal; `data-closes` shuts the one it is in. A
+// save that works redraws the list, and the dialog goes with it.
+document.addEventListener("click", (event) => {
+  const opener = event.target.closest && event.target.closest("[data-opens]");
+  if (opener) {
+    document.getElementById(opener.dataset.opens).showModal();
+    return;
+  }
+  const closer = event.target.closest && event.target.closest("[data-closes]");
+  if (closer) {
+    closer.closest("dialog").close();
+  }
+});
+
+// A refused save says why in the page's problem line, which is under the
+// modal; the open dialog shows the same sentence in its own.
+document.addEventListener("htmx:afterSettle", () => {
+  const dialog = document.querySelector("dialog[open]");
+  const problem = document.getElementById("problem");
+  if (dialog && problem) {
+    dialog.querySelector(".problem").textContent = problem.textContent;
+  }
+});

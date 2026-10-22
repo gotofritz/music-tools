@@ -257,11 +257,13 @@ def _queue_context(
     conn: sqlite3.Connection, *, module_id: int, now: datetime
 ) -> dict[str, Any]:
     """The page chrome and the module's rows, the running one first."""
+    exercises = views.running_first(
+        repo.exercises_due(conn, module_id=module_id), conn=conn, now=now
+    )
     return {
         **views.chrome(conn, now=now),
-        "exercises": views.running_first(
-            repo.exercises_due(conn, module_id=module_id), conn=conn, now=now
-        ),
+        "exercises": exercises,
+        "row_media": views.row_media(conn, exercises),
     }
 
 
@@ -271,6 +273,7 @@ def _row(conn: sqlite3.Connection, exercise: Exercise, *, now: datetime) -> str:
         "_exercise_row.html",
         exercise=exercise,
         module=views.modules_by_id(conn)[exercise.module_id],
+        row_media=views.row_media(conn, [exercise]),
         **views.chrome(conn, now=now),
     )
 
