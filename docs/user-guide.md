@@ -130,7 +130,7 @@ starts it without opening a window.
   what it is, how long you have been on it, its name, speed, target BPM and
   notes — editable where they are — and its material: the audio, the video, the
   YouTube player, the score, your own notes. Its media is editable in the card
-  too (names, order, remove, mix, add to a set, and **attach something**), so a
+  too (names, order, remove, mix, add to a set, and **+ add**), so a
   whole session never leaves this page. Under it are the five **stop** buttons
   — `normal`, `short`, `long`, `rotate`, `hold` — and **discard**. Typing in
   the card never restarts the player.
@@ -138,7 +138,10 @@ starts it without opening a window.
   rows appear in a panel under the buttons, due ones first. Click a row to
   start it; click the module again, or **close**, to hide the list. Any stop
   (and discard) puts you back on the module buttons, so the next tune is one
-  click away.
+  click away. **just start**, after the module buttons, is for when the clock
+  should begin before you have decided what to play: it opens a line called
+  `Practice` from now. A stop on the card closes it as it is (click its name in
+  the log to rename it); **stop** on a row's module page makes it that row's.
 - **Log** is today, line by line, with the entry that is running now counting
   up. **Totals** underneath is the subtotal per log group and the total for the
   day — the same numbers as `practice log`.
@@ -245,55 +248,63 @@ Terminal shows it.
 
 ## Attaching the tune to the row
 
-**media**, beside a row on its module page, opens everything that row is
-practised from — and the forms that add more. Four kinds:
+Under each row's name on its module page is a framed list of everything that
+row is practised from, one line each: **✎** to edit it, **×** to remove it,
+an icon for its kind (♪ sound, ▶ YouTube, 📄 score, ¶ note) and its label (or
+the file's name when it has none). **✎** opens a small box with what it points
+at and its label: change either and **save** (a new path keeps its place and
+its mix). The last line, **+ add**, opens the same box empty; with nothing
+attached it is the only thing there. What you type in the first box decides
+the kind — four of them:
 
-- **audio or video**, by path. It is played on the card while you practise. A
+- **audio or video**, by path (anything starting with `/` or `~`). It is played on the card while you practise. A
   video is there for its sound; nothing shows a picture.
-- **a YouTube URL**, shown as the embedded player with the plain link under it.
+- **a YouTube URL** (anything starting with `http`), shown as the embedded player with the plain link under it.
   This is the one thing in the app that needs the network — downloading is
   another program's job. A tune you want offline is downloaded with that and
   attached as a file, with the URL kept beside it so you know where it came
   from.
-- **a score** — a MuseScore file, a PDF, anything your machine opens — as a
-  link. Nothing is checked but the path: the file is opened where it lies.
-- **text**: a fingering, a chord chart, a reminder about the bridge.
+- **a score** — a path ending in `.pdf` or `.mscz` — as a link. Nothing is checked but the path: the file is opened where it lies.
+- **text**: anything else — a fingering, a chord chart, a reminder about the bridge.
 
 Files are **referenced where they are and never copied**, so a path has to be
 absolute and has to point inside the folders the app is allowed to read —
 normally your home directory and the app's own data directory — so file
 your music however you like. The roots are there to keep the app out of the
-machine's own files, not to tidy yours. The media page lists them; set `MUSIC_TOOLS_MEDIA_ROOTS` (a
+machine's own files, not to tidy yours. The **?** in the add box lists them; set `MUSIC_TOOLS_MEDIA_ROOTS` (a
 `:`-separated list, like `PATH`) to change them. Anything outside is refused
 with a message rather than quietly read.
 
 ### Adding a sound file, step by step
 
-1. On the module page, press **media** beside the row.
+1. On the module page, press **+ add** under the row's name.
 2. Copy the file's **absolute path** — the one starting with `/`. On a Mac,
    select it in Finder and press ⌥⌘C; on Linux use your file manager's "Copy
    path", or `realpath file.wav` in a terminal. The quotes Finder puts around it
    are fine; they are dropped. A file already attached to this row is refused
    (other rows may use the same file).
-3. Paste it into the first box on the media page and press **attach audio or
-   video**. A path outside the allowed folders, or to a file that is not there,
-   is refused with a message.
+3. Paste it into the first box, name it in the second if you like, and press
+   **add**. A path outside the allowed folders, or to a file that is not
+   there, is refused with a message in the box.
 4. Back on the module page, press **start** on the row. The card on today's
    page now has the player.
 
 ### The player
 
-For a single file the card shows the **waveform** with a red playhead. Click
-anywhere on it to jump there. **play**/**pause** and **loop** (the whole file)
-sit underneath, then:
+The card shows the **waveform** with a red playhead. Click anywhere on it to
+jump there; drag across it to pick a stretch to **loop**. **play**/**pause**,
+the time, and **loop** (your stretch, or the whole file) sit underneath, then:
 
 - **speed** — a slider from 50% to 100% of the row's target BPM. It plays the
   file slower **without changing its pitch**, and writes the new speed back to
   the row in the notation the row already uses: `66%` stays a percentage, `88`
   stays a BPM. With no target BPM on the row the slider is greyed out; fill the
-  target in first.
-- **volume** — a slider from silent to full, for a single file. It is the
-  player's own: not stored, and every load starts at full.
+  target in first. Let go of the slider and the app renders the new speed —
+  60%, 70%, 80%, 90% and the row's own speed are made when the file is
+  attached, so those are instant; anything else takes a few seconds the first
+  time. Playing carries on from where it was.
+- **volume** — a slider from silent to full, for everything on the card. It
+  is the player's own: not stored, and every load starts at full.
 - **pitch** — up or down by up to 12 semitones, at the same speed. The first
   time you pick one the app renders it, which takes a few seconds; the result is
   kept and reused. Playing resumes where it was.
@@ -308,7 +319,7 @@ an attachment never touches the file on disk.
 
 A tune often arrives as several files: bass, drums and keys split out of a
 recording, or a backing track beside a click. Attach the first as audio, then
-use **add a track to this set** under that card for each of the others: they
+use **+ track** under it (the same box) for each of the others: they
 become one **track set** rather than a row of separate cards, and each member
 can be named (`bass`, `drums`) and given its place in the mix.
 
@@ -317,9 +328,15 @@ within a quarter of a second, and there are eight at most. A file that
 disagrees is refused by name — a set plays as one thing, so a member from a
 different take is a mistake worth catching early.
 
-For now the members are stacked players, which are not in sync with each other;
-one transport with a mixer strip is the next phase of the work. Everything you
-set here — the names, the gains, the mutes — is what that will read.
+A set plays as one tune: one player with a lane per track, every track locked
+to the same clock. The waveforms are stacked with nothing between them; to
+the left of each are the track's name (hover over it to see a long one in
+full), **M** (mute), **S** (solo — with any track soloed you hear only the
+soloed ones) and its **gain**. Gain and mute are kept with the track,
+so the mix is the same next time; solo is not. Loading a set takes a moment (the card counts the tracks in), and a set
+plays in mono, which is what keeps eight tracks from filling the browser's
+memory. Play a set to the end and the card says how closely the tracks agreed.
+Without JavaScript a set is a stack of separate players, not in sync.
 
 ## How fast you are playing it
 

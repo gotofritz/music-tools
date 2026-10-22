@@ -1,35 +1,63 @@
 {# The material attached to an exercise, one card per thing, in `cards`.
 
-   A lone audio or video file is the player: a waveform from server-computed
-   peaks, click to seek, a loop toggle, a speed slider bound to the row's
-   ratio and a semitone control. The `<audio controls>` inside is the whole
-   thing with the JavaScript off, and `player.js` takes the controls over
-   when it runs. A YouTube URL is the embedded player, a score a link that
-   opens it locally, and text is text.
+   An audio or video file is the player, and a track set is the same player
+   with a lane per track: one transport (`transport.js`) with every track
+   locked to one clock, waveforms from server-computed peaks under a shared
+   playhead and time axis, click to seek, drag to loop a span, a speed slider
+   bound to the row's ratio and a semitone control. A set adds the mixer
+   strip — the name, M, S and a gain to the left of each lane, so the waves
+   stack with nothing between them; gain and mute are saved on the track. A lone file is a set of one, without
+   the strip.
 
-   A track set renders as stacked players, which is honest about being
-   unsynchronised rather than pretending otherwise; Phase 5b is the one
-   transport with a mixer strip. #}
+   The `<audio controls>` in each lane is the whole thing with the JavaScript
+   off: stacked, unsynchronised players. `mixer.js` takes over when it runs.
+   A YouTube URL is the embedded player, a score a link that opens it
+   locally, and text is text. #}
 {% for card in cards %}
 <article class="media media-{{ card.kind }}" id="media-card-{{ card.sources[0].id }}">
   {% if card.label %}<h4>{{ card.label }}</h4>{% endif %}
   {% if card.kind == "file" %}
-  {% if card.is_set %}
-  <p class="muted">A track set of {{ card.sources | length }}: stacked players
-    until they play as one (Phase 5b).</p>
-  {% endif %}
-  {% if not card.is_set and running_exercise %}
-  {% set track = card.sources[0] %}
+  {% if running_exercise %}
   {% set ratio = exercise_ratio(running_exercise) %}
-  <div class="player" data-peaks-url="/media/{{ track.id }}/peaks"
-       data-audio-url="/media/{{ track.id }}/audio"
+  <div class="player{% if card.is_set %} set{% endif %}"
+       data-set="{{ 1 if card.is_set else 0 }}"
        data-speed-url="/exercises/{{ running_exercise.id }}/speed"
        data-ratio="{{ "%g" | format(ratio if ratio is not none else 1) }}">
-    <span class="track-name">{{ track.label or file_name(track.path) }}</span>
-    <canvas class="wave" height="80" aria-label="waveform: click to seek"></canvas>
-    <audio controls preload="metadata" src="/media/{{ track.id }}/audio"></audio>
+    {% if card.is_set %}
+    <p class="muted">A track set of {{ card.sources | length }}, played as one.</p>
+    {% endif %}
+    <div class="tracks">
+      {% if card.is_set %}<canvas class="axis" aria-hidden="true"></canvas>{% endif %}
+      {% for track in card.sources %}
+      <div class="track" data-id="{{ track.id }}"
+           data-audio-url="/media/{{ track.id }}/audio"
+           data-peaks-url="/media/{{ track.id }}/peaks"
+           data-describe-url="/media/{{ track.id }}"
+           data-gain="{{ "%g" | format(track.gain) }}"
+           data-muted="{{ 1 if track.muted else 0 }}">
+        {% set name = track.label or file_name(track.path) %}
+        {% if card.is_set %}
+        {# Everything but the wave sits to its left, so the waves stack with
+           nothing between them. The name is clipped; hover shows it whole. #}
+        <div class="side">
+          <span class="track-name" title="{{ name }}">{{ name }}</span>
+          <label class="mute" title="mute"><input type="checkbox"{% if track.muted %} checked{% endif %}> M</label>
+          <label class="solo" title="solo: hear only the soloed tracks"><input type="checkbox"> S</label>
+          <label class="gain" title="gain">
+            <input type="range" min="0" max="2" step="0.01" value="{{ "%g" | format(track.gain) }}" aria-label="gain"></label>
+        </div>
+        {% else %}
+        <span class="track-name">{{ name }}</span>
+        {% endif %}
+        <canvas class="wave" aria-label="waveform: click to seek, drag to loop a span"></canvas>
+        <audio controls preload="{{ "none" if card.is_set else "metadata" }}"
+               src="/media/{{ track.id }}/audio"></audio>
+      </div>
+      {% endfor %}
+    </div>
     <div class="player-controls">
       <button type="button" class="play">play</button>
+      <output class="clock">0:00 / 0:00</output>
       <label class="loop"><input type="checkbox"> loop</label>
       <label class="speed">speed
         <input type="range" min="0.5" max="1" step="0.01"

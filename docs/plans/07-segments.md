@@ -85,7 +85,7 @@ CREATE UNIQUE INDEX segment_order ON segment(sequence_id, position);
 4. **The UI** — click a marked span on the waveform to add it, reorder, set
    repeats, toggle silent; the resolved timeline drawn under the sequence;
    render, and the player switches to the result. Fragments everywhere; the
-   waveform interaction stays inside `player.js`'s island.
+   waveform interaction stays inside `mixer.js`'s island.
 5. **The day-log tie-in** — the card of a started exercise reaches its
    sequences, so due → start → loop a passage → done is the whole scenario
    the plan promised, without Transcribe! in the middle.

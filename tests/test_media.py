@@ -710,3 +710,128 @@ def test_describing_nothing_leaves_the_track_as_it_was(db, le_freak, audio_file)
 def test_a_set_that_is_not_there_cannot_be_labelled(db):
     with pytest.raises(media.UnknownMedia):
         media.label_set(db, group_id=404, label="stems")
+
+
+# --- replacing what an attachment points at ---------------------------------
+
+
+def test_a_file_is_replaced_in_place_keeping_its_label_and_mix(
+    db, le_freak, audio_file
+):
+    old = audio_file("S/old.wav")
+    new = audio_file("S/new.wav")
+    source = media.attach(
+        db, exercise_id=le_freak.id, kind="file", path=str(old), label="bass", now=NOW
+    )
+    media.describe(db, source_id=source.id, gain=0.5)
+
+    replaced = media.replace(db, source_id=source.id, path=f"'{new}'")
+
+    assert replaced.id == source.id
+    assert replaced.path == str(new)
+    assert (replaced.label, replaced.gain, replaced.group_id) == (
+        "bass",
+        0.5,
+        source.group_id,
+    )
+
+
+def test_a_replacement_is_held_to_the_roots_and_must_exist(
+    db, le_freak, audio_file, roots
+):
+    source = media.attach(
+        db,
+        exercise_id=le_freak.id,
+        kind="file",
+        path=str(audio_file("S/a.wav")),
+        now=NOW,
+    )
+
+    with pytest.raises(media.OutsideRoots):
+        media.replace(db, source_id=source.id, path="/etc/passwd")
+    with pytest.raises(media.MissingFile):
+        media.replace(db, source_id=source.id, path=str(roots / "nope.wav"))
+
+
+def test_a_replacement_cannot_be_a_file_already_on_the_exercise(
+    db, le_freak, audio_file
+):
+    first = audio_file("S/a.wav")
+    second = audio_file("S/b.wav")
+    source = media.attach(
+        db, exercise_id=le_freak.id, kind="file", path=str(first), now=NOW
+    )
+    media.attach(db, exercise_id=le_freak.id, kind="file", path=str(second), now=NOW)
+
+    with pytest.raises(media.DuplicateMedia):
+        media.replace(db, source_id=source.id, path=str(second))
+    # pointing it at itself again is no change, not a clash
+    assert media.replace(db, source_id=source.id, path=str(first)).path == str(first)
+
+
+def test_a_set_members_replacement_must_still_match_the_set(db, le_freak, audio_file):
+    first = media.attach(
+        db,
+        exercise_id=le_freak.id,
+        kind="file",
+        path=str(audio_file("S/a.wav")),
+        now=NOW,
+    )
+    drums = media.attach(
+        db,
+        exercise_id=le_freak.id,
+        kind="file",
+        path=str(audio_file("S/b.wav")),
+        group_id=first.group_id,
+        now=NOW,
+    )
+
+    with pytest.raises(media.MembersDisagree):
+        media.replace(
+            db, source_id=drums.id, path=str(audio_file("S/c.wav", seconds=9))
+        )
+    same = audio_file("S/d.wav")
+    assert media.replace(db, source_id=drums.id, path=str(same)).path == str(same)
+
+
+def test_a_url_or_a_text_is_replaced_by_its_own_kind_of_value(db, le_freak):
+    video = media.attach(
+        db,
+        exercise_id=le_freak.id,
+        kind="youtube",
+        url="https://youtu.be/Kt2GdFbdVxo",
+        now=NOW,
+    )
+    note = media.attach(db, exercise_id=le_freak.id, kind="text", body="a", now=NOW)
+
+    assert (
+        media.replace(db, source_id=video.id, url="https://youtu.be/abcdefgh").url
+        == "https://youtu.be/abcdefgh"
+    )
+    assert media.replace(db, source_id=note.id, body="b").body == "b"
+    with pytest.raises(media.BadMedia):
+        media.replace(db, source_id=note.id, path="/x.wav")
+    with pytest.raises(media.BadMedia):
+        media.replace(db, source_id=note.id, body="")
+
+
+def test_replacing_media_that_is_not_there_is_unknown(db):
+    with pytest.raises(media.UnknownMedia):
+        media.replace(db, source_id=404, body="x")
+
+
+@pytest.mark.parametrize(
+    ("value", "kind"),
+    [
+        ("/music/loop.wav", "file"),
+        ("~/music/take.mp4", "file"),
+        ("'/music/with space.wav'", "file"),
+        ("/scores/tune.pdf", "score"),
+        ("/scores/tune.MSCZ", "score"),
+        ("https://www.youtube.com/watch?v=Kt2GdFbdVxo", "youtube"),
+        ("http://youtu.be/Kt2GdFbdVxo", "youtube"),
+        ("two octaves, thumb on the E", "text"),
+    ],
+)
+def test_one_box_is_enough_to_tell_what_was_typed(value, kind):
+    assert media.classify(value) == kind

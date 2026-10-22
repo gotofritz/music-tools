@@ -18,10 +18,16 @@ from music_tools.web.deps import STATIC, is_htmx, render
 from music_tools.web.routes import media, modules, practice
 
 
-def create_app(db_path: str | Path) -> FastAPI:
-    """A practice app over one database file, migrated to the current schema."""
+def create_app(db_path: str | Path, *, prerender: bool = False) -> FastAPI:
+    """A practice app over one database file, migrated to the current schema.
+
+    `prerender` renders a file at the common speeds when it is attached
+    (`routes/media.py`). `serve` turns it on; a test leaves it off unless it is
+    the thing under test, so attaching in a test does not fill a cache.
+    """
     app = FastAPI(title="practice", docs_url=None, redoc_url=None)
     app.state.db_path = Path(db_path)
+    app.state.prerender = prerender
 
     conn = open_db(db_path)
     try:
@@ -79,7 +85,7 @@ def serve(
 
     import uvicorn
 
-    app = create_app(db_path)
+    app = create_app(db_path, prerender=True)
     if open_browser:
         webbrowser.open(f"http://{host}:{port}/")
     uvicorn.run(app, host=host, port=port, log_level="warning")

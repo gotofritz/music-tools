@@ -22,7 +22,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from music_tools.db.connection import open_db
-from music_tools.domain.media import youtube_embed
+from music_tools.domain.media import media_roots, youtube_embed
 from music_tools.domain.models import DaySummary, Exercise, PracticeEntry
 from music_tools.domain.session import (
     entry_duration,
@@ -135,6 +135,7 @@ def _environment() -> Environment:
         "file_name": file_name,
         "group_cells": group_cells,
         "youtube_embed": youtube_embed,
+        "media_roots": media_roots,
     }
     env.globals.update(helpers)
     return env

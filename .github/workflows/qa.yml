@@ -16,9 +16,16 @@ jobs:
           enable-cache: true
 
       # pydub shells out to ffmpeg for anything that is not a wav, and a
-      # later phase renders audio in tests
+      # later phase renders audio in tests. The runner's Ubuntu mirror has
+      # served these packages at 27 kB/s (37 minutes), so a download that
+      # stops is retried, and the step gives up at 45 minutes rather than at
+      # the job's six-hour default.
       - name: Install ffmpeg
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+        timeout-minutes: 45
+        run: |
+          apt_opts="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
+          sudo apt-get $apt_opts update
+          sudo apt-get $apt_opts install -y ffmpeg
 
       - run: uv sync --all-groups
 
