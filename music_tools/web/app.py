@@ -5,6 +5,7 @@ test gets a database of its own without setting `MUSIC_TOOLS_DB` and two apps
 in one process cannot end up sharing one.
 """
 
+import logging
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -16,6 +17,8 @@ from music_tools.db.connection import open_db
 from music_tools.db.migrate import migrate
 from music_tools.web.deps import STATIC, is_htmx, render
 from music_tools.web.routes import media, modules, practice
+
+logger = logging.getLogger(__name__)
 
 
 def create_app(db_path: str | Path, *, prerender: bool = False) -> FastAPI:
@@ -56,6 +59,13 @@ def refused(request: Request, exc: Exception) -> Response:
     as a page.
     """
     assert isinstance(exc, HTTPException)  # the only class this is registered for
+    logger.warning(
+        "%s %s refused %d: %s",
+        request.method,
+        request.url.path,
+        exc.status_code,
+        exc.detail,
+    )
     if is_htmx(request):
         return HTMLResponse(
             render("_problem.html", problem=exc.detail),
@@ -80,12 +90,16 @@ def serve(
     The browser is launched before `uvicorn.run` blocks, which is a race the
     browser loses every time: starting one takes far longer than binding a
     socket does.
+
+    Every request is logged, and a refusal with its reason: a save that did
+    not happen has to leave a line in the terminal running this.
     """
     import webbrowser
 
     import uvicorn
 
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s:     %(message)s")
     app = create_app(db_path, prerender=True)
     if open_browser:
         webbrowser.open(f"http://{host}:{port}/")
-    uvicorn.run(app, host=host, port=port, log_level="warning")
+    uvicorn.run(app, host=host, port=port, log_level="info")

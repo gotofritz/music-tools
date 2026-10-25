@@ -25,7 +25,11 @@ usable after weeks of history because earlier days are collapsed.
   nothing behind. Ad-hoc typed practice is dropped from this page;
   `practice` CLI keeps `start_ad_hoc`. (Revised: the untitled "from now, for
   anything" line came back as **just start** in the picker, because a session
-  sometimes starts before the tune is chosen.)
+  sometimes starts before the tune is chosen. Revised again: START itself
+  opens that line, with the picker under it, and **just start** is gone. The
+  player's habit is START, then a module tab, then a row's stop — which claims
+  it — and a picker-only START logged nothing. Picking a row from the list
+  claims the line too.)
 - **Any stop is a start for the next one.** Clicking one of the five stop
   buttons (normal / short / long / rotate / hold) on the current exercise
   finishes it exactly as today and then shows the picker, the same state as

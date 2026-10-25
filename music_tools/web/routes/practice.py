@@ -120,19 +120,6 @@ def end_the_day(
     return fragment_or_redirect(request, _redraw(request, conn, now=now, history=True))
 
 
-@router.post("/day/reopen")
-def reopen_the_day(
-    request: Request,
-    conn: sqlite3.Connection = Depends(get_conn),
-    now: datetime = Depends(get_now),
-) -> Response:
-    """START on an ended day: the log is today's again, and the picker is open."""
-    session.reopen_day(conn, now=now)
-    return fragment_or_redirect(
-        request, _redraw(request, conn, now=now, picker=True, history=True)
-    )
-
-
 @router.post("/exercises/{exercise_id}/start")
 def start(
     request: Request,
@@ -172,9 +159,11 @@ def just_start(
 ) -> Response:
     """The clock first, the tune later: a line called `Practice` from now.
 
-    The picker's **just start**, for when the session should begin before
-    anyone has said what is being played. A row's stop later makes the line
-    that row's; a stop on the card closes it as it is, to be named afterwards.
+    The today page's **START**: the session begins before anyone has said what
+    is being played, and the picker is drawn under the line. Picking a row, or
+    a row's stop on its module page, makes the line that row's; a stop on the
+    card closes it as it is, to be named afterwards. On an ended day it brings
+    the day back, so `#history` is redrawn.
     """
     was_ended = views.day_ended(conn, now=now)
     session.start_ad_hoc(conn, rng=rng, description="Practice", now=now)

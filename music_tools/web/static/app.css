@@ -583,26 +583,15 @@ td.pick {
 
 .picker-module,
 .picker-close,
-.picker-just-start button,
-a.start {
+form.start button {
   border: 1px solid var(--line);
   border-radius: 4px;
   padding: 0.25rem 0.7rem;
   background: #f7f7f7;
   color: inherit;
+  font: inherit;
   text-decoration: none;
   cursor: pointer;
-}
-
-/* Set apart from the modules: it starts a line rather than opening a list. */
-.picker-just-start {
-  margin: 0 0 0 0.6rem;
-  font: inherit;
-}
-
-.picker-just-start button {
-  font: inherit;
-  font-style: italic;
 }
 
 .picker-module.active {

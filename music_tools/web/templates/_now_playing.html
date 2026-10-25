@@ -27,6 +27,11 @@
   </dialog>
   {% endwith %}
   {% endif %}
+  {% if running.exercise_id is none %}
+  {# START's line, not yet anyone's: pick the tune here, and the row claims it,
+     or stop a row on its module page. #}
+  {% include "_picker.html" %}
+  {% endif %}
   {# The stops: one button per way it comes back, each sending its own
      `algorithm`. Whatever it is, the answer is the log with the picker under
      it — a stop is a start for the next one. #}
@@ -47,22 +52,18 @@
     <button type="submit" class="remove">discard</button>
   </form>
   {% elif picker_open %}
-  {# A stop or a discard has just left nothing running: the same state START
-     reveals. #}
+  {# A stop or a discard has just left nothing running: pick the next tune. #}
   {% include "_picker.html" %}
   {% if day_has_entries %}{% include "_end_day.html" %}{% endif %}
-  {% elif day_ended %}
-  {# Ended by hand: its log is in Earlier. START is what brings it back. #}
-  <form class="start" action="/day/reopen" method="post" hx-post="/day/reopen"
+  {% else %}
+  {# Nothing running: START is the clock. It opens an untitled `Practice` line
+     from now, and a row's stop on its module page makes it that row's,
+     keeping its start. On an ended day it brings the day back too. END,
+     once there is something to end, moves the day's log into Earlier. #}
+  <form class="start" action="/entries" method="post" hx-post="/entries"
         hx-target="#day-log" hx-swap="outerHTML">
     <button type="submit">START</button>
   </form>
-  {% else %}
-  {# Nothing running: START only reveals the module picker. A line opens when
-     a row is picked, so a false start leaves nothing behind. END, once there
-     is something to end, moves the day's log into Earlier. #}
-  <a class="start" href="/picker" hx-get="/picker" hx-target="this"
-     hx-swap="outerHTML" role="button">START</a>
-  {% if day_has_entries %}{% include "_end_day.html" %}{% endif %}
+  {% if day_has_entries and not day_ended %}{% include "_end_day.html" %}{% endif %}
   {% endif %}
 </div>

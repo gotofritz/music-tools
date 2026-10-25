@@ -15,7 +15,7 @@
     <script src="/static/transport.js" defer></script>
     <script src="/static/mixer.js" defer></script>
   </head>
-  <body hx-on::before-request="this.querySelector('#problem').textContent = ''">
+  <body hx-on::before-request="if (event.detail.requestConfig.verb !== 'get') this.querySelector('#problem').textContent = ''">
     <header>
       <nav>
         <a href="/">today</a>

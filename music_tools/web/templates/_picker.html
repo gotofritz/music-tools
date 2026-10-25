@@ -17,11 +17,6 @@
        hx-swap="outerHTML" aria-pressed="false">{{ module.name }}</a>
     {% endif %}
     {% endfor %}
-    {# The clock without a tune: an untitled `Practice` line, named later. #}
-    <form class="picker-just-start" action="/entries" method="post"
-          hx-post="/entries" hx-target="#day-log" hx-swap="outerHTML">
-      <button type="submit" title="start the clock now and say what it was later">just start</button>
-    </form>
     {% if active %}
     <a class="picker-close" href="/picker" hx-get="/picker" hx-target="#picker"
        hx-swap="outerHTML" aria-label="close the list">close</a>
