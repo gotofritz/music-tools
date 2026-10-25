@@ -171,3 +171,10 @@ document.addEventListener("htmx:afterSettle", () => {
     dialog.querySelector(".problem").textContent = problem.textContent;
   }
 });
+
+// HTMX will not send a form the browser finds invalid (an empty required
+// name), and says nothing when it stops: the click just does nothing. Ask the
+// browser to show its own message on the box that is wrong.
+document.addEventListener("htmx:validation:halted", (event) => {
+  event.target.reportValidity();
+});

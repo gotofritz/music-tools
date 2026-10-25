@@ -527,6 +527,64 @@ def test_a_name_that_is_already_taken_is_refused(client, conn, le_freak, espress
     assert after.name == "espresso"
 
 
+def test_a_refused_write_is_logged_with_its_reason(client, caplog, le_freak):
+    """The page shows the refusal; the terminal running the server says it too."""
+    with caplog.at_level("WARNING"):
+        client.patch(f"/exercises/{le_freak.id}", data={"target_bpm": "fast"})
+
+    assert "PATCH" in caplog.text
+    assert f"/exercises/{le_freak.id}" in caplog.text
+    assert "400" in caplog.text
+    assert "target BPM must be a positive number" in caplog.text
+
+
+def test_the_target_boxes_leave_checking_to_the_server(client, songs, le_freak):
+    """A `pattern` the box does not match makes HTMX drop the save, silently.
+
+    `120 ` or `92,5` never reached the server: no request, no log line, no
+    message on the page. The server already refuses a non-number with a
+    sentence the page shows, so the box sends whatever was typed.
+    """
+    page = client.get("/modules/songs").text
+
+    assert 'name="target_bpm"' in page
+    assert "pattern=" not in page
+
+
+def test_a_target_typed_with_spaces_round_it_is_saved(client, conn, le_freak):
+    response = client.patch(
+        f"/exercises/{le_freak.id}", data={"target_bpm": " 120 "}, headers=hx()
+    )
+
+    assert response.status_code == 200
+    after = repo.get_exercise(conn, le_freak.id)
+    assert after is not None
+    assert after.target_bpm == 120
+
+
+def test_a_refusal_is_not_wiped_by_the_preview_that_follows_it(client):
+    """Only a write clears the problem line.
+
+    Typing in a speed box fires the live tempo preview, a GET, straight after
+    the save it refused; clearing on every request erased the sentence before
+    it could be read.
+    """
+    page = client.get("/").text
+    body = re.search(r"<body[^>]*>", page)
+
+    assert body is not None
+    assert "requestConfig.verb !== 'get'" in body.group(0)
+
+
+def test_a_form_the_browser_will_not_send_says_why(client):
+    """HTMX halts on an invalid form without a word; the page asks the browser
+    to show its own message on the box instead."""
+    script = client.get("/static/app.js").text
+
+    assert "htmx:validation:halted" in script
+    assert "reportValidity" in script
+
+
 def test_the_tempo_endpoint_resolves_what_is_being_typed(client, le_freak):
     response = client.get(f"/exercises/{le_freak.id}/tempo?written=123/2")
 
