@@ -96,8 +96,13 @@ def today_context(conn: sqlite3.Connection, *, now: datetime) -> dict[str, Any]:
     today = practice_day_for(now)
     ended = day_ended(conn, now=now)
     summary = DaySummary(day=today) if ended else day_summary(conn, day=today, now=now)
+    page = chrome(conn, now=now)
+    running = page["running"]
+    if running is not None and running.exercise_id is None:
+        # START's line: the picker sits under it until a row claims it.
+        page |= picker_context(conn, now=now)
     return {
-        **chrome(conn, now=now),
+        **page,
         "day": today,
         "summary": summary,
         "day_ended": ended,

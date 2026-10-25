@@ -33,6 +33,7 @@ from music_tools.db.connection import transaction
 from music_tools.domain.models import (
     DaySummary,
     DoneResult,
+    Exercise,
     GroupTotal,
     PracticeDay,
     PracticeEntry,
@@ -135,6 +136,11 @@ def start_exercise(
     keeps the time it really began at. Every row on a module page carries a
     start button, so the click is as likely to mean "this is the one" as it is
     to mean "again from here", and restarting would lose the minutes played.
+
+    The START button's line — unattached, and still called `Practice` — is a
+    placeholder for the tune not yet chosen, so starting one claims it: it
+    becomes this exercise's, keeps the time START was pressed, and runs on. A
+    line given a name of its own (`start --ad-hoc warm-up`) is closed instead.
     """
     with transaction(conn):
         exercise = repo.get_exercise(conn, exercise_id)
@@ -143,6 +149,12 @@ def start_exercise(
         running = _running_for(conn, now=now)
         if running is not None and running.exercise_id == exercise_id:
             return StartResult(entry=running, closed=None)
+        if (
+            running is not None
+            and running.exercise_id is None
+            and running.description == DEFAULT_DESCRIPTION
+        ):
+            return StartResult(entry=_claim(conn, running, exercise), closed=None)
         module = repo.get_module(conn, exercise.module_id)
         tempo = parse_tempo(exercise.speed or "", target_bpm=exercise.target_bpm)
 
@@ -348,24 +360,33 @@ def _claim_and_finish(
         exercise = repo.get_exercise(conn, exercise_id)
         if exercise is None:
             raise UnknownExercise(exercise_id)
-        module = repo.get_module(conn, exercise.module_id)
-        tempo = parse_tempo(exercise.speed or "", target_bpm=exercise.target_bpm)
-        claimed = repo.update_entry(
-            conn,
-            entry.id,
-            exercise_id=exercise.id,
-            description=(
-                exercise.name
-                if entry.description == DEFAULT_DESCRIPTION
-                else entry.description
-            ),
-            speed=exercise.speed,
-            bpm=tempo.bpm,
-            log_group=module.log_group if module else None,
-        )
+        claimed = _claim(conn, entry, exercise)
         return _finish(
             conn, claimed, algorithm=algorithm, now=now, rng=rng, notes=notes
         )
+
+
+def _claim(
+    conn: sqlite3.Connection, entry: PracticeEntry, exercise: Exercise
+) -> PracticeEntry:
+    """An unattached line, made the exercise's: its start stays, the rest is
+    snapshotted from the exercise as `start_exercise` would have. A name the
+    player typed is kept; the placeholder `Practice` gives way to the row's."""
+    module = repo.get_module(conn, exercise.module_id)
+    tempo = parse_tempo(exercise.speed or "", target_bpm=exercise.target_bpm)
+    return repo.update_entry(
+        conn,
+        entry.id,
+        exercise_id=exercise.id,
+        description=(
+            exercise.name
+            if entry.description == DEFAULT_DESCRIPTION
+            else entry.description
+        ),
+        speed=exercise.speed,
+        bpm=tempo.bpm,
+        log_group=module.log_group if module else None,
+    )
 
 
 def _backfill(

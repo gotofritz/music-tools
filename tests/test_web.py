@@ -857,31 +857,57 @@ def test_a_picker_for_an_unknown_or_archived_module_is_404(client, conn, songs):
     assert client.get("/picker/songs", headers=hx()).status_code == 404
 
 
-# --- START is a picker, a stop is a start (Phase 10, steps 3 and 4) -----------
+# --- START opens a slot, a stop is a start (Phase 10, steps 3 and 4) ----------
 
 
-def test_with_nothing_running_start_reveals_the_picker_and_opens_no_line(
+def test_with_nothing_running_start_opens_an_unassigned_line(
     client, conn, songs, le_freak
 ):
+    """START is the clock: the line is there before the tune is chosen.
+
+    The habit is START, then off to a module tab, then a row's stop — which
+    makes the line that row's. A START that only showed the picker logged
+    nothing when the player went straight to a tab.
+    """
     page = client.get("/").text
     now_playing = page[page.index('id="now-playing"') : page.index("<h2>Log</h2>")]
 
     assert ">START<" in now_playing
-    assert 'hx-get="/picker"' in now_playing
-    assert 'id="picker"' not in now_playing  # revealed by the click, not drawn
-    assert running(conn) is None
-    assert repo.get_day(conn, TODAY) is None  # a false start leaves nothing behind
+    assert 'hx-post="/entries"' in now_playing
+    assert 'action="/entries"' in now_playing  # and with no JS
+    assert 'hx-get="/picker"' not in now_playing
+    assert running(conn) is None  # drawing the button writes nothing
 
 
-def test_the_picker_offers_starting_the_clock_before_picking_a_row(client, songs):
+def test_start_then_a_stop_on_a_module_row_makes_the_line_that_rows(
+    client, conn, songs, le_freak
+):
+    client.post("/entries", headers=hx(referer="http://localhost/"))
+    later = NOW.replace(minute=59)
+    client.app.dependency_overrides[get_now] = lambda: later
+
+    client.post(
+        f"/exercises/{le_freak.id}/stop",
+        data={"algorithm": "normal"},
+        headers=hx(referer="http://localhost/modules/songs"),
+    )
+
+    day = repo.get_day(conn, TODAY)
+    assert day is not None
+    [entry] = repo.entries_for_day(conn, day.id)
+    assert (entry.exercise_id, entry.description) == (le_freak.id, "le freak")
+    assert (entry.started_at, entry.ended_at) == (NOW, later)
+
+
+def test_the_picker_has_no_button_of_its_own_for_the_clock(client, songs):
+    """START is the clock; a second button for it was one click too many."""
     page = client.get("/picker", headers=hx()).text
 
-    assert 'hx-post="/entries"' in page
-    assert 'action="/entries"' in page  # and with no JS
-    assert "just start" in page
+    assert 'hx-post="/entries"' not in page
+    assert "just start" not in page
 
 
-def test_just_start_opens_an_untitled_practice_line_and_shows_it_running(
+def test_start_opens_an_untitled_practice_line_with_the_picker_under_it(
     client, conn, songs
 ):
     response = client.post("/entries", headers=hx(referer="http://localhost/"))
@@ -891,11 +917,40 @@ def test_just_start_opens_an_untitled_practice_line_and_shows_it_running(
     assert entry is not None
     assert (entry.description, entry.exercise_id) == ("Practice", None)
     assert '<section id="day-log"' in response.text
-    assert 'id="picker"' not in response.text
+    assert 'id="picker"' in response.text
     assert f'hx-post="/entries/{entry.id}/done"' in response.text
 
 
-def test_just_start_closes_whatever_was_running(client, conn, songs, le_freak):
+def test_the_picker_stays_under_the_slot_when_the_page_is_reloaded(client, conn, songs):
+    client.post("/entries", headers=hx(referer="http://localhost/"))
+
+    assert 'id="picker"' in client.get("/").text
+
+
+def test_a_running_row_has_no_picker_under_it(client, conn, songs, le_freak):
+    start(client, le_freak.id)
+
+    assert 'id="picker"' not in client.get("/").text
+
+
+def test_picking_a_row_under_the_slot_makes_the_line_that_rows(
+    client, conn, songs, le_freak
+):
+    client.post("/entries", headers=hx(referer="http://localhost/"))
+    later = NOW.replace(minute=59)
+    client.app.dependency_overrides[get_now] = lambda: later
+
+    response = start(client, le_freak.id, referer="http://localhost/")
+
+    day = repo.get_day(conn, TODAY)
+    assert day is not None
+    [entry] = repo.entries_for_day(conn, day.id)
+    assert (entry.exercise_id, entry.description) == (le_freak.id, "le freak")
+    assert (entry.started_at, entry.ended_at) == (NOW, None)
+    assert 'id="picker"' not in response.text
+
+
+def test_start_closes_whatever_was_running(client, conn, songs, le_freak):
     start(client, le_freak.id)
 
     client.post("/entries", headers=hx(referer="http://localhost/"))
@@ -909,7 +964,7 @@ def test_just_start_closes_whatever_was_running(client, conn, songs, le_freak):
     assert running(conn).description == "Practice"
 
 
-def test_just_start_on_an_ended_day_brings_the_day_back(client, conn, le_freak):
+def test_start_on_an_ended_day_brings_the_day_back(client, conn, le_freak):
     start(client, le_freak.id)
     client.post(f"/entries/{running(conn).id}/done", headers=hx())
     client.post("/day/end", headers=hx())
@@ -1440,7 +1495,7 @@ def test_after_ending_the_page_starts_blank_with_the_day_in_earlier(
     )
     assert 'id="day-2026-07-05"' in history  # the first of Earlier
     assert "00:53" in history
-    assert 'hx-post="/day/reopen"' in _idle(page)
+    assert 'hx-post="/entries"' in _idle(page)
     assert ">END<" not in page
 
 
@@ -1460,17 +1515,17 @@ def test_ending_a_day_with_nothing_in_it_changes_nothing(client, conn):
     assert repo.get_day(conn, TODAY) is None
 
 
-def test_start_after_end_brings_the_day_back_and_opens_the_picker(
+def test_start_after_end_brings_the_day_back_and_opens_a_line(
     client, conn, songs, sample_block
 ):
     client.post("/day/end", headers=hx())
 
-    response = client.post("/day/reopen", headers=hx(referer="http://localhost/"))
+    response = client.post("/entries", headers=hx(referer="http://localhost/"))
 
     assert response.status_code == 200
     assert _ended_at(conn) is None
     assert "le freak" in response.text.split('id="history"')[0]  # the log is back
-    assert 'id="picker"' in response.text
+    assert running(conn).description == "Practice"
     history = response.text[response.text.index('id="history"') :]
     assert 'id="day-2026-07-05"' not in history  # no longer an earlier day
     page = client.get("/").text
@@ -1516,12 +1571,12 @@ def test_an_ended_day_is_a_block_on_its_own_page_not_the_live_log(client, sample
     assert 'id="day-log"' not in page
 
 
-def test_end_and_reopen_without_htmx_redirect_back(client, sample_block):
+def test_end_and_start_without_htmx_redirect_back(client, sample_block):
     ended = client.post("/day/end", follow_redirects=False)
-    reopened = client.post("/day/reopen", follow_redirects=False)
+    started = client.post("/entries", follow_redirects=False)
 
     assert (ended.status_code, ended.headers["location"]) == (303, "/")
-    assert (reopened.status_code, reopened.headers["location"]) == (303, "/")
+    assert (started.status_code, started.headers["location"]) == (303, "/")
 
 
 # --- correcting a line of the log, in place -------------------------------------------

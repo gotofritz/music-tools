@@ -134,14 +134,16 @@ starts it without opening a window.
   whole session never leaves this page. Under it are the five **stop** buttons
   — `normal`, `short`, `long`, `rotate`, `hold` — and **discard**. Typing in
   the card never restarts the player.
-- **START** opens no line. It shows one button per module; click one and its
-  rows appear in a panel under the buttons, due ones first. Click a row to
-  start it; click the module again, or **close**, to hide the list. Any stop
-  (and discard) puts you back on the module buttons, so the next tune is one
-  click away. **just start**, after the module buttons, is for when the clock
-  should begin before you have decided what to play: it opens a line called
-  `Practice` from now. A stop on the card closes it as it is (click its name in
-  the log to rename it); **stop** on a row's module page makes it that row's.
+- **START** starts the clock: it opens a line called `Practice` from now,
+  before you have said what you are playing, and shows one button per module
+  under it. Click one and its rows appear in a panel under the buttons, due
+  ones first; click the module again, or **close**, to hide the list. Click a
+  row and the line becomes that row's, keeping the time you pressed START.
+  Or go to the module tab, play, and press one of the row's **stop** buttons:
+  the line becomes that row's the same way, and the row is scheduled. A stop
+  on the card closes it as it is (click its name in the log to rename it).
+- Any stop (and discard) puts you back on the module buttons, so the next tune
+  is one click away.
 - **Log** is today, line by line, with the entry that is running now counting
   up. **Totals** underneath is the subtotal per log group and the total for the
   day — the same numbers as `practice log`.
@@ -192,8 +194,9 @@ What a click means depends on what is running:
 | another row | **start** here | that one is closed and scheduled the normal way, this one starts |
 | nothing | **start** here | this one starts |
 | this row | **start** here | nothing — the line keeps the time it began at |
+| **START**'s `Practice` line | **start** here | the line becomes this row's — it keeps its start time — and runs on |
 | another row | **stop** here | nothing |
-| a line with no row (from `practice start --ad-hoc`) | **stop** here | the line becomes this row's — it keeps its start time — and closes |
+| a line with no row (**START**'s, or `practice start --ad-hoc`) | **stop** here | the line becomes this row's — it keeps its start time — and closes |
 | nothing | **stop** here | the line is written backwards, from the last line's end to now |
 | this row | **stop** here | the line closes and the schedule moves |
 

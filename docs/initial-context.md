@@ -559,13 +559,19 @@ because it is reading a keystroke, not a submission.
 the module pages are where the catalogue is *configured*, and keep start and
 stop because they are still useful.
 
-- **START opens no line.** It swaps in the picker (`GET /picker`): one button
-  per live module, in tab order. `GET /picker/{slug}` is the same block with
-  that module's live rows, read-only, under the buttons; a row posts the
-  ordinary `/exercises/{id}/start`. A line opens when a row is picked, so a
-  false start leaves nothing behind. The one exception is the picker's
-  **just start**, `POST /entries`: an untitled `Practice` line from now
-  (`start_ad_hoc`), for a session whose tune is not chosen yet.
+- **START opens an unassigned line.** It posts `POST /entries`: an untitled
+  `Practice` line from now (`start_ad_hoc`), which a row's stop then claims
+  (`stop_exercise`), keeping its start. That is how the player works — START,
+  off to a module tab, stop on the row — and a START that only revealed the
+  picker logged nothing when they did. The picker (`GET /picker`) is drawn
+  under that line (`today_context` adds it while the running line has no
+  exercise), and after a stop or discard: one button per live module, in tab
+  order. `GET /picker/{slug}` is the same block with that module's live rows,
+  read-only, under the buttons; a row posts the ordinary
+  `/exercises/{id}/start`, and `start_exercise` claims a running `Practice`
+  line with no exercise rather than closing it, so the time since START is the
+  row's. A line given its own name (`start --ad-hoc warm-up`) is closed as
+  before.
 - **Any stop is a start for the next one.** The running card carries the five
   stop buttons, each posting its `algorithm` to `/entries/{id}/done`; stop,
   done and discard answer from the today page with the log redrawn and the
@@ -585,8 +591,8 @@ stop because they are still useful.
   004) is a stamp, not a deletion: `session.end_day` sets it (refused with a line
   running; a day with nothing in it has nothing to end) and `_start_day` — so any
   start, from either front end — clears it. An ended day is the first of Earlier
-  and today's log and totals render blank; `POST /day/end` and `POST /day/reopen`
-  redraw the log and swap `#history` out of band, which is the only time that
+  and today's log and totals render blank; `POST /day/end`, and `POST /entries`
+  on an ended day, redraw the log and swap `#history` out of band, which is the only time that
   list is redrawn, since doing it on every start would close the days the
   player has opened.
 - **Earlier days are `<details>`**, collapsed on every load; today's log is

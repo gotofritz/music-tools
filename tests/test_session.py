@@ -463,6 +463,36 @@ def test_stop_on_an_exercise_claims_the_unnamed_line_that_is_running(
     assert current_entry(db, now=NOW) is None
 
 
+def test_starting_an_exercise_claims_the_start_buttons_line(db, slap, stomp):
+    """START opened the line before the tune was chosen; picking it says which.
+
+    The line keeps the time START was pressed and goes on running as the
+    exercise's, with nothing closed and nothing scheduled yet.
+    """
+    began = datetime(2026, 7, 5, 22, 20)
+    slot = start_ad_hoc(db, description="Practice", now=began, rng=RNG).entry
+
+    result = start_exercise(db, exercise_id=stomp.id, now=NOW, rng=RNG)
+
+    assert result.closed is None
+    assert result.entry.id == slot.id
+    running = loaded(current_entry(db, now=NOW))
+    assert (running.id, running.exercise_id) == (slot.id, stomp.id)
+    assert (running.description, running.started_at) == ("Stomp!", began)
+    assert (running.speed, running.log_group) == ("80%", slap.log_group)
+    assert loaded(repo.get_exercise(db, stomp.id)).practiced_count == 8
+
+
+def test_starting_an_exercise_closes_a_line_you_named_rather_than_claim_it(db, stomp):
+    """`start --ad-hoc warm-up` is a thing of its own, not a placeholder."""
+    start_ad_hoc(db, description="warm-up", now=datetime(2026, 7, 5, 22, 20), rng=RNG)
+
+    result = start_exercise(db, exercise_id=stomp.id, now=NOW, rng=RNG)
+
+    assert loaded(result.closed).description == "warm-up"
+    assert loaded(current_entry(db, now=NOW)).description == "Stomp!"
+
+
 def test_a_line_you_named_keeps_its_name_when_an_exercise_claims_it(
     db, stomp, steady_rng
 ):
