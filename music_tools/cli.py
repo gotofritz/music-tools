@@ -572,6 +572,7 @@ def serve_command(ctx: click.Context, host: str, port: int, browser: bool) -> No
     """
     from music_tools.web.app import serve
 
+    click.echo(f"serving {ctx.obj.db_path} on http://{host}:{port}/")
     serve(ctx.obj.db_path, host=host, port=port, open_browser=browser)
 
 

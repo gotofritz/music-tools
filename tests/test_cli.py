@@ -432,6 +432,21 @@ def test_serve_opens_a_browser_unless_told_not_to(run, uvicorn_run, monkeypatch)
     assert opened == ["http://127.0.0.1:9001/"]
 
 
+def test_serve_logs_every_request(run, uvicorn_run):
+    """At `warning` uvicorn drops the access log, so a save left no trace."""
+    run("serve", "--no-browser")
+
+    _, kwargs = uvicorn_run[0]
+    assert kwargs["log_level"] == "info"
+
+
+def test_serve_says_which_database_it_writes_to(run, uvicorn_run, tmp_path):
+    result = run("serve", "--no-browser")
+
+    assert str(tmp_path / "practice.db") in result.output
+    assert "http://127.0.0.1:8567/" in result.output
+
+
 def test_help_answers_to_both_spellings(run):
     """`loop` already takes -h; the tracker should not be the odd one out."""
     short = run("-h")
